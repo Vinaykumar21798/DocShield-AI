@@ -1,0 +1,75 @@
+# ==========================
+# Python
+# ==========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Python Packaging
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# OS Files
+.DS_Store
+Thumbs.db
+
+# SQLite
+*.sqlite3
+*.db
+
+# Alembic
+alembic.ini
+
+# Uploads
+storage/uploads/*
+!storage/uploads/.gitkeep
+
+storage/extracted/*
+!storage/extracted/.gitkeep
+
+# Future (Dev2)
+storage/redacted/*
+!storage/redacted/.gitkeep
+
+storage/reports/*
+!storage/reports/.gitkeep
+
+# Temporary Files
+*.tmp
+*.temp
+
+# Jupyter
+.ipynb_checkpoints/
+
+# mypy
+.mypy_cache/
+
+# Ruff
+.ruff_cache/
+
+# Coverage
+.coverage.*
