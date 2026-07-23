@@ -25,3 +25,5 @@ loguru
 
 pytest
 httpx
+
+docker
