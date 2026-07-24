@@ -37,6 +37,19 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             .all()
         )
 
+    def get_latest_job_by_document(
+        self,
+        db: Session,
+        document_id: str,
+    ) -> Optional[ProcessingJob]:
+
+        return (
+            db.query(ProcessingJob)
+            .filter(ProcessingJob.document_id == document_id)
+            .order_by(ProcessingJob.created_at.desc())
+            .first()
+        )
+
     def get_jobs_by_status(
         self,
         db: Session,
@@ -54,6 +67,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         job: ProcessingJob,
         status: str,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,
@@ -68,6 +82,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         job: ProcessingJob,
         stage: str,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,
@@ -82,6 +97,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         job: ProcessingJob,
         worker_id: str,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,
@@ -96,6 +112,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         db: Session,
         job: ProcessingJob,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,
@@ -109,6 +126,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         db: Session,
         job: ProcessingJob,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,
@@ -124,6 +142,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         job: ProcessingJob,
         error_message: str,
     ) -> ProcessingJob:
+
         return self.update(
             db,
             job,

@@ -1,75 +1,113 @@
-# ==========================
+# ==========================================
 # Python
-# ==========================
+# ==========================================
 __pycache__/
 *.py[cod]
 *$py.class
 
-# Virtual Environment
-.venv/
-venv/
-env/
+# Compiled Extensions
+*.so
 
-# Environment Variables
-.env
-
-# VS Code
-.vscode/
-
-# PyCharm
-.idea/
-
-# Python Packaging
+# Distribution / Packaging
 build/
 dist/
 *.egg-info/
+.eggs/
 
-# Logs
-*.log
-logs/
+# ==========================================
+# Virtual Environment
+# ==========================================
+.venv/
+venv/
+env/
+ENV/
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
+# ==========================================
+# Environment Variables
+# ==========================================
+.env
+.env.*
+!.env.example
 
+# ==========================================
+# IDE
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ==========================================
 # OS Files
+# ==========================================
 .DS_Store
 Thumbs.db
 
-# SQLite
-*.sqlite3
+# ==========================================
+# Python Cache
+# ==========================================
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+
+# ==========================================
+# Logs
+# ==========================================
+logs/
+*.log
+
+# ==========================================
+# Coverage
+# ==========================================
+.coverage
+coverage.xml
+htmlcov/
+
+# ==========================================
+# Database
+# ==========================================
 *.db
+*.sqlite3
 
+# ==========================================
 # Alembic
-alembic.ini
+# ==========================================
+alembic/versions/__pycache__/
 
-# Uploads
+# ==========================================
+# Uploaded Files
+# ==========================================
 storage/uploads/*
 !storage/uploads/.gitkeep
 
-storage/extracted/*
-!storage/extracted/.gitkeep
-
-# Future (Dev2)
-storage/redacted/*
-!storage/redacted/.gitkeep
-
-storage/reports/*
-!storage/reports/.gitkeep
+# OCR Output (Future)
+storage/ocr/*
+!storage/ocr/.gitkeep
 
 # Temporary Files
-*.tmp
-*.temp
+storage/temp/*
+!storage/temp/.gitkeep
 
+# ==========================================
+# Redis
+# ==========================================
+dump.rdb
+
+# ==========================================
+# Docker
+# ==========================================
+*.pid
+docker-compose.override.yml
+
+# ==========================================
 # Jupyter
+# ==========================================
 .ipynb_checkpoints/
 
-# mypy
-.mypy_cache/
-
-# Ruff
-.ruff_cache/
-
-# Coverage
-.coverage.*
+# ==========================================
+# Miscellaneous
+# ==========================================
+*.tmp
+*.bak
+*.orig
