@@ -386,38 +386,176 @@ Decision behavior:
 
 ## 8.1 OCR Engine Comparison
 
-| Feature | PaddleOCR (Current) | GLM OCR | Baidu OCR |
-|---------|----------------------|---------|-----------|
-| Type | Open Source | Vision Language Model | Cloud OCR API |
-| Cost | Free | API/GPU Cost | API Cost |
-| Offline Support | Yes | Depends on Deployment | No |
-| Printed Text | Excellent | Excellent | Excellent |
-| Scanned Documents | Excellent | Excellent | Excellent |
-| Table Extraction | Good | Excellent | Excellent |
-| Form/Layout Understanding | Basic | Advanced | Advanced |
-| Handwriting | Moderate | Good | Good |
-| Integration | Easy | Medium | Easy |
+The current production path is still PaddleOCR. GLM OCR and Baidu Unlimited-OCR are candidate engines for future routing when a document needs stronger layout, table, or long-document understanding.
 
-Current Choice
+| Feature | PaddleOCR (Current) | GLM OCR via Ollama (Candidate) | Baidu Unlimited-OCR via Hugging Face (Candidate) |
+|---------|----------------------|---------------------------------|--------------------------------------------------|
+| Type | OCR toolkit | Multimodal OCR model | Image-text-to-text vision-language OCR model |
+| Primary fit | Fast OCR for images and scanned PDFs | Local complex document OCR, tables, figures, forms | Long-horizon document parsing, complex tables, multi-page documents |
+| Deployment | In-process Python dependency | Local Ollama service using `glm-ocr` | Transformers, vLLM, or SGLang self-hosting |
+| Offline support | Yes | Yes, after model pull | Yes, if model is self-hosted |
+| Model size | PaddleOCR model dependent | 0.9B parameters; Ollama tags include `latest`, `q8_0`, and `bf16` | 3B parameters, BF16 safetensors |
+| Context / long document handling | Basic text extraction; structure must be rebuilt downstream | 128K context window in Ollama model metadata | Supports single-image and multi-page/PDF-style parsing workflows |
+| Printed text | Excellent on clean scans | Excellent | Excellent |
+| Scanned documents | Excellent on clean scans | Excellent | Excellent |
+| Table extraction | Text is extracted, but row/column structure can be lost | Strong candidate for table recognition | Strong candidate for table and long-layout parsing |
+| Form/layout understanding | Basic unless coordinates are post-processed | Advanced document understanding | Advanced long-horizon layout parsing |
+| Integration effort | Already implemented | Medium: add Ollama client/provider and prompt templates | Medium/high: add model-serving path and GPU deployment plan |
+| Main risk | Plain-text output loses visual table structure | Requires local model runtime capacity and prompt control | Requires GPU/server capacity, `trust_remote_code` review, and model-serving operations |
 
-The current implementation uses **PaddleOCR** because it:
+Current choice:
 
-- Is open-source and free.
+The implementation uses **PaddleOCR** because it:
+
+- Is already integrated with the FastAPI workflow.
 - Supports offline processing.
-- Provides fast and accurate OCR for scanned PDFs and images.
-- Is easy to integrate with the current FastAPI pipeline.
+- Provides fast and accurate OCR for clean scanned PDFs and images.
+- Has low operational complexity for the PoC.
 
-Future Enhancement
+Future provider candidates:
 
-The OCR engine can be extended to support additional providers based on document complexity.
+### GLM OCR
 
-| Document Type | Recommended Engine |
-|--------------|--------------------|
+Source: <https://ollama.com/library/glm-ocr>
+
+GLM OCR is a local multimodal OCR option available through Ollama. It is designed for complex document understanding and supports text/image inputs. The Ollama library page lists `glm-ocr:latest`, `glm-ocr:q8_0`, and `glm-ocr:bf16` variants with a 128K context window.
+
+Recommended PoC usage pattern:
+
+```powershell
+ollama pull glm-ocr
+ollama run glm-ocr "Text Recognition: ./image.png"
+ollama run glm-ocr "Table Recognition: ./image.png"
+ollama run glm-ocr "Figure Recognition: ./image.png"
+```
+
+Integration direction:
+
+- Add a new extraction provider named `GLM_OCR`.
+- Run Ollama locally or on an internal OCR node.
+- Use text-recognition prompts for normal pages.
+- Use table-recognition prompts for invoices, statements, tabular medical reports, and claim forms.
+- Store the raw OCR response plus a normalized JSON/table representation when available.
+
+Best fit:
+
+- Complex tables.
+- Forms where labels and values are visually separated.
+- Documents where PaddleOCR text is correct but row/column structure is weak.
+- Local/private deployment where cloud OCR is not allowed.
+
+### Baidu Unlimited-OCR
+
+Source: <https://huggingface.co/baidu/Unlimited-OCR>
+
+Baidu Unlimited-OCR is a Hugging Face image-text-to-text model released under the MIT license. The model card lists it as a 3B-parameter BF16 model and provides Transformers, vLLM, and SGLang inference paths. It supports single-image parsing and multi-page parsing where PDFs are first converted to page images.
+
+Recommended PoC usage pattern:
+
+```python
+from transformers import AutoModel, AutoTokenizer
+
+model_name = "baidu/Unlimited-OCR"
+tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+model = AutoModel.from_pretrained(
+    model_name,
+    trust_remote_code=True,
+    use_safetensors=True,
+    device_map="auto",
+)
+
+model.infer(
+    tokenizer,
+    prompt="<image>document parsing.",
+    image_file="invoice.jpg",
+    output_path="ocr_output",
+    base_size=1024,
+    image_size=640,
+    crop_mode=True,
+    max_length=32768,
+    save_results=True,
+)
+```
+
+Integration direction:
+
+- Add a new extraction provider named `BAIDU_UNLIMITED_OCR`.
+- Prefer a model-serving boundary such as vLLM or SGLang instead of loading the model inside the API process.
+- Convert PDFs to images at 300 DPI before multi-page parsing.
+- Review any remote model code before enabling `trust_remote_code=True` in a controlled environment.
+- Keep PaddleOCR as the default path and route only complex/failed documents to this engine until benchmarked.
+
+Best fit:
+
+- Long invoices or statements.
+- Multi-page documents.
+- Complex tables that need row/column reconstruction.
+- Documents where one-shot page-level parsing is more valuable than simple line OCR.
+
+Recommended future routing:
+
+| Document Type / Condition | Recommended Engine |
+|---------------------------|--------------------|
 | Searchable PDF | Native PDF Extraction |
-| Scanned PDF / Images | PaddleOCR |
-| Complex Forms | GLM OCR |
-| Complex Tables | GLM OCR / Baidu OCR |
-| Handwritten Documents | GLM OCR |
+| Clean image or scanned PDF | PaddleOCR |
+| PaddleOCR text is good but table structure is weak | GLM OCR or Baidu Unlimited-OCR |
+| Complex forms with separated labels and values | GLM OCR |
+| Long multi-page invoices/statements | Baidu Unlimited-OCR |
+| Handwritten or low-quality images | Benchmark GLM OCR and Baidu Unlimited-OCR before production use |
+
+## 8.2 Current PaddleOCR Issues Observed
+
+Sample file:
+
+```text
+batch1-0001.jpg
+```
+
+Visible document:
+
+- Invoice no: `51109338`
+- Date of issue: `04/13/2013`
+- Seller: `Andrews, Kirby and Valdez`
+- Client: `Becker Ltd`
+- Seller Tax Id: `945-82-2137`
+- Client Tax Id: `942-80-0517`
+- IBAN: `GB75MCRL06841367619257`
+- Summary total gross worth: `$ 6 204,19`
+
+Observed PaddleOCR quality:
+
+- Core text recognition is strong for this sample. The invoice number, date, seller/client names, addresses, tax IDs, IBAN, line-item descriptions, quantities, VAT values, and totals are present.
+- Estimated extraction quality is approximately 95-98% for plain text because the image is high resolution, straight, high contrast, and printed in standard fonts.
+- The main gap is not character recognition. The main gap is layout preservation and table structure.
+
+Current issues to handle before Dev2 handoff:
+
+1. Label/value line breaks.
+   Example: `Date of issue:` appears on one line and `04/13/2013` appears on the next line. This should be normalized to `Date of issue: 04/13/2013`.
+
+2. Two-column party layout flattening.
+   Seller and client blocks are visually side by side, but plain OCR text serializes them into a single stream. Downstream parsers should preserve separate `seller` and `client` blocks.
+
+3. Table row reconstruction.
+   PaddleOCR extracts item text and numbers, but the visual table becomes plain text. Multi-line product descriptions and numeric columns need to be grouped into structured rows.
+
+4. Split table headers.
+   Headers such as `Gross worth` can appear as `Gross` and `worth` on separate lines. Header normalization should merge these before table parsing.
+
+5. Locale-specific numeric formats.
+   Values use comma decimals and spaces as thousands separators, for example `1 394,67` and `6 204,19`. Post-processing must preserve the original value and optionally normalize to machine-readable decimals.
+
+6. Product punctuation and spacing.
+   Product descriptions such as `TESTED!!READ BELOW!!` may need whitespace cleanup, but should not be treated as an OCR failure.
+
+Recommended PaddleOCR post-processing:
+
+- Normalize whitespace and repeated blank lines.
+- Join label/value pairs when a label line is followed by a value line.
+- Use OCR bounding boxes, when available, to separate seller/client regions and rebuild table rows.
+- Convert invoice item rows into structured fields: `no`, `description`, `qty`, `um`, `net_price`, `net_worth`, `vat_rate`, and `gross_worth`.
+- Preserve original extracted text for audit/debugging and store normalized structured output separately.
+- Keep PII/financial identifiers such as `Tax Id` and `IBAN` unchanged so Dev2 can detect them reliably.
 
 ## 9. OCR Confidence Evaluation
 
