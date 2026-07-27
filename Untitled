@@ -1,9 +1,0 @@
-"Invoice Number INV-3001`nBill To: Test Patient`nAmount Due: 99.00" | Set-Content .\sample-invoice.txt
-
-$response = Invoke-RestMethod `
-  -Uri http://127.0.0.1:8000/upload/ `
-  -Method Post `
-  -Form @{ file = Get-Item .\sample-invoice.txt }
-
-$response
-$documentId = $response.document.document_id

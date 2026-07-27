@@ -1,6 +1,6 @@
-# PII/PHI Document Intelligence PoC
+# DocShield-AI
 
-A FastAPI-based Document Intelligence Proof of Concept (PoC) for document ingestion, OCR, document classification, and extracted text generation. The extracted text is exposed through APIs for downstream PII/PHI detection and compliance workflows.
+DocShield-AI is a FastAPI-based Document Intelligence Proof of Concept (PoC) for document ingestion, OCR, document classification, and extracted text generation. The extracted text is exposed through APIs for downstream PII/PHI detection and compliance workflows.
 
 ## Features
 
@@ -41,7 +41,7 @@ A FastAPI-based Document Intelligence Proof of Concept (PoC) for document ingest
 ## Project Structure
 
 ```text
-PII-PHI-Document-Intelligence-PoC/
+DocShield-AI/
 ├── api/
 ├── core/
 ├── database/
@@ -121,8 +121,8 @@ Extracted Text API
 ### 1. Clone Repository
 
 ```bash
-git clone <repository-url>
-cd PII-PHI-Document-Intelligence-PoC
+git clone https://github.com/Vinaykumar21798/DocShield-AI.git
+cd DocShield-AI
 ```
 
 ### 2. Create Virtual Environment

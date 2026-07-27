@@ -1,8 +1,8 @@
-# PII/PHI Document Intelligence PoC - Dev1 Documentation
+# DocShield-AI - Dev1 Documentation
 
 ## 1. Purpose
 
-This FastAPI project is the Dev1 backend for an enterprise Document Intelligence PoC. It handles document upload, validation, local storage, PostgreSQL metadata, Redis queueing, background processing, document classification, OCR/text extraction, OCR confidence evaluation, and extracted-text handoff to Dev2 for PII/PHI detection.
+DocShield-AI is the Dev1 backend for an enterprise Document Intelligence PoC. It handles document upload, validation, local storage, PostgreSQL metadata, Redis queueing, background processing, document classification, OCR/text extraction, OCR confidence evaluation, and extracted-text handoff to Dev2 for PII/PHI detection.
 
 ## 2. Current Dev1 Status
 
@@ -62,7 +62,7 @@ Pending / next work:
 ## 4. Clean Project Structure
 
 ```text
-PII-PHI-Document-Intelligence-PoC/
+DocShield-AI/
 |-- api/
 |   |-- dependencies.py
 |   |-- routes/
