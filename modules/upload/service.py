@@ -13,6 +13,12 @@ from redis_queue.producer import RedisProducer
 from redis_queue.redis_client import redis_client
 
 
+DOCUMENT_STATUS_PENDING = "PENDING"
+PROCESSING_JOB_STATUS_PENDING = "PENDING"
+WORKFLOW_STAGE_UPLOAD = "UPLOAD"
+DOCUMENT_PROCESSING_QUEUE = "document_processing"
+
+
 class UploadService:
     """
     Handles document upload workflow.
@@ -66,7 +72,7 @@ class UploadService:
             file_type=file.content_type,
             file_size=len(file_content),
             storage_path=file_path,
-            status="UPLOADED",
+            status=DOCUMENT_STATUS_PENDING,
         )
 
         self.db.add(document)
@@ -75,9 +81,9 @@ class UploadService:
         # Create processing job
         processing_job = ProcessingJob(
             document_id=document.id,
-            workflow_stage="UPLOAD",
-            queue_name="document_processing",
-            job_status="PENDING",
+            workflow_stage=WORKFLOW_STAGE_UPLOAD,
+            queue_name=DOCUMENT_PROCESSING_QUEUE,
+            job_status=PROCESSING_JOB_STATUS_PENDING,
         )
 
         self.db.add(processing_job)

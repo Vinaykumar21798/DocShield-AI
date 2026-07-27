@@ -36,6 +36,18 @@ class OCRResultRepository(BaseRepository[OCRResult]):
             .all()
         )
 
+    def get_latest_by_document_id(
+        self,
+        db: Session,
+        document_id: str,
+    ) -> Optional[OCRResult]:
+        return (
+            db.query(OCRResult)
+            .filter(OCRResult.document_id == document_id)
+            .order_by(OCRResult.created_at.desc())
+            .first()
+        )
+
     def update_extracted_text(
         self,
         db: Session,

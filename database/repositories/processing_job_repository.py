@@ -104,6 +104,8 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             {
                 "worker_id": worker_id,
                 "started_at": datetime.utcnow(),
+                "completed_at": None,
+                "error_message": None,
             },
         )
 
@@ -117,7 +119,26 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             db,
             job,
             {
-                "retry_count": job.retry_count + 1,
+                "retry_count": (job.retry_count or 0) + 1,
+            },
+        )
+
+    def mark_retry_queued(
+        self,
+        db: Session,
+        job: ProcessingJob,
+    ) -> ProcessingJob:
+
+        return self.update(
+            db,
+            job,
+            {
+                "job_status": "PENDING",
+                "workflow_stage": "RETRY_QUEUED",
+                "retry_count": (job.retry_count or 0) + 1,
+                "worker_id": None,
+                "started_at": None,
+                "completed_at": None,
             },
         )
 
@@ -132,6 +153,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             job,
             {
                 "job_status": "COMPLETED",
+                "error_message": None,
                 "completed_at": datetime.utcnow(),
             },
         )

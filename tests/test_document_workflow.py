@@ -1,0 +1,132 @@
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+
+from database.models import Document, OCRResult, ProcessingJob
+from modules.classification.service import DocumentType
+from modules.extraction.ocr import OCREngine
+from modules.extraction.service import ExtractionService
+from orchestration.workflow import DocumentProcessingWorkflow
+
+
+def create_document_with_job(
+    db_session,
+    storage_path,
+    filename="invoice.txt",
+    file_type="text/plain",
+    retry_count=0,
+):
+    document = Document(
+        id=str(uuid4()),
+        filename=filename,
+        stored_filename=f"{uuid4()}.txt",
+        file_type=file_type,
+        file_size=100,
+        storage_path=str(storage_path),
+        status="PENDING",
+    )
+    processing_job = ProcessingJob(
+        id=str(uuid4()),
+        document_id=document.id,
+        job_status="PENDING",
+        workflow_stage="UPLOAD",
+        queue_name="document_processing",
+        retry_count=retry_count,
+    )
+
+    db_session.add(document)
+    db_session.add(processing_job)
+    db_session.commit()
+
+    return document, processing_job
+
+
+def test_workflow_completes_native_text_document(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    document_path = tmp_path / "invoice.txt"
+    document_text = (
+        "Invoice Number INV-1001\n"
+        "Bill To: Jane Patient\n"
+        "Amount Due: 125.00\n"
+        "Payment terms: due on receipt."
+    )
+    document_path.write_text(document_text, encoding="utf-8")
+    document, _ = create_document_with_job(db_session, document_path)
+
+    state = DocumentProcessingWorkflow(db_session).execute(document.id)
+
+    saved_document = db_session.get(Document, document.id)
+    saved_job = (
+        db_session.query(ProcessingJob)
+        .filter(ProcessingJob.document_id == document.id)
+        .one()
+    )
+    ocr_result = (
+        db_session.query(OCRResult)
+        .filter(OCRResult.document_id == document.id)
+        .one()
+    )
+
+    assert state.status == "COMPLETED"
+    assert saved_document.status == "COMPLETED"
+    assert saved_document.document_type == DocumentType.INVOICE.value
+    assert saved_job.job_status == "COMPLETED"
+    assert saved_job.workflow_stage == "COMPLETE_WORKFLOW"
+    assert ocr_result.extraction_method == OCREngine.NATIVE_TEXT.value
+    assert ocr_result.is_searchable is True
+    assert "Invoice Number INV-1001" in ocr_result.extracted_text
+    assert ocr_result.confidence_score > 0
+
+    expected_text_path = (
+        Path("storage/extracted_text") / f"{document.id}.txt"
+    )
+    assert ocr_result.extracted_text_path == expected_text_path.as_posix()
+    assert state.extracted_text_path == expected_text_path.as_posix()
+
+    extracted_text_file = tmp_path / expected_text_path
+    assert extracted_text_file.exists()
+    assert extracted_text_file.read_text(encoding="utf-8") == (
+        ocr_result.extracted_text
+    )
+
+    extraction_service = ExtractionService(db_session)
+    status_response = extraction_service.get_processing_status(document.id)
+    text_response = extraction_service.get_extracted_text(document.id)
+
+    assert status_response.has_extracted_text is True
+    assert status_response.processing_status == "COMPLETED"
+    assert text_response.extracted_text == ocr_result.extracted_text
+
+
+def test_workflow_marks_document_and_job_failed_when_file_is_missing(
+    db_session,
+    tmp_path,
+):
+    missing_path = tmp_path / "missing.txt"
+    document, _ = create_document_with_job(db_session, missing_path)
+
+    with pytest.raises(Exception, match="Stored document file not found"):
+        DocumentProcessingWorkflow(db_session).execute(document.id)
+
+    saved_document = db_session.get(Document, document.id)
+    saved_job = (
+        db_session.query(ProcessingJob)
+        .filter(ProcessingJob.document_id == document.id)
+        .one()
+    )
+    ocr_results = (
+        db_session.query(OCRResult)
+        .filter(OCRResult.document_id == document.id)
+        .all()
+    )
+
+    assert saved_document.status == "FAILED"
+    assert saved_job.job_status == "FAILED"
+    assert "Stored document file not found" in saved_job.error_message
+    assert saved_job.completed_at is not None
+    assert ocr_results == []

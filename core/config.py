@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,14 +24,31 @@ class Settings(BaseSettings):
     host: str = Field("0.0.0.0", alias="HOST")
     port: int = Field(8000, alias="PORT")
 
-
     database_url: str = Field(..., alias="DATABASE_URL")
 
     redis_url: str = Field(..., alias="REDIS_URL")
 
+    processing_job_max_retries: int = Field(
+        3,
+        alias="PROCESSING_JOB_MAX_RETRIES",
+    )
 
     upload_dir: str = Field(..., alias="UPLOAD_DIR")
     max_file_size_mb: int = Field(..., alias="MAX_FILE_SIZE_MB")
+
+    @field_validator("debug", mode="before")
+    @classmethod
+    def parse_debug(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            normalized_value = value.strip().lower()
+
+            if normalized_value in {"release", "production", "prod"}:
+                return False
+
+            if normalized_value in {"debug", "development", "dev"}:
+                return True
+
+        return value
 
 
 @lru_cache

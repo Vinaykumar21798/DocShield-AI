@@ -24,7 +24,7 @@ class Document(Base):
         unique=True,
     )
 
-    file_type = Column(String(50), nullable=False)
+    file_type = Column(String(255), nullable=False)
 
     document_type = Column(String(100))
 

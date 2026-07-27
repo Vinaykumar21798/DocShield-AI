@@ -1,0 +1,8 @@
+Invoice
+INVOICE #5130
+Bill to:
+Cedar Valley Clinic
+71 Church Ave, Anchorage, AK 99501
+Description: consulting services
+Amount due: $3972.00
+Payment terms: net 30 days
