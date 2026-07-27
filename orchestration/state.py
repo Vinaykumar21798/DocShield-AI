@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from database.models import Document, ProcessingJob
 
@@ -19,6 +19,7 @@ class WorkflowState:
     is_searchable: Optional[bool] = None
     extracted_text: Optional[str] = None
     extracted_text_path: Optional[str] = None
+    structured_output: Optional[Dict[str, Any]] = None
     page_count: int = 0
     confidence_score: float = 0.0
     raw_confidence_score: float = 0.0

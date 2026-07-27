@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -18,6 +18,7 @@ class ExtractedTextResponse(BaseModel):
     is_searchable: bool
     extracted_text: Optional[str] = None
     extracted_text_path: Optional[str] = None
+    structured_output: Optional[Dict[str, Any]] = None
     page_count: Optional[int] = None
     confidence_score: Optional[float] = None
     processing_time: Optional[float] = None

@@ -22,6 +22,8 @@ Completed:
 - OCR decision engine.
 - Native PDF text extraction.
 - PaddleOCR image/scanned PDF extraction.
+- Layout-preserving OCR output for scanned PDFs and images.
+- Optional structured OCR output persisted with OCR results.
 - OCR result storage.
 - OCR confidence evaluation.
 - Native text extraction for `.txt` and `.docx` documents.
@@ -206,7 +208,7 @@ OCR Decision Engine
   |-- Image / Scanned PDF -> PaddleOCR
   |
   v
-Extract Text
+Extract Text + Structured Layout
   |
   v
 OCR Confidence Evaluation
@@ -364,6 +366,8 @@ Responsibilities:
 - Select extraction method.
 - Extract text from searchable PDFs with PyMuPDF.
 - Extract text from images and scanned PDFs with PaddleOCR.
+- Preserve scanned document layout using PP-Structure/Layout when available.
+- Reconstruct page, block, row, line, bounding box, and table-like structure from OCR coordinates when PP-Structure is unavailable.
 - Evaluate production OCR confidence.
 - Serve extracted text outputs to APIs.
 
@@ -398,8 +402,8 @@ The current production path is still PaddleOCR. GLM OCR and Baidu Unlimited-OCR 
 | Context / long document handling | Basic text extraction; structure must be rebuilt downstream | 128K context window in Ollama model metadata | Supports single-image and multi-page/PDF-style parsing workflows |
 | Printed text | Excellent on clean scans | Excellent | Excellent |
 | Scanned documents | Excellent on clean scans | Excellent | Excellent |
-| Table extraction | Text is extracted, but row/column structure can be lost | Strong candidate for table recognition | Strong candidate for table and long-layout parsing |
-| Form/layout understanding | Basic unless coordinates are post-processed | Advanced document understanding | Advanced long-horizon layout parsing |
+| Table extraction | Text plus optional PP-Structure or bounding-box table-like reconstruction | Strong candidate for table recognition | Strong candidate for table and long-layout parsing |
+| Form/layout understanding | Coordinates are post-processed; PP-Structure used when available | Advanced document understanding | Advanced long-horizon layout parsing |
 | Integration effort | Already implemented | Medium: add Ollama client/provider and prompt templates | Medium/high: add model-serving path and GPU deployment plan |
 | Main risk | Plain-text output loses visual table structure | Requires local model runtime capacity and prompt control | Requires GPU/server capacity, `trust_remote_code` review, and model-serving operations |
 
@@ -528,7 +532,7 @@ Observed PaddleOCR quality:
 - Estimated extraction quality is approximately 95-98% for plain text because the image is high resolution, straight, high contrast, and printed in standard fonts.
 - The main gap is not character recognition. The main gap is layout preservation and table structure.
 
-Current issues to handle before Dev2 handoff:
+Known document-shape issues now partially addressed by layout-preserving OCR, with remaining normalization left to downstream/domain post-processing:
 
 1. Label/value line breaks.
    Example: `Date of issue:` appears on one line and `04/13/2013` appears on the next line. This should be normalized to `Date of issue: 04/13/2013`.
@@ -548,14 +552,60 @@ Current issues to handle before Dev2 handoff:
 6. Product punctuation and spacing.
    Product descriptions such as `TESTED!!READ BELOW!!` may need whitespace cleanup, but should not be treated as an OCR failure.
 
-Recommended PaddleOCR post-processing:
+Recommended downstream PaddleOCR post-processing remains:
 
 - Normalize whitespace and repeated blank lines.
 - Join label/value pairs when a label line is followed by a value line.
-- Use OCR bounding boxes, when available, to separate seller/client regions and rebuild table rows.
+- Use `structured_output` OCR bounding boxes, when available, to separate seller/client regions and rebuild table rows.
 - Convert invoice item rows into structured fields: `no`, `description`, `qty`, `um`, `net_price`, `net_worth`, `vat_rate`, and `gross_worth`.
 - Preserve original extracted text for audit/debugging and store normalized structured output separately.
 - Keep PII/financial identifiers such as `Tax Id` and `IBAN` unchanged so Dev2 can detect them reliably.
+
+## 8.3 Layout-Preserving PaddleOCR Output
+
+PaddleOCR extraction now produces two outputs for scanned PDFs and images:
+
+- `extracted_text`: plain text for the existing downstream workflow.
+- `structured_output`: optional layout metadata for consumers that need page, block, line, table, or coordinate context.
+
+The `TextExtractionResult` dataclass remains backward compatible because `structured_output` is optional and all existing required fields are unchanged. The workflow still evaluates OCR confidence after extraction using the existing evaluator and stores the same plain extracted text file under `storage/extracted_text`.
+
+Storage/API behavior:
+
+- `ocr_results.structured_output` stores the structured OCR payload as nullable JSON.
+- `GET /documents/{document_id}/text` returns `structured_output` when it exists.
+- Existing consumers can continue reading `extracted_text`, `confidence_score`, `page_count`, and processing status without changes.
+
+PP-Structure path:
+
+1. The PaddleOCR extractor runs the normal OCR call first so raw OCR confidence scoring remains unchanged.
+2. When `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True`, it lazily attempts to construct `PPStructure` or `PPStructureV3` from the installed `paddleocr` package.
+3. If PP-Structure returns layout blocks, those blocks are normalized into `pages[].blocks[]` with `block_type`, `bbox`, `text`, `lines`, and `source=pp_structure`.
+4. Table HTML returned by PP-Structure is parsed into `block.table.rows` and also rendered to plain text using tab-separated cells.
+
+Bounding-box fallback path:
+
+1. OCR lines are collected from PaddleOCR legacy outputs and newer dict-style outputs such as `rec_texts`, `rec_scores`, `rec_boxes`, and `rec_polys`.
+2. Bounding boxes are normalized to `[left, top, right, bottom]`. Polygon boxes are reduced to their enclosing rectangle.
+3. Lines are grouped into visual rows using vertical center proximity, then sorted left-to-right inside each row.
+4. Large horizontal gaps are rendered as tabs so multi-column regions and tables retain visible separation in plain text.
+5. Larger vertical gaps create separate text blocks/paragraphs.
+6. Repeated rows with three or more fragments are marked as table-like blocks.
+7. Multi-page scanned PDFs are merged with a form-feed page break (`\f`) between page texts.
+
+Current limitations:
+
+- PP-Structure availability depends on the installed PaddleOCR package and model support.
+- Bounding-box reconstruction is heuristic and cannot perfectly recover all reading order decisions.
+- Complex nested tables, merged cells, rotated text, overlapping columns, handwriting, and poor scans may still lose structure.
+- Fallback table detection preserves rows and visible column separation but does not infer semantic schemas.
+- Native PDF, TXT, and DOCX extraction paths continue to return plain text only unless separate layout support is added later.
+
+Dependencies and configuration:
+
+- No new dependency was added. The feature uses existing `paddleocr`, `paddlepaddle`, `Pillow`, and `pymupdf` dependencies.
+- Optional PP-Structure support is used only when `PPStructure` or `PPStructureV3` is available in the installed PaddleOCR package.
+- Set `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=False` to skip PP-Structure attempts and rely on OCR bounding-box reconstruction.
 
 ## 9. OCR Confidence Evaluation
 
@@ -662,6 +712,7 @@ Important fields:
 - `page_count`
 - `confidence_score`
 - `processing_time`
+- `structured_output`
 - `created_at`
 - `updated_at`
 
@@ -765,6 +816,7 @@ Important response fields:
 - `page_count`
 - `confidence_score`
 - `processing_time`
+- `structured_output`
 
 
 
@@ -945,6 +997,7 @@ Required fields:
 - `is_searchable`
 - `confidence_score`
 - `page_count`
+- `structured_output`
 - `processing_status`
 - `workflow_stage`
 

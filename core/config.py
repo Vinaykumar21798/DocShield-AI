@@ -33,6 +33,11 @@ class Settings(BaseSettings):
         alias="PROCESSING_JOB_MAX_RETRIES",
     )
 
+    paddleocr_layout_analysis_enabled: bool = Field(
+        True,
+        alias="PADDLEOCR_LAYOUT_ANALYSIS_ENABLED",
+    )
+
     upload_dir: str = Field(..., alias="UPLOAD_DIR")
     max_file_size_mb: int = Field(..., alias="MAX_FILE_SIZE_MB")
 

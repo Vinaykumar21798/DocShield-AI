@@ -13,6 +13,7 @@ A FastAPI-based Document Intelligence Proof of Concept (PoC) for document ingest
 - OCR Decision Engine
 - Native PDF text extraction (PyMuPDF)
 - PaddleOCR for scanned PDFs and images
+- Layout-preserving OCR output for scanned PDFs and images
 - Native text extraction for `.txt` and `.docx`
 - OCR confidence evaluation
 - Extracted text storage
@@ -194,7 +195,7 @@ http://localhost:8000/docs
 | POST | `/upload/` | Upload Single Document |
 | POST | `/upload/bulk` | Upload Multiple Documents |
 | GET | `/documents/{document_id}/status` | Document Status |
-| GET | `/documents/{document_id}/text` | Extracted Text |
+| GET | `/documents/{document_id}/text` | Extracted Text with optional structured OCR layout |
 
 ---
 
@@ -205,6 +206,31 @@ http://localhost:8000/docs
 | Native PDF | Searchable PDFs |
 | PaddleOCR | Images & Scanned PDFs |
 | Native Text | TXT / DOCX |
+
+---
+
+## Layout-Preserving OCR
+
+PaddleOCR extraction now returns both plain extracted text and optional structured layout output. The plain `extracted_text` field remains the downstream processing input, while `structured_output` contains page, block, line, bounding box, and table metadata when available.
+
+When `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True`, the PaddleOCR extractor attempts PP-Structure/Layout (`PPStructure` or `PPStructureV3`) lazily during scanned PDF/image OCR. If PP-Structure is unavailable or fails for a page, extraction falls back to OCR bounding box reconstruction.
+
+Fallback reconstruction works by normalizing OCR boxes, grouping lines by vertical position, sorting each row left-to-right, inserting tabs for large horizontal gaps, inserting blank lines for larger vertical gaps, and marking repeated multi-fragment rows as table-like blocks. Multi-page scanned PDFs use a form-feed page break (`\f`) between page texts.
+
+Structured output is stored in `ocr_results.structured_output` and returned by `GET /documents/{document_id}/text`. Existing fields such as `extracted_text`, `extracted_text_path`, `page_count`, `confidence_score`, and `processing_time` are unchanged. OCR confidence still uses the existing line-score average and confidence evaluator.
+
+Current limitations:
+
+- Layout reconstruction is heuristic when PP-Structure is not available.
+- Complex nested tables, merged cells, rotated text, handwritten text, and heavily skewed scans may still need provider-specific post-processing.
+- Multi-column reading order is inferred from coordinates and may be imperfect when columns overlap vertically or have inconsistent gutters.
+- Table output from fallback OCR preserves visual rows with tabs but does not infer semantic column names beyond recognized text.
+
+Dependencies and configuration:
+
+- No new package is required beyond the existing `paddleocr`, `paddlepaddle`, `Pillow`, and `pymupdf` dependencies.
+- PP-Structure support depends on the installed PaddleOCR package exposing `PPStructure` or `PPStructureV3`.
+- Set `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=False` to skip PP-Structure attempts and use bounding-box reconstruction only.
 
 ---
 

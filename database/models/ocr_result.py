@@ -7,6 +7,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
 )
@@ -49,6 +50,11 @@ class OCRResult(Base):
 
     extracted_text_path = Column(
         String(500),
+        nullable=True,
+    )
+
+    structured_output = Column(
+        JSON,
         nullable=True,
     )
 

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 from time import perf_counter
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from database.models import Document
 
@@ -19,6 +19,7 @@ class TextExtractionResult:
     confidence_score: float
     processing_time: float
     extracted_text_path: Optional[str] = None
+    structured_output: Optional[Dict[str, Any]] = None
 
 
 class NativePDFExtractionService:

@@ -4,6 +4,7 @@ from typing import Callable, Dict, Optional
 
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from database.models import Document, OCRResult, ProcessingJob
 from database.repositories.document_repository import (
     DocumentRepository,
@@ -115,7 +116,12 @@ class DocumentProcessingWorkflow:
             native_text_extractor or NativeTextExtractionService()
         )
         self.paddle_ocr_extractor = (
-            paddle_ocr_extractor or PaddleOCRExtractionService()
+            paddle_ocr_extractor
+            or PaddleOCRExtractionService(
+                use_layout_analysis=(
+                    settings.paddleocr_layout_analysis_enabled
+                ),
+            )
         )
         self.planner = planner or WorkflowPlanner()
         self.worker_id = worker_id
@@ -317,6 +323,7 @@ class DocumentProcessingWorkflow:
             ),
             extracted_text=extracted_text,
             extracted_text_path=state.extracted_text_path,
+            structured_output=state.structured_output,
             page_count=state.page_count,
             confidence_score=state.confidence_score,
             processing_time=state.processing_time,
@@ -514,6 +521,7 @@ class DocumentProcessingWorkflow:
     ) -> None:
         state.extracted_text = extraction_result.extracted_text
         state.extracted_text_path = extraction_result.extracted_text_path
+        state.structured_output = extraction_result.structured_output
         state.page_count = extraction_result.page_count
         state.confidence_score = extraction_result.confidence_score
         state.raw_confidence_score = extraction_result.confidence_score

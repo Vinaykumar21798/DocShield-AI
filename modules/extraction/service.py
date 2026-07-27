@@ -152,6 +152,7 @@ class ExtractionService:
             is_searchable=ocr_result.is_searchable,
             extracted_text=ocr_result.extracted_text,
             extracted_text_path=ocr_result.extracted_text_path,
+            structured_output=ocr_result.structured_output,
             page_count=ocr_result.page_count,
             confidence_score=ocr_result.confidence_score,
             processing_time=ocr_result.processing_time,

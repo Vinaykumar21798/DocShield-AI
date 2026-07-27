@@ -5,6 +5,7 @@ import pytest
 
 from database.models import Document, OCRResult, ProcessingJob
 from modules.classification.service import DocumentType
+from modules.extraction.native import TextExtractionResult
 from modules.extraction.ocr import OCREngine
 from modules.extraction.service import ExtractionService
 from orchestration.workflow import DocumentProcessingWorkflow
@@ -130,3 +131,67 @@ def test_workflow_marks_document_and_job_failed_when_file_is_missing(
     assert "Stored document file not found" in saved_job.error_message
     assert saved_job.completed_at is not None
     assert ocr_results == []
+
+
+class FakePaddleExtractor:
+    def __init__(self, structured_output):
+        self.structured_output = structured_output
+
+    def extract(self, document):
+        return TextExtractionResult(
+            extracted_text="Invoice Number INV-3003\nTotal 10.00",
+            page_count=1,
+            confidence_score=0.90,
+            processing_time=0.01,
+            structured_output=self.structured_output,
+        )
+
+
+def test_workflow_persists_structured_ocr_output(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    image_path = tmp_path / "invoice.png"
+    image_path.write_bytes(b"fake image bytes")
+    document, _ = create_document_with_job(
+        db_session,
+        image_path,
+        filename="invoice.png",
+        file_type="image/png",
+    )
+    structured_output = {
+        "schema_version": "layout_ocr_v1",
+        "engine": "PADDLEOCR",
+        "pages": [
+            {
+                "page_number": 1,
+                "layout_source": "ocr_bounding_boxes",
+                "blocks": [
+                    {
+                        "block_type": "text",
+                        "text": "Invoice Number INV-3003",
+                    }
+                ],
+            }
+        ],
+    }
+
+    DocumentProcessingWorkflow(
+        db_session,
+        paddle_ocr_extractor=FakePaddleExtractor(structured_output),
+    ).execute(document.id)
+
+    ocr_result = (
+        db_session.query(OCRResult)
+        .filter(OCRResult.document_id == document.id)
+        .one()
+    )
+    text_response = ExtractionService(db_session).get_extracted_text(
+        document.id,
+    )
+
+    assert ocr_result.extraction_method == OCREngine.PADDLEOCR.value
+    assert ocr_result.structured_output == structured_output
+    assert text_response.structured_output == structured_output
