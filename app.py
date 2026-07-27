@@ -134,7 +134,7 @@ SWAGGER_UI_BULK_UPLOAD_STYLE = """
 
 
 app = FastAPI(
-    title="PII/PHI Document Intelligence PoC",
+    title="DocShield-AI",
     version="1.0.0",
     description="Backend API for document upload, OCR and PHI/PII processing.",
     docs_url=None,
