@@ -1,6 +1,0 @@
-Internal memo - vendor address correction
-Heads up: accounting keeps sending Sierra Foods invoices to the wrong place. They consolidated
-everything to the distribution center on Foothill last year.
-The correct mailing address is 4200 Foothill Boulevard, Denver Colorado 80204 - that is the big
-warehouse off exit 11, not the old downtown office on Larimer.
-Please update the vendor card before the next payment run so nothing bounces.
