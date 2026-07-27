@@ -1,0 +1,186 @@
+{
+    "document": "sample.pdf",
+    "total_pages": 1,
+    "summary": {
+        "total_entities": 11,
+        "pii": {
+            "total": 3,
+            "breakdown": {
+                "EMAIL": 1,
+                "PERSON": 2
+            }
+        },
+        "phi": {
+            "total": 1,
+            "breakdown": {
+                "PROBLEM": 1
+            }
+        },
+        "detectors": {
+            "Regex": 2,
+            "medspacy": 2,
+            "presidio": 7
+        }
+    },
+    "pages": [
+        {
+            "page": 1,
+            "pii": {
+                "PERSON": [
+                    "Marcus Whitfield",
+                    "Elena Vasquez"
+                ],
+                "EMAIL": [
+                    "m.whitfield75@fakemail.com"
+                ]
+            },
+            "phi": {
+                "PROBLEM": [
+                    "Hypertension"
+                ]
+            }
+        }
+    ],
+    "entities": [
+        {
+            "page": 1,
+            "entity_type": "PERSON",
+            "entity_value": "Marcus Whitfield",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "DATE_TIME",
+            "entity_value": "1975-11-02",
+            "confidence": 0.95,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "DateRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.95
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "EMAIL",
+            "entity_value": "m.whitfield75@fakemail.com",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Birchwood Ave",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Charlotte",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PIN_CODE",
+            "entity_value": "556344",
+            "confidence": 0.7,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "DATE_TIME",
+            "entity_value": "2026-02-27",
+            "confidence": 0.95,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "DateRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.95
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PERSON",
+            "entity_value": "Elena Vasquez",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "MD",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PROBLEM",
+            "entity_value": "Hypertension",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "VITAL_SIGN",
+            "entity_value": "Blood Pressure",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        }
+    ]
+}

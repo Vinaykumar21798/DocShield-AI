@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime
+from sqlalchemy import Column, String, Integer, DateTime, Boolean
 from sqlalchemy.sql import func
 
 from database.base import Base
@@ -20,6 +20,15 @@ class Report(Base):
     report_path = Column(String)
 
     generated_by = Column(String)
+
+    # Auditing metrics and stages (Issue 7)
+    processing_duration_ms = Column(Integer)
+    detectors_used = Column(String)
+    qwen_invoked = Column(Boolean, default=False)
+    total_pii = Column(Integer, default=0)
+    total_phi = Column(Integer, default=0)
+    review_completion = Column(Boolean, default=False)
+    redaction_completion = Column(Boolean, default=False)
 
     created_at = Column(
         DateTime(timezone=True),

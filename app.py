@@ -7,6 +7,12 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+def startup_validation():
+    from database.session import run_startup_validation
+    run_startup_validation()
+
+
 @app.get("/")
 async def root():
     return {

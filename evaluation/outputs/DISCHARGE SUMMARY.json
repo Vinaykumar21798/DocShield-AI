@@ -1,0 +1,702 @@
+{
+    "document": "DISCHARGE SUMMARY.pdf",
+    "total_pages": 3,
+    "summary": {
+        "total_entities": 44,
+        "pii": {
+            "total": 17,
+            "breakdown": {
+                "AADHAAR_NUMBER": 1,
+                "ADDRESS": 1,
+                "EMAIL": 2,
+                "IFSC_CODE": 1,
+                "PAN_NUMBER": 1,
+                "PASSPORT_NUMBER": 1,
+                "PERSON": 4,
+                "PIN_CODE": 2,
+                "UPI_ID": 1,
+                "URL": 1,
+                "US_PHONE_NUMBER": 2
+            }
+        },
+        "phi": {
+            "total": 8,
+            "breakdown": {
+                "DOCTOR": 1,
+                "HOSPITAL": 1,
+                "MEDICATION": 1,
+                "MRN": 1,
+                "PROBLEM": 1,
+                "SYMPTOM": 3
+            }
+        },
+        "detectors": {
+            "Regex": 13,
+            "gliner": 6,
+            "medspacy": 8,
+            "presidio": 17
+        }
+    },
+    "pages": [
+        {
+            "page": 1,
+            "pii": {
+                "PIN_CODE": [
+                    "500034",
+                    "500081"
+                ],
+                "PERSON": [
+                    "Ramesh Kumar"
+                ],
+                "US_PHONE_NUMBER": [
+                    "9876543210"
+                ],
+                "EMAIL": [
+                    "ramesh.kumar@gmail.com"
+                ],
+                "ADDRESS": [
+                    "Sai Residency"
+                ],
+                "AADHAAR_NUMBER": [
+                    "4567 8912 3456"
+                ],
+                "PAN_NUMBER": [
+                    "ABCDE1234F"
+                ],
+                "PASSPORT_NUMBER": [
+                    "M1234567"
+                ],
+                "IFSC_CODE": [
+                    "SBIN0001234"
+                ],
+                "UPI_ID": [
+                    "rameshkumar@oksbi"
+                ]
+            },
+            "phi": {
+                "HOSPITAL": [
+                    "ABC Multispeciality Hospital"
+                ]
+            }
+        },
+        {
+            "page": 2,
+            "pii": {
+                "PERSON": [
+                    "Priya Sharma"
+                ]
+            },
+            "phi": {
+                "MRN": [
+                    "MRN-202600145"
+                ],
+                "DOCTOR": [
+                    "Dr."
+                ],
+                "SYMPTOM": [
+                    "Fever",
+                    "Fever",
+                    "fever"
+                ],
+                "PROBLEM": [
+                    "Hypertension"
+                ],
+                "MEDICATION": [
+                    "Paracetamol"
+                ]
+            }
+        },
+        {
+            "page": 3,
+            "pii": {
+                "PERSON": [
+                    "Suresh Kumar",
+                    "Brother"
+                ],
+                "US_PHONE_NUMBER": [
+                    "9123456789"
+                ],
+                "URL": [
+                    "https://www.abcmultispecialityhospital.in"
+                ],
+                "EMAIL": [
+                    "support@abcmultispecialityhospital.in"
+                ]
+            },
+            "phi": {}
+        }
+    ],
+    "entities": [
+        {
+            "page": 1,
+            "entity_type": "HOSPITAL",
+            "entity_value": "ABC Multispeciality Hospital",
+            "confidence": 0.985,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.985489547252655
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Banjara Hills",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Hyderabad",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Telangana",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PIN_CODE",
+            "entity_value": "500034",
+            "confidence": 0.7,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PERSON",
+            "entity_value": "Ramesh Kumar",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "DATE_TIME",
+            "entity_value": "42 Years",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "DATE_TIME",
+            "entity_value": "15-Aug-1983",
+            "confidence": 0.95,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "DateRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.95
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "US_PHONE_NUMBER",
+            "entity_value": "9876543210",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "EMAIL",
+            "entity_value": "ramesh.kumar@gmail.com",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "ZIP CODE",
+            "entity_value": "Flat No. 302",
+            "confidence": 0.804,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.80350661277771
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "ADDRESS",
+            "entity_value": "Sai Residency",
+            "confidence": 0.746,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7459654211997986
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Madhapur",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Hyderabad",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "Telangana",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PIN_CODE",
+            "entity_value": "500081",
+            "confidence": 0.7,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "AADHAAR_NUMBER",
+            "entity_value": "4567 8912 3456",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PAN_NUMBER",
+            "entity_value": "ABCDE1234F",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "PASSPORT_NUMBER",
+            "entity_value": "M1234567",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "ORGANIZATION",
+            "entity_value": "State Bank of India",
+            "confidence": 0.871,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.8705576062202454
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "IFSC_CODE",
+            "entity_value": "SBIN0001234",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "LOCATION",
+            "entity_value": "UPI",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 1,
+            "entity_type": "UPI_ID",
+            "entity_value": "rameshkumar@oksbi",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "MRN",
+            "entity_value": "MRN-202600145",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DATE_TIME",
+            "entity_value": "10-Jul-2026",
+            "confidence": 0.95,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "DateRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.95
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DATE_TIME",
+            "entity_value": "14-Jul-2026",
+            "confidence": 0.95,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "DateRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.95
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DOCTOR",
+            "entity_value": "Dr.",
+            "confidence": 0.747,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7471907138824463
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "PERSON",
+            "entity_value": "Priya Sharma",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "SYMPTOM",
+            "entity_value": "Fever",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DATE_TIME",
+            "entity_value": "five days",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "SYMPTOM",
+            "entity_value": "Fever",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "PROBLEM",
+            "entity_value": "Hypertension",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "MEDICATION",
+            "entity_value": "Paracetamol",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "LAB",
+            "entity_value": "Hemoglobin",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "VITAL_SIGN",
+            "entity_value": "Blood Pressure",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "VITAL_SIGN",
+            "entity_value": "Heart Rate",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DATE_TIME",
+            "entity_value": "five days",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "DATE_TIME",
+            "entity_value": "one week",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 2,
+            "entity_type": "SYMPTOM",
+            "entity_value": "fever",
+            "confidence": 0.85,
+            "detector": "medspacy",
+            "metadata": {
+                "clinical": true,
+                "source": "TargetMatcher",
+                "model": "medspacy",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 3,
+            "entity_type": "PERSON",
+            "entity_value": "Suresh Kumar",
+            "confidence": 0.85,
+            "detector": "presidio",
+            "metadata": {
+                "recognizer": "SpacyRecognizer",
+                "confidence_level": "HIGH",
+                "final_confidence": 0.85
+            }
+        },
+        {
+            "page": 3,
+            "entity_type": "PERSON",
+            "entity_value": "Brother",
+            "confidence": 0.757,
+            "detector": "gliner",
+            "metadata": {
+                "model": "GLiNER",
+                "fallback_detector": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7570437788963318
+            }
+        },
+        {
+            "page": 3,
+            "entity_type": "US_PHONE_NUMBER",
+            "entity_value": "9123456789",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        },
+        {
+            "page": 3,
+            "entity_type": "URL",
+            "entity_value": "https://www.abcmultispecialityhospital.in",
+            "confidence": 0.7,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "MEDIUM",
+                "final_confidence": 0.7
+            }
+        },
+        {
+            "page": 3,
+            "entity_type": "EMAIL",
+            "entity_value": "support@abcmultispecialityhospital.in",
+            "confidence": 1.0,
+            "detector": "Regex",
+            "metadata": {
+                "method": "hybrid_regex",
+                "resolved": true,
+                "confidence_level": "HIGH",
+                "final_confidence": 1.0
+            }
+        }
+    ]
+}
