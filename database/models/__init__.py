@@ -3,6 +3,9 @@ from .confidence import ConfidenceScore
 from .review import Review
 from .redaction import Redaction
 from .report import Report
+from .document import Document
+from .processing_job import ProcessingJob
+from .ocr_result import OCRResult
 
 __all__ = [
     "Entity",
@@ -10,4 +13,7 @@ __all__ = [
     "Review",
     "Redaction",
     "Report",
-]
+    "Document",
+    "ProcessingJob",
+    "OCRResult",
+]

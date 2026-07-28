@@ -1,10 +1,29 @@
 from database.base import Base
 
-from database.models.entity import Entity
-from database.models.confidence import ConfidenceScore
-from database.models.review import Review
-from database.models.redaction import Redaction
-from database.models.report import Report
+from .models import (
+    Entity,
+    ConfidenceScore,
+    Review,
+    Redaction,
+    Report,
+    Document,
+    ProcessingJob,
+    OCRResult,
+)
+from .repositories import (
+    BaseRepository,
+    DocumentRepository,
+    document_repository,
+    ProcessingJobRepository,
+    processing_job_repository,
+    OCRResultRepository,
+    ocr_result_repository,
+    ConfidenceRepository,
+    EntityRepository,
+    RedactionRepository,
+    ReportRepository,
+    ReviewRepository,
+)
 
 __all__ = [
     "Base",
@@ -13,4 +32,19 @@ __all__ = [
     "Review",
     "Redaction",
     "Report",
-]
+    "Document",
+    "ProcessingJob",
+    "OCRResult",
+    "BaseRepository",
+    "DocumentRepository",
+    "document_repository",
+    "ProcessingJobRepository",
+    "processing_job_repository",
+    "OCRResultRepository",
+    "ocr_result_repository",
+    "ConfidenceRepository",
+    "EntityRepository",
+    "RedactionRepository",
+    "ReportRepository",
+    "ReviewRepository",
+]
