@@ -140,6 +140,13 @@ app = FastAPI(
     docs_url=None,
 )
 
+
+@app.on_event("startup")
+def startup_validation():
+    from database.session import run_startup_validation
+    run_startup_validation()
+
+
 app.include_router(api_router)
 
 
@@ -196,5 +203,7 @@ def custom_swagger_ui_html(request: Request) -> HTMLResponse:
 @app.get("/")
 def root():
     return {
-        "message": "PII/PHI Document Intelligence PoC API"
+        "status": "running",
+        "message": "DocShield-AI PII/PHI Document Intelligence PoC API",
+        "version": "1.0.0"
     }

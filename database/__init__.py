@@ -1,16 +1,50 @@
-from .models import *
-from .repositories import *
+from database.base import Base
+
+from .models import (
+    Entity,
+    ConfidenceScore,
+    Review,
+    Redaction,
+    Report,
+    Document,
+    ProcessingJob,
+    OCRResult,
+)
+from .repositories import (
+    BaseRepository,
+    DocumentRepository,
+    document_repository,
+    ProcessingJobRepository,
+    processing_job_repository,
+    OCRResultRepository,
+    ocr_result_repository,
+    ConfidenceRepository,
+    EntityRepository,
+    RedactionRepository,
+    ReportRepository,
+    ReviewRepository,
+)
 
 __all__ = [
+    "Base",
+    "Entity",
+    "ConfidenceScore",
+    "Review",
+    "Redaction",
+    "Report",
     "Document",
     "ProcessingJob",
     "OCRResult",
-
+    "BaseRepository",
     "DocumentRepository",
-    "ProcessingJobRepository",
-    "OCRResultRepository",
-
     "document_repository",
+    "ProcessingJobRepository",
     "processing_job_repository",
+    "OCRResultRepository",
     "ocr_result_repository",
+    "ConfidenceRepository",
+    "EntityRepository",
+    "RedactionRepository",
+    "ReportRepository",
+    "ReviewRepository",
 ]

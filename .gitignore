@@ -78,6 +78,7 @@ alembic/versions/__pycache__/
 # ==========================================
 # Uploaded Files
 # ==========================================
+uploads/
 storage/uploads/*
 !storage/uploads/.gitkeep
 
