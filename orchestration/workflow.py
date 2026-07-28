@@ -1,15 +1,28 @@
+import json
 import logging
 from pathlib import Path
 from typing import Callable, Dict, Optional
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
 from core.config import settings
-from database.models import Document, OCRResult, ProcessingJob
+from database.models import (
+    ConfidenceScore,
+    Document,
+    Entity,
+    OCRResult,
+    ProcessingJob,
+    Redaction,
+    Report,
+    Review,
+)
+from database.repositories.confidence_repository import ConfidenceRepository
 from database.repositories.document_repository import (
     DocumentRepository,
     document_repository,
 )
+from database.repositories.entity_repository import EntityRepository
 from database.repositories.ocr_result_repository import (
     OCRResultRepository,
     ocr_result_repository,
@@ -18,12 +31,16 @@ from database.repositories.processing_job_repository import (
     ProcessingJobRepository,
     processing_job_repository,
 )
+from database.repositories.redaction_repository import RedactionRepository
+from database.repositories.report_repository import ReportRepository
+from database.repositories.review_repository import ReviewRepository
 from modules.classification.service import (
     ClassificationResult,
     DocumentClassificationService,
     DocumentType,
     document_classification_service,
 )
+from modules.detection.service import DetectionService
 from modules.extraction.evaluation import (
     OCRConfidenceEvaluator,
     ocr_confidence_evaluator,
@@ -51,6 +68,9 @@ OCR_ENGINE_PLACEHOLDER = "PLACEHOLDER"
 OCR_PLACEHOLDER_TEXT = "TODO - OCR not implemented"
 DEFAULT_WORKER_ID = "document-processing-worker"
 EXTRACTED_TEXT_DIR = Path("storage/extracted_text")
+REDACTED_TEXT_DIR = Path("storage/redacted")
+REPORTS_DIR = Path("storage/reports")
+HUMAN_REVIEW_THRESHOLD = 0.80
 
 
 class DocumentWorkflowError(Exception):
@@ -92,6 +112,7 @@ class DocumentProcessingWorkflow:
             DocumentClassificationService
         ] = None,
         confidence_evaluator: Optional[OCRConfidenceEvaluator] = None,
+        detection_service: Optional[DetectionService] = None,
         planner: Optional[WorkflowPlanner] = None,
         worker_id: str = DEFAULT_WORKER_ID,
         logger: Optional[logging.Logger] = None,
@@ -106,6 +127,7 @@ class DocumentProcessingWorkflow:
         self.confidence_evaluator = (
             confidence_evaluator or ocr_confidence_evaluator
         )
+        self.detection_service = detection_service or DetectionService()
         self.ocr_decision_engine = (
             ocr_decision_engine or OCRDecisionEngine()
         )
@@ -141,6 +163,13 @@ class DocumentProcessingWorkflow:
             WorkflowStep.OCR_DECISION: self._decide_ocr_engine,
             WorkflowStep.OCR_EXECUTION: self._execute_ocr,
             WorkflowStep.STORE_OCR_RESULTS: self._store_ocr_results,
+            WorkflowStep.DETECTION_EXECUTION: self._execute_detection,
+            WorkflowStep.STORE_DETECTION_RESULTS: (
+                self._store_detection_results
+            ),
+            WorkflowStep.HUMAN_REVIEW: self._prepare_human_review,
+            WorkflowStep.REDACTION: self._redact_document_text,
+            WorkflowStep.REPORT_GENERATION: self._generate_report,
             WorkflowStep.COMPLETE_WORKFLOW: self._complete_workflow,
         }
 
@@ -329,7 +358,7 @@ class DocumentProcessingWorkflow:
             processing_time=state.processing_time,
         )
 
-        self.ocr_result_repository.create_result(
+        state.ocr_result = self.ocr_result_repository.create_result(
             self.db,
             ocr_result,
         )
@@ -344,6 +373,317 @@ class DocumentProcessingWorkflow:
         text_path.parent.mkdir(parents=True, exist_ok=True)
         text_path.write_text(extracted_text, encoding="utf-8")
         return text_path.as_posix()
+
+    def _execute_detection(self, state: WorkflowState) -> None:
+        if not state.extracted_text or not state.extracted_text.strip():
+            state.detected_entities = []
+            self.logger.info(
+                "Detection skipped for document_id=%s because extracted text is empty",
+                state.document_id,
+            )
+            return
+
+        state.detected_entities = self.detection_service.detect(
+            state.extracted_text,
+        )
+        self.logger.info(
+            "Detection completed for document_id=%s entity_count=%s",
+            state.document_id,
+            len(state.detected_entities),
+        )
+
+    def _store_detection_results(self, state: WorkflowState) -> None:
+        document = self._require_document(state)
+        ocr_result = self._require_ocr_result(state)
+
+        entity_repository = EntityRepository(self.db)
+        confidence_repository = ConfidenceRepository(self.db)
+
+        self._delete_existing_detection_outputs(document.id)
+        state.persisted_entity_ids = []
+
+        for detection in state.detected_entities:
+            entity = Entity(
+                id=str(uuid4()),
+                document_id=document.id,
+                ocr_result_id=ocr_result.id,
+                entity_type=detection.entity_type,
+                entity_value=detection.entity_value,
+                page_number=str(detection.page_number),
+                confidence_score=detection.confidence_score,
+                detector=detection.detector,
+                start_char=detection.start_char,
+                end_char=detection.end_char,
+                privacy_category=detection.privacy_category,
+                entity_owner=detection.entity_owner or detection.detector,
+                canonical_type=detection.canonical_type or detection.entity_type,
+                processing_stage="DETECTION",
+                is_review_required=(
+                    detection.confidence_score < HUMAN_REVIEW_THRESHOLD
+                ),
+                is_redacted=False,
+                final_confidence=detection.confidence_score,
+            )
+            entity_repository.create(entity)
+            state.persisted_entity_ids.append(entity.id)
+
+            confidence_repository.create(
+                ConfidenceScore(
+                    id=str(uuid4()),
+                    entity_id=entity.id,
+                    confidence_score=detection.confidence_score,
+                    confidence_level=self._confidence_level(detection),
+                    threshold=HUMAN_REVIEW_THRESHOLD,
+                )
+            )
+
+        self.logger.info(
+            "Stored detection outputs for document_id=%s entity_count=%s",
+            document.id,
+            len(state.persisted_entity_ids),
+        )
+
+    def _prepare_human_review(self, state: WorkflowState) -> None:
+        document = self._require_document(state)
+        entity_repository = EntityRepository(self.db)
+        review_repository = ReviewRepository(self.db)
+        review_count = 0
+
+        for entity in entity_repository.get_by_document_id(document.id):
+            if not entity.is_review_required:
+                continue
+
+            review_repository.create(
+                Review(
+                    id=str(uuid4()),
+                    entity_id=entity.id,
+                    reviewer=None,
+                    review_status="PENDING",
+                    review_comment=(
+                        "Flagged for manual review due to low confidence score."
+                    ),
+                    reviewed_at=None,
+                )
+            )
+            review_count += 1
+
+        state.review_count = review_count
+        self.logger.info(
+            "Human review prepared for document_id=%s pending_review_count=%s",
+            document.id,
+            review_count,
+        )
+
+    def _redact_document_text(self, state: WorkflowState) -> None:
+        document = self._require_document(state)
+        source_text = state.extracted_text or ""
+        entity_repository = EntityRepository(self.db)
+        redaction_repository = RedactionRepository(self.db)
+        entities = entity_repository.get_by_document_id(document.id)
+
+        redaction_repository.delete_by_document_id(document.id)
+        redacted_text = self._apply_redactions(source_text, entities)
+        redacted_file_path = self._save_redacted_text_file(
+            document.id,
+            redacted_text,
+        )
+
+        redaction_repository.create(
+            Redaction(
+                id=str(uuid4()),
+                document_id=document.id,
+                redaction_type="PII_PHI_TEXT_REDACTION",
+                redacted_file_path=redacted_file_path,
+                redaction_summary=(
+                    f"Redacted {len(entities)} sensitive entities."
+                ),
+                processed_by=self.worker_id,
+            )
+        )
+
+        for entity in entities:
+            entity.is_redacted = True
+            self.db.add(entity)
+        self.db.commit()
+
+        state.redacted_file_path = redacted_file_path
+        self.logger.info(
+            "Redaction completed for document_id=%s entity_count=%s",
+            document.id,
+            len(entities),
+        )
+
+    def _generate_report(self, state: WorkflowState) -> None:
+        document = self._require_document(state)
+        entity_repository = EntityRepository(self.db)
+        report_repository = ReportRepository(self.db)
+        entities = entity_repository.get_by_document_id(document.id)
+        reviews = (
+            self.db.query(Review)
+            .join(Entity, Review.entity_id == Entity.id)
+            .filter(Entity.document_id == document.id)
+            .all()
+        )
+
+        for existing_report in report_repository.get_by_document_id(document.id):
+            self.db.delete(existing_report)
+        self.db.commit()
+
+        detectors_used = sorted(
+            {entity.detector for entity in entities if entity.detector}
+        )
+        total_pii = sum(
+            1 for entity in entities if entity.privacy_category == "PII"
+        )
+        total_phi = sum(
+            1 for entity in entities if entity.privacy_category == "PHI"
+        )
+        pending_reviews = [
+            review for review in reviews if review.review_status == "PENDING"
+        ]
+        qwen_invoked = any(
+            (entity.detector or "").lower().startswith("qwen")
+            for entity in entities
+        )
+
+        report_payload = {
+            "document_id": document.id,
+            "document_type": document.document_type,
+            "ocr_result_id": state.ocr_result.id if state.ocr_result else None,
+            "total_entities": len(entities),
+            "total_pii": total_pii,
+            "total_phi": total_phi,
+            "pending_reviews": len(pending_reviews),
+            "redacted_file_path": state.redacted_file_path,
+            "detectors_used": detectors_used,
+            "entities": [
+                {
+                    "entity_id": entity.id,
+                    "entity_type": entity.entity_type,
+                    "privacy_category": entity.privacy_category,
+                    "confidence_score": entity.confidence_score,
+                    "is_review_required": entity.is_review_required,
+                    "is_redacted": entity.is_redacted,
+                    "detector": entity.detector,
+                }
+                for entity in entities
+            ],
+        }
+        report_path = self._save_report_file(document.id, report_payload)
+
+        report_repository.create(
+            Report(
+                id=str(uuid4()),
+                document_id=document.id,
+                report_type="AUDIT",
+                total_entities=len(entities),
+                total_redactions=len(entities),
+                report_path=report_path,
+                generated_by=self.worker_id,
+                processing_duration_ms=int(state.processing_time * 1000),
+                detectors_used=",".join(detectors_used),
+                qwen_invoked=qwen_invoked,
+                total_pii=total_pii,
+                total_phi=total_phi,
+                review_completion=(len(pending_reviews) == 0),
+                redaction_completion=all(
+                    entity.is_redacted for entity in entities
+                ) if entities else True,
+            )
+        )
+
+        state.report_path = report_path
+        self.logger.info(
+            "Report generated for document_id=%s path=%s",
+            document.id,
+            report_path,
+        )
+
+    def _delete_existing_detection_outputs(self, document_id: str) -> None:
+        entities = EntityRepository(self.db).get_by_document_id(document_id)
+        if not entities:
+            return
+
+        entity_ids = [entity.id for entity in entities]
+        self.db.query(Review).filter(Review.entity_id.in_(entity_ids)).delete(
+            synchronize_session=False,
+        )
+        self.db.query(ConfidenceScore).filter(
+            ConfidenceScore.entity_id.in_(entity_ids),
+        ).delete(synchronize_session=False)
+        for entity in entities:
+            self.db.delete(entity)
+        self.db.commit()
+
+    @staticmethod
+    def _confidence_level(detection) -> str:
+        confidence_level = detection.metadata.get("confidence_level")
+        if confidence_level:
+            return confidence_level
+
+        if detection.confidence_score >= 0.85:
+            return "HIGH"
+
+        if detection.confidence_score >= 0.60:
+            return "MEDIUM"
+
+        return "LOW"
+
+    @staticmethod
+    def _apply_redactions(
+        text: str,
+        entities: list[Entity],
+    ) -> str:
+        redacted_text = text
+        valid_entities = [
+            entity for entity in entities
+            if entity.start_char is not None
+            and entity.end_char is not None
+            and 0 <= entity.start_char < entity.end_char <= len(text)
+        ]
+        valid_entities.sort(key=lambda entity: entity.start_char, reverse=True)
+
+        for entity in valid_entities:
+            marker = f"[REDACTED_{entity.entity_type}]"
+            redacted_text = (
+                redacted_text[:entity.start_char]
+                + marker
+                + redacted_text[entity.end_char:]
+            )
+
+        return redacted_text
+
+    @staticmethod
+    def _save_redacted_text_file(
+        document_id: str,
+        redacted_text: str,
+    ) -> str:
+        redacted_path = REDACTED_TEXT_DIR / f"{document_id}_redacted.txt"
+        redacted_path.parent.mkdir(parents=True, exist_ok=True)
+        redacted_path.write_text(redacted_text, encoding="utf-8")
+        return redacted_path.as_posix()
+
+    @staticmethod
+    def _save_report_file(
+        document_id: str,
+        report_payload: dict,
+    ) -> str:
+        report_path = REPORTS_DIR / f"{document_id}_audit_report.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(
+            json.dumps(report_payload, indent=2),
+            encoding="utf-8",
+        )
+        return report_path.as_posix()
+
+    @staticmethod
+    def _require_ocr_result(state: WorkflowState) -> OCRResult:
+        if state.ocr_result is None:
+            raise DocumentWorkflowError(
+                "OCR result not stored for document_id="
+                f"{state.document_id}"
+            )
+        return state.ocr_result
 
     def _complete_workflow(self, state: WorkflowState) -> None:
         document = self._require_document(state)

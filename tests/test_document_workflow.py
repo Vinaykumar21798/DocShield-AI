@@ -3,7 +3,15 @@ from uuid import uuid4
 
 import pytest
 
-from database.models import Document, OCRResult, ProcessingJob
+from database.models import (
+    ConfidenceScore,
+    Document,
+    Entity,
+    OCRResult,
+    ProcessingJob,
+    Redaction,
+    Report,
+)
 from modules.classification.service import DocumentType
 from modules.extraction.native import TextExtractionResult
 from modules.extraction.ocr import OCREngine
@@ -54,6 +62,7 @@ def test_workflow_completes_native_text_document(
         "Invoice Number INV-1001\n"
         "Bill To: Jane Patient\n"
         "Amount Due: 125.00\n"
+        "Email: jane.patient@example.com\n"
         "Payment terms: due on receipt."
     )
     document_path.write_text(document_text, encoding="utf-8")
@@ -102,6 +111,37 @@ def test_workflow_completes_native_text_document(
     assert status_response.has_extracted_text is True
     assert status_response.processing_status == "COMPLETED"
     assert text_response.extracted_text == ocr_result.extracted_text
+
+    entities = (
+        db_session.query(Entity)
+        .filter(Entity.document_id == document.id)
+        .all()
+    )
+    confidence_scores = db_session.query(ConfidenceScore).all()
+    redaction = (
+        db_session.query(Redaction)
+        .filter(Redaction.document_id == document.id)
+        .one()
+    )
+    report = (
+        db_session.query(Report)
+        .filter(Report.document_id == document.id)
+        .one()
+    )
+
+    assert any(entity.entity_type == "EMAIL" for entity in entities)
+    assert len(confidence_scores) == len(entities)
+    assert redaction.redaction_type == "PII_PHI_TEXT_REDACTION"
+    assert report.total_entities == len(entities)
+    assert report.total_redactions == len(entities)
+
+    redacted_text_file = tmp_path / redaction.redacted_file_path
+    report_file = tmp_path / report.report_path
+    assert redacted_text_file.exists()
+    assert report_file.exists()
+    assert "[REDACTED_EMAIL]" in redacted_text_file.read_text(
+        encoding="utf-8",
+    )
 
 
 def test_workflow_marks_document_and_job_failed_when_file_is_missing(

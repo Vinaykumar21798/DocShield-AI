@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import logging
+import re
 from typing import List
 
-import medspacy
-from medspacy.ner import TargetRule
+try:
+    import medspacy
+    from medspacy.ner import TargetRule
+except ImportError:
+    medspacy = None
+    TargetRule = None
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
+
+logger = logging.getLogger(__name__)
 
 
 class MedSpaCyDetector(BaseDetector):
 
     DEFAULT_CONFIDENCE = 0.85
+    FALLBACK_CONFIDENCE = 0.78
 
-    #
-    # Clinical entities we care about
-    #
     ALLOWED_LABELS = {
         "PROBLEM",
         "MEDICATION",
@@ -30,14 +36,49 @@ class MedSpaCyDetector(BaseDetector):
         "CLINICAL_FINDING",
     }
 
+    TARGET_RULES = (
+        ("type 2 diabetes mellitus", "DISEASE"),
+        ("diabetes", "DISEASE"),
+        ("hypertension", "DISEASE"),
+        ("asthma", "DISEASE"),
+        ("persistent fever", "SYMPTOM"),
+        ("shortness of breath", "SYMPTOM"),
+        ("chest pain", "SYMPTOM"),
+        ("fever", "SYMPTOM"),
+        ("headache", "SYMPTOM"),
+        ("paracetamol", "MEDICATION"),
+        ("ibuprofen", "MEDICATION"),
+        ("metformin", "MEDICATION"),
+        ("aspirin", "MEDICATION"),
+        ("atorvastatin", "MEDICATION"),
+        ("chest x-ray", "PROCEDURE"),
+        ("x-ray", "PROCEDURE"),
+        ("mri", "PROCEDURE"),
+        ("ct scan", "PROCEDURE"),
+        ("biopsy", "PROCEDURE"),
+        ("ecg", "PROCEDURE"),
+        ("coronary angiography", "PROCEDURE"),
+        ("blood glucose", "LAB"),
+        ("cbc", "LAB"),
+        ("hemoglobin", "LAB"),
+        ("penicillin allergy", "ALLERGY"),
+        ("blood pressure", "VITAL_SIGN"),
+        ("heart rate", "VITAL_SIGN"),
+        ("abnormal ecg findings", "CLINICAL_FINDING"),
+        ("elevated blood glucose", "CLINICAL_FINDING"),
+        ("high blood pressure", "CLINICAL_FINDING"),
+    )
+
     @property
     def name(self):
         return "medspacy"
 
+    def __init__(self):
+        self._nlp = None
+
     def should_run(self, text: str, state: "PipelineState") -> bool:
         """
-        Run MedSpaCy only if the text appears to contain
-        clinical or medical content.
+        Run MedSpaCy only if the text appears to contain clinical content.
         """
 
         if not text or not text.strip():
@@ -49,37 +90,29 @@ class MedSpaCyDetector(BaseDetector):
 
         text_lower = text.lower()
 
-        # Check special multi-word phrases or punctuated abbreviations
         if any(phrase in text_lower for phrase in ["chief complaint", "ct scan", "x-ray"]):
             return True
 
-        # Find all alphanumeric words in the original raw text to check keywords
-        words = set(re.findall(r'\b[a-z]+\b', text_lower))
+        words = set(re.findall(r"\b[a-z]+\b", text_lower))
         medspacy_keywords = {
             "patient", "doctor", "hospital", "diagnosis", "diagnoses", "complaint",
             "history", "symptom", "symptoms", "medication", "medicine", "drug", "prescription", "allergy",
             "procedure", "surgery", "lab", "laboratory", "blood", "glucose", "hemoglobin", "diabetes",
-            "hypertension", "asthma", "fever", "headache", "mri", "ct", "biopsy", "findings", "clinical"
+            "hypertension", "asthma", "fever", "headache", "mri", "ct", "biopsy", "findings", "clinical",
         }
 
         return not words.isdisjoint(medspacy_keywords)
 
-
-
-
-    def __init__(self):
-        self._nlp = None
-
     @property
     def nlp(self):
+        if medspacy is None or TargetRule is None:
+            raise RuntimeError(
+                "MedSpaCy is not installed. Using deterministic clinical fallback."
+            )
 
         if self._nlp is None:
-
             self._nlp = medspacy.load()
 
-            #
-            # Get TargetMatcher from pipeline
-            #
             if "medspacy_target_matcher" not in self._nlp.pipe_names:
                 self._nlp.add_pipe(
                     "medspacy_target_matcher",
@@ -89,56 +122,10 @@ class MedSpaCyDetector(BaseDetector):
             target_matcher = self._nlp.get_pipe(
                 "medspacy_target_matcher"
             )
-
-            target_rules = [
-                # Problems / Diseases
-                TargetRule("diabetes", "DISEASE"),
-                TargetRule("hypertension", "DISEASE"),
-                TargetRule("asthma", "DISEASE"),
-                TargetRule("type 2 diabetes mellitus", "DISEASE"),
-
-                # Symptoms
-                TargetRule("fever", "SYMPTOM"),
-                TargetRule("persistent fever", "SYMPTOM"),
-                TargetRule("headache", "SYMPTOM"),
-                TargetRule("chest pain", "SYMPTOM"),
-                TargetRule("shortness of breath", "SYMPTOM"),
-
-                # Medications
-                TargetRule("paracetamol", "MEDICATION"),
-                TargetRule("ibuprofen", "MEDICATION"),
-                TargetRule("metformin", "MEDICATION"),
-                TargetRule("aspirin", "MEDICATION"),
-                TargetRule("atorvastatin", "MEDICATION"),
-
-                # Procedures
-                TargetRule("x-ray", "PROCEDURE"),
-                TargetRule("chest x-ray", "PROCEDURE"),
-                TargetRule("mri", "PROCEDURE"),
-                TargetRule("ct scan", "PROCEDURE"),
-                TargetRule("biopsy", "PROCEDURE"),
-                TargetRule("ecg", "PROCEDURE"),
-                TargetRule("coronary angiography", "PROCEDURE"),
-
-                # Labs
-                TargetRule("blood glucose", "LAB"),
-                TargetRule("cbc", "LAB"),
-                TargetRule("hemoglobin", "LAB"),
-
-                # Allergies
-                TargetRule("penicillin allergy", "ALLERGY"),
-
-                # Vital Signs
-                TargetRule("blood pressure", "VITAL_SIGN"),
-                TargetRule("heart rate", "VITAL_SIGN"),
-
-                # Clinical Findings
-                TargetRule("abnormal ecg findings", "CLINICAL_FINDING"),
-                TargetRule("elevated blood glucose", "CLINICAL_FINDING"),
-                TargetRule("high blood pressure", "CLINICAL_FINDING"),
-            ]
-
-            target_matcher.add(target_rules)
+            target_matcher.add([
+                TargetRule(phrase, label)
+                for phrase, label in self.TARGET_RULES
+            ])
 
         return self._nlp
 
@@ -147,13 +134,18 @@ class MedSpaCyDetector(BaseDetector):
         text: str,
         page_number: int = 1,
     ) -> List[DetectionResult]:
+        if not text or not text.strip():
+            return []
 
-        doc = self.nlp(text)
+        try:
+            doc = self.nlp(text)
+        except Exception as exc:
+            logger.warning("MedSpaCy unavailable; using fallback rules: %s", exc)
+            return self._detect_with_fallback_rules(text, page_number)
 
         detections = []
 
         for ent in doc.ents:
-
             if ent.label_ not in self.ALLOWED_LABELS:
                 continue
 
@@ -178,5 +170,54 @@ class MedSpaCyDetector(BaseDetector):
             )
 
         detections.sort(key=lambda entity: entity.start_char)
-
         return detections
+
+    def _detect_with_fallback_rules(
+        self,
+        text: str,
+        page_number: int,
+    ) -> List[DetectionResult]:
+        detections: list[DetectionResult] = []
+
+        rules = sorted(
+            self.TARGET_RULES,
+            key=lambda item: len(item[0]),
+            reverse=True,
+        )
+        for phrase, label in rules:
+            pattern = r"(?<!\w)" + re.escape(phrase).replace(r"\ ", r"\s+") + r"(?!\w)"
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                if self._overlaps(match.start(), match.end(), detections):
+                    continue
+
+                detections.append(
+                    DetectionResult(
+                        entity_type=label,
+                        entity_value=" ".join(match.group(0).split()),
+                        confidence_score=self.FALLBACK_CONFIDENCE,
+                        start_char=match.start(),
+                        end_char=match.end(),
+                        page_number=page_number,
+                        detector=self.name,
+                        metadata={
+                            "clinical": True,
+                            "source": "fallback_rules",
+                            "model": "deterministic",
+                            "resolved": True,
+                        },
+                    )
+                )
+
+        detections.sort(key=lambda entity: entity.start_char)
+        return detections
+
+    @staticmethod
+    def _overlaps(
+        start: int,
+        end: int,
+        accepted: list[DetectionResult],
+    ) -> bool:
+        return any(
+            start < entity.end_char and end > entity.start_char
+            for entity in accepted
+        )

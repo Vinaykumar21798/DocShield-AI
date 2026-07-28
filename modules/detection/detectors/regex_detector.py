@@ -1,4 +1,4 @@
-import re
+﻿import re
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
@@ -168,6 +168,11 @@ class RegexDetector(BaseDetector):
                 # Enforce contextual verification for PIN_CODE to avoid matching salaries/numbers
                 if entity == "PIN_CODE":
                     if not self.validate_pin_code(value, text, match.start()):
+                        continue
+
+                # Avoid treating invoice/reference IDs as insurance IDs without insurance context.
+                if entity == "INSURANCE_ID":
+                    if not self.validate_insurance_id(value, text, match.start()):
                         continue
 
                 confidence = self.calculate_confidence(
@@ -343,6 +348,11 @@ class RegexDetector(BaseDetector):
         # Check if keyword context exists
         return self.has_context("ZIP_CODE", text, start)
 
+    def validate_insurance_id(self, value: str, text: str, start: int) -> bool:
+        normalized = value.upper()
+        has_explicit_prefix = normalized.startswith(("INS", "POL", "POLICY"))
+        return has_explicit_prefix or self.has_context("INSURANCE_ID", text, start)
+
     def validate_pin_code(self, value: str, text: str, start: int) -> bool:
         """
         Ensures a 6-digit number is only classified as a PIN_CODE if it is not a currency/salary
@@ -350,7 +360,7 @@ class RegexDetector(BaseDetector):
         """
         # Check if preceded by currency or salary markers
         preceding = text[max(0, start - 15):start].strip()
-        if any(curr in preceding.lower() for curr in ["$", "₹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
+        if any(curr in preceding.lower() for curr in ["$", "â‚¹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
             return False
 
         INDIAN_STATES = {
@@ -395,3 +405,4 @@ class RegexDetector(BaseDetector):
             total += n
 
         return total % 10 == 0
+

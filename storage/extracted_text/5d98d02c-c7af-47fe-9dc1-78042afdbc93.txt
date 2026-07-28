@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Denise Moore
+DOB: 1986-02-17
+SSN: 207-38-6919
+Insurance ID: Mfx-03814360
+Visit Date: 2023-09-07
+Provider: Smith Group
+Procedure Code: CPT99406
+Diagnosis: Type 2 Diabetes
+Amount Billed: $724.00
+Amount Covered: $503.00

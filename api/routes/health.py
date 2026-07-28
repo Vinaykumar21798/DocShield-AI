@@ -10,5 +10,5 @@ router = APIRouter(
 def health():
     return {
         "status": "healthy",
-        "service": "PII PHI Document Intelligence PoC"
+        "service": "DocShield-AI"
     }

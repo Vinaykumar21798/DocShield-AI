@@ -65,3 +65,21 @@ class Document(Base):
         back_populates="document",
         cascade="all, delete-orphan",
     )
+
+    entities = relationship(
+        "Entity",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    redactions = relationship(
+        "Redaction",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )
+
+    reports = relationship(
+        "Report",
+        back_populates="document",
+        cascade="all, delete-orphan",
+    )

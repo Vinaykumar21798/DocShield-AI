@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 import logging
@@ -8,7 +8,6 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 
-import ollama
 
 from pydantic import BaseModel
 from pydantic import Field
@@ -63,28 +62,28 @@ class OllamaValidator:
     Instead it validates:
 
         Regex
-            ↓
+            â†“
         Presidio
-            ↓
+            â†“
         GLiNER
-            ↓
+            â†“
         MedSpaCy
-            ↓
+            â†“
         LOW confidence entities
-            ↓
+            â†“
         Ollama
-            ↓
+            â†“
         Final result
 
     Features
 
-    ✓ Batch validation
-    ✓ Retry logic
-    ✓ Pydantic validation
-    ✓ JSON enforcement
-    ✓ Confidence calibration
-    ✓ Audit metadata
-    ✓ Validation cache
+    âœ“ Batch validation
+    âœ“ Retry logic
+    âœ“ Pydantic validation
+    âœ“ JSON enforcement
+    âœ“ Confidence calibration
+    âœ“ Audit metadata
+    âœ“ Validation cache
     """
 
     MODEL_NAME = "qwen2.5:8b"
@@ -155,15 +154,27 @@ class OllamaValidator:
 
     def __init__(self):
         import os
-        from ollama import Client
+
         ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        self.client = Client(host=ollama_host, timeout=self.REQUEST_TIMEOUT)
+        self.client = None
+        self.ollama_host = ollama_host
+
+        try:
+            from ollama import Client
+
+            self.client = Client(
+                host=ollama_host,
+                timeout=self.REQUEST_TIMEOUT,
+            )
+        except ImportError:
+            logger.warning(
+                "Ollama package is not installed. LLM validation will be skipped."
+            )
 
         self._cache: Dict[
             Tuple[str, str],
             ValidationResponse,
         ] = {}
-
     # ======================================================
     # Utility Methods
     # ======================================================
@@ -531,6 +542,12 @@ No explanation.
 
         Retries automatically with exponential backoff if parsing or connection fails.
         """
+        if self.client is None:
+            raise RuntimeError(
+                "Ollama validation is unavailable because the `ollama` "
+                "Python package is not installed."
+            )
+
         last_exception = None
 
         for attempt in range(1, self.MAX_RETRIES + 2):
@@ -609,7 +626,7 @@ No explanation.
 
         raise RuntimeError(
             f"Ollama validation failed after {self.MAX_RETRIES + 1} attempts. "
-            f"Please verify that the Ollama host '{self.client._client.base_url}' is running and healthy. "
+            f"Please verify that the Ollama host '{self.ollama_host}' is running and healthy. "
             f"Error details: {last_exception}"
         ) from last_exception
 
@@ -825,18 +842,29 @@ No explanation.
         Workflow
 
             Cache
-                ↓
+                â†“
             Batch
-                ↓
+                â†“
             Ollama
-                ↓
+                â†“
             Pydantic Validation
-                ↓
+                â†“
             Update DetectionResult
         """
 
         if not entities:
             return []
+
+        if self.client is None:
+            for entity in entities:
+                entity.metadata.update(
+                    {
+                        "validated_by": "ollama",
+                        "validation_status": "SKIPPED",
+                        "validation_error": "Ollama client unavailable",
+                    }
+                )
+            return entities
 
         #
         # Split cached vs pending
@@ -958,3 +986,4 @@ No explanation.
             )
 
         return ordered_results
+

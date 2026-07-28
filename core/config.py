@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     upload_dir: str = Field(..., alias="UPLOAD_DIR")
     max_file_size_mb: int = Field(..., alias="MAX_FILE_SIZE_MB")
 
+    startup_validation_enabled: bool = Field(
+        True,
+        alias="STARTUP_VALIDATION_ENABLED",
+    )
+
     @field_validator("debug", mode="before")
     @classmethod
     def parse_debug(cls, value: Any) -> Any:

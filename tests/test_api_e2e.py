@@ -45,7 +45,13 @@ def test_upload_process_and_read_extracted_text_e2e(
                 files={
                     "file": (
                         "invoice.txt",
-                        b"Invoice Number INV-2002\nBill To: Jane Patient\nAmount Due: 75.00",
+                        (
+                            b"Invoice Number INV-2002\n"
+                            b"Bill To: Jane Patient\n"
+                            b"Email: jane.patient@example.com\n"
+                            b"Reference: 998-99-5253\n"
+                            b"Amount Due: 75.00"
+                        ),
                         "text/plain",
                     ),
                 },
@@ -77,8 +83,69 @@ def test_upload_process_and_read_extracted_text_e2e(
             assert (tmp_path / expected_text_path).read_text(
                 encoding="utf-8"
             ) == text_response.json()["extracted_text"]
+
+            reviews_response = client.get(f"/documents/{document_id}/reviews")
+            assert reviews_response.status_code == 200
+            reviews = reviews_response.json()
+            assert reviews
+            pending_review = next(
+                review for review in reviews
+                if review["review_status"] == "PENDING"
+                and review["entity"]["entity_type"] == "SSN"
+            )
+
+            decision_response = client.patch(
+                f"/reviews/{pending_review['review_id']}",
+                json={
+                    "reviewer": "integration-reviewer",
+                    "review_status": "APPROVED",
+                    "review_comment": "Confirmed by API integration test.",
+                    "final_confidence": 0.91,
+                },
+            )
+            assert decision_response.status_code == 200
+            decision = decision_response.json()
+            assert decision["review_status"] == "APPROVED"
+            assert decision["reviewer"] == "integration-reviewer"
+            assert decision["entity"]["is_review_required"] is False
+            assert decision["entity"]["final_confidence"] == 0.91
+
+            redactions_response = client.get(
+                f"/documents/{document_id}/redactions"
+            )
+            assert redactions_response.status_code == 200
+            redactions = redactions_response.json()
+            assert len(redactions) == 1
+
+            redaction_file_response = client.get(
+                f"/redactions/{redactions[0]['redaction_id']}/file"
+            )
+            assert redaction_file_response.status_code == 200
+            assert "[REDACTED_EMAIL]" in redaction_file_response.text
+            assert "jane.patient@example.com" not in redaction_file_response.text
+
+            reports_response = client.get(f"/documents/{document_id}/reports")
+            assert reports_response.status_code == 200
+            reports = reports_response.json()
+            assert len(reports) == 1
+            assert reports[0]["total_entities"] >= 2
+            assert reports[0]["redaction_completion"] is True
+            assert reports[0]["review_completion"] is True
+
+            report_response = client.get(f"/reports/{reports[0]['report_id']}")
+            assert report_response.status_code == 200
+            report = report_response.json()
+            assert report["payload"]["document_id"] == document_id
+            assert report["payload"]["total_entities"] >= 2
+
+            report_file_response = client.get(
+                f"/reports/{reports[0]['report_id']}/file"
+            )
+            assert report_file_response.status_code == 200
+            assert report_file_response.json()["document_id"] == document_id
     finally:
         app.dependency_overrides.clear()
+
 
 def test_upload_accepts_docx_mime_type(
     db_session,
@@ -123,3 +190,4 @@ def test_upload_accepts_docx_mime_type(
             assert Document.__table__.c.file_type.type.length == 255
     finally:
         app.dependency_overrides.clear()
+

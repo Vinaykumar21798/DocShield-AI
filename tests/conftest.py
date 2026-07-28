@@ -1,4 +1,4 @@
-import os
+﻿import os
 
 import pytest
 from sqlalchemy import create_engine
@@ -12,6 +12,10 @@ os.environ["REDIS_URL"] = "redis://localhost:6379/15"
 os.environ["UPLOAD_DIR"] = "storage/uploads"
 os.environ["MAX_FILE_SIZE_MB"] = "20"
 os.environ["PROCESSING_JOB_MAX_RETRIES"] = "1"
+os.environ["STARTUP_VALIDATION_ENABLED"] = "False"
+os.environ["BYPASS_LLM"] = "true"
+os.environ["GLINER_ENABLED"] = "False"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 from core.database import Base  # noqa: E402
 from database import models  # noqa: E402,F401

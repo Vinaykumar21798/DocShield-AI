@@ -1,14 +1,30 @@
+from pathlib import Path
 from typing import Generator
 
 import redis
-
 from sqlalchemy import create_engine
-from sqlalchemy.orm import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.orm import Session
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 from core.config import settings
 
+
+def _ensure_sqlite_database_parent(database_url: str) -> None:
+    url = make_url(database_url)
+    if url.get_backend_name() != "sqlite":
+        return
+
+    database_path = url.database
+    if not database_path or database_path == ":memory:":
+        return
+
+    Path(database_path).expanduser().parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+
+_ensure_sqlite_database_parent(settings.database_url)
 
 engine = create_engine(
     settings.database_url,

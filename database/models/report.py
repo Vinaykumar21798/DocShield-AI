@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Integer, DateTime, Boolean
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from database.base import Base
@@ -6,10 +7,18 @@ from database.base import Base
 
 class Report(Base):
     __tablename__ = "reports"
+    __table_args__ = (
+        Index("ix_reports_document_id", "document_id"),
+        Index("ix_reports_type", "report_type"),
+    )
 
     id = Column(String, primary_key=True)
 
-    document_id = Column(String, nullable=False)
+    document_id = Column(
+        String(36),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     report_type = Column(String, nullable=False)
 
@@ -21,7 +30,6 @@ class Report(Base):
 
     generated_by = Column(String)
 
-    # Auditing metrics and stages (Issue 7)
     processing_duration_ms = Column(Integer)
     detectors_used = Column(String)
     qwen_invoked = Column(Boolean, default=False)
@@ -32,5 +40,10 @@ class Report(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        server_default=func.now()
+        server_default=func.now(),
+    )
+
+    document = relationship(
+        "Document",
+        back_populates="reports",
     )

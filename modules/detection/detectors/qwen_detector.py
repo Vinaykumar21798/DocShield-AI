@@ -1,10 +1,9 @@
-import json
+﻿import json
 import logging
 import os
 import re
 import time
 from typing import List
-import ollama
 from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
@@ -38,10 +37,19 @@ class Qwen3BDetector(BaseDetector):
     def __init__(self):
         super().__init__()
         import os
-        from ollama import Client
-        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        self.client = Client(host=ollama_host)
 
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.client = None
+        self.ollama_host = ollama_host
+
+        try:
+            from ollama import Client
+
+            self.client = Client(host=ollama_host)
+        except ImportError:
+            logger.warning(
+                "Ollama package is not installed. Qwen 3B detection will be skipped."
+            )
     @property
     def name(self) -> str:
         return "qwen3b"
@@ -53,6 +61,9 @@ class Qwen3BDetector(BaseDetector):
         - And there is either an entity type conflict (ambiguity) or low confidence detections.
         """
         if os.getenv("BYPASS_LLM") == "true":
+            return False
+
+        if self.client is None:
             return False
 
         if not text or not text.strip():
@@ -127,6 +138,12 @@ Return ONLY valid JSON. No reasoning, no markdown wrappers, no explanation.
 Input Text:
 {text}
 """
+        if self.client is None:
+            logger.warning(
+                "Qwen 3B detection skipped because the `ollama` Python package is not installed."
+            )
+            return []
+
         try:
             start = time.perf_counter()
             response = self.client.chat(
@@ -189,3 +206,5 @@ Input Text:
         except Exception as exc:
             logger.exception("Qwen 3B detection failed: %s", exc)
             return []
+
+

@@ -11,6 +11,11 @@ from .ocr_result_repository import (
     OCRResultRepository,
     ocr_result_repository,
 )
+from .confidence_repository import ConfidenceRepository
+from .entity_repository import EntityRepository
+from .redaction_repository import RedactionRepository
+from .report_repository import ReportRepository
+from .review_repository import ReviewRepository
 
 __all__ = [
     "BaseRepository",
@@ -23,4 +28,10 @@ __all__ = [
 
     "OCRResultRepository",
     "ocr_result_repository",
+
+    "ConfidenceRepository",
+    "EntityRepository",
+    "RedactionRepository",
+    "ReportRepository",
+    "ReviewRepository",
 ]

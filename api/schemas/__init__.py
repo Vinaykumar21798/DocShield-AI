@@ -15,6 +15,14 @@ from .processing_job import (
     ProcessingJobResponse,
     ProcessingJobUpdate,
 )
+from .redaction import RedactionResponse
+from .report import ReportDetailResponse, ReportResponse
+from .review import (
+    ReviewDecisionRequest,
+    ReviewDecisionResponse,
+    ReviewEntityResponse,
+    ReviewResponse,
+)
 
 __all__ = [
     "DocumentCreate",
@@ -28,4 +36,11 @@ __all__ = [
     "ProcessingJobCreate",
     "ProcessingJobResponse",
     "ProcessingJobUpdate",
+    "RedactionResponse",
+    "ReportDetailResponse",
+    "ReportResponse",
+    "ReviewDecisionRequest",
+    "ReviewDecisionResponse",
+    "ReviewEntityResponse",
+    "ReviewResponse",
 ]

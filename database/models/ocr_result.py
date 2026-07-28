@@ -88,3 +88,8 @@ class OCRResult(Base):
         "Document",
         back_populates="ocr_results",
     )
+
+    entities = relationship(
+        "Entity",
+        back_populates="ocr_result",
+    )

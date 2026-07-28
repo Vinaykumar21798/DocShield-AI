@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, Text, DateTime
+from sqlalchemy import Column, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from database.base import Base
@@ -6,10 +7,18 @@ from database.base import Base
 
 class Review(Base):
     __tablename__ = "reviews"
+    __table_args__ = (
+        Index("ix_reviews_entity_id", "entity_id"),
+        Index("ix_reviews_status", "review_status"),
+    )
 
     id = Column(String, primary_key=True)
 
-    entity_id = Column(String, nullable=False)
+    entity_id = Column(
+        String,
+        ForeignKey("entities.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     reviewer = Column(String)
 
@@ -21,5 +30,10 @@ class Review(Base):
 
     created_at = Column(
         DateTime(timezone=True),
-        server_default=func.now()
+        server_default=func.now(),
+    )
+
+    entity = relationship(
+        "Entity",
+        back_populates="reviews",
     )

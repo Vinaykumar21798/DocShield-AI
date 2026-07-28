@@ -1,261 +1,255 @@
 # DocShield-AI
 
-DocShield-AI is a FastAPI-based Document Intelligence Proof of Concept (PoC) for document ingestion, OCR, document classification, and extracted text generation. The extracted text is exposed through APIs for downstream PII/PHI detection and compliance workflows.
+DocShield-AI is a FastAPI backend for document ingestion, OCR/text extraction, PII/PHI detection, human-review records, redaction artifacts, and audit reports.
 
-## Features
+This repo is API-only right now. The frontend was removed for the current phase.
 
-- Document upload (Single & Bulk)
-- File validation
-- Local file storage
-- PostgreSQL metadata management
-- Redis-based asynchronous processing
-- Rule-based document classification
-- OCR Decision Engine
-- Native PDF text extraction (PyMuPDF)
-- PaddleOCR for scanned PDFs and images
-- Layout-preserving OCR output for scanned PDFs and images
-- Native text extraction for `.txt` and `.docx`
-- OCR confidence evaluation
-- Extracted text storage
-- REST APIs for document status and extracted text
-- Retry mechanism for failed jobs
+## What It Does
 
----
+- Upload single or multiple documents.
+- Store document metadata in PostgreSQL.
+- Push processing jobs to Redis.
+- Run background processing through the worker.
+- Extract text from TXT, DOCX, searchable PDFs, scanned PDFs, and images.
+- Preserve optional layout metadata for PaddleOCR outputs.
+- Detect sensitive entities and persist confidence scores.
+- Create review, redaction, and report records.
+- Save generated artifacts under `storage/`.
+- Expose REST APIs through FastAPI and Swagger/OpenAPI.
 
-## Technology Stack
+## Tech Stack
 
-| Layer | Technology |
-|--------|------------|
-| Backend | FastAPI |
+| Area | Technology |
+| --- | --- |
+| API | FastAPI |
 | Database | PostgreSQL |
-| ORM | SQLAlchemy |
+| ORM/Migrations | SQLAlchemy, Alembic |
 | Queue | Redis |
-| OCR | PaddleOCR |
-| PDF Parser | PyMuPDF |
-| Validation | Pydantic |
-| Storage | Local File System |
-| API Docs | Swagger / OpenAPI |
-
----
+| Worker | Python worker process |
+| OCR | PyMuPDF, PaddleOCR |
+| Detection | Regex, Presidio, MedSpaCy, GLiNER, optional Ollama validation |
+| Storage | Local filesystem or Docker volume |
+| Tests | Pytest |
 
 ## Project Structure
 
 ```text
 DocShield-AI/
-├── api/
-├── core/
-├── database/
-├── modules/
-├── orchestration/
-├── redis_queue/
-├── shared/
-├── storage/
-├── tests/
-├── app.py
-├── requirements.txt
-├── docker-compose.yml
-├── Dockerfile
-├── README.md
-└── doc.md
+|-- api/
+|   |-- routes/
+|   |-- schemas/
+|   |-- dependencies.py
+|-- core/
+|-- database/
+|   |-- migrations/
+|   |-- models/
+|   |-- repositories/
+|-- modules/
+|   |-- classification/
+|   |-- detection/
+|   |-- extraction/
+|   |-- upload/
+|-- orchestration/
+|-- redis_queue/
+|-- storage/
+|-- tests/
+|-- app.py
+|-- docker-compose.yml
+|-- docker-compose.local-gui.yml
+|-- Dockerfile
+|-- requirements.txt
+|-- README.md
+|-- doc.md
 ```
 
----
+## Docker Quick Start
 
-## Processing Workflow
+Use this path when testing with Docker Desktop, pgAdmin4, and RedisInsight.
+
+```powershell
+cd E:\Office\DocShield-AI
+
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml up -d --build
+
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml ps
+```
+
+Expected exposed ports:
+
+| Service | Host URL / Port |
+| --- | --- |
+| API | `http://localhost:8001` |
+| Swagger UI | `http://localhost:8001/docs` |
+| PostgreSQL | `127.0.0.1:5433` |
+| Redis | `127.0.0.1:6380` |
+
+Health check:
+
+```powershell
+Invoke-RestMethod http://localhost:8001/health/
+```
+
+## pgAdmin4 Connection
+
+Register a new server in pgAdmin4 with:
 
 ```text
-Upload Document
-        │
-        ▼
-File Validation
-        │
-        ▼
-Store File
-        │
-        ▼
-Create Database Records
-        │
-        ▼
-Push Job to Redis Queue
-        │
-        ▼
-Background Worker
-        │
-        ▼
-Document Classification
-        │
-        ▼
-OCR Decision Engine
-        │
-        ├── Native PDF
-        ├── PaddleOCR
-        └── Native Text
-        │
-        ▼
-OCR Confidence Evaluation
-        │
-        ▼
-Store OCR Results
-        │
-        ▼
-Extracted Text API
+Name: DocShield Live
+Host name/address: 127.0.0.1
+Port: 5433
+Maintenance database: pii_phi_document_intelligence_poc
+Username: postgres
+Password: postgres
 ```
 
----
+Useful tables:
 
-## Supported File Types
+```text
+documents
+processing_jobs
+ocr_results
+entities
+confidence_scores
+reviews
+redactions
+reports
+```
+
+## RedisInsight Connection
+
+Add a Redis database in RedisInsight with:
+
+```text
+Name: DocShield Live Redis
+Host: 127.0.0.1
+Port: 6380
+Username: leave empty
+Password: leave empty
+```
+
+The queue key is:
+
+```text
+document_processing
+```
+
+The queue may be empty during normal operation because the worker consumes jobs quickly.
+
+## Storage
+
+With `docker-compose.local-gui.yml`, API and worker both bind mount local storage:
+
+```yaml
+./storage:/app/storage
+```
+
+Generated files should appear locally under:
+
+```text
+storage/uploads/
+storage/extracted_text/
+storage/redacted/
+storage/reports/
+```
+
+If you run only `docker-compose.yml`, files are stored in the Docker named volume `app_storage` instead of the local repo folder.
+
+## Test Upload
+
+```powershell
+$response = Invoke-RestMethod `
+  -Uri http://localhost:8001/upload/ `
+  -Method Post `
+  -Form @{ file = Get-Item .\sample-invoice.txt }
+
+$documentId = $response.document.document_id
+$documentId
+```
+
+Check status and outputs:
+
+```powershell
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/status"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/text"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reviews"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/redactions"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reports"
+```
+
+Check worker logs if processing does not complete:
+
+```powershell
+docker logs docshield-ai-live-worker --tail 100
+```
+
+## Main APIs
+
+| Method | Endpoint | Description |
+| --- | --- | --- |
+| GET | `/health/` | Health check |
+| POST | `/upload/` | Upload one document |
+| POST | `/upload/bulk` | Upload multiple documents |
+| GET | `/documents/{document_id}/status` | Document and processing status |
+| GET | `/documents/{document_id}/text` | Extracted text and OCR metadata |
+| GET | `/documents/{document_id}/reviews` | Review records for detected entities |
+| PATCH | `/reviews/{review_id}` | Submit reviewer decision/corrections |
+| GET | `/documents/{document_id}/redactions` | Redaction metadata |
+| GET | `/redactions/{redaction_id}/file` | Download redacted artifact |
+| GET | `/documents/{document_id}/reports` | Report metadata list |
+| GET | `/reports/{report_id}` | Report metadata and JSON payload |
+| GET | `/reports/{report_id}/file` | Download report artifact |
+
+## Supported Upload Types
 
 - PDF
 - PNG
-- JPG
-- JPEG
+- JPG/JPEG
 - TIFF
 - BMP
 - DOCX
 - TXT
 
----
+## Local Python Development
 
-## Setup
-
-### 1. Clone Repository
-
-```bash
-git clone https://github.com/Vinaykumar21798/DocShield-AI.git
-cd DocShield-AI
-```
-
-### 2. Create Virtual Environment
-
-```bash
-python -m venv .venv
-```
-
-Activate:
-
-Windows
+A virtual environment is needed only when running Python outside Docker.
 
 ```powershell
+python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-Linux/macOS
-
-```bash
-source .venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
 pip install -r requirements.txt
+pytest -q
 ```
 
-### 4. Start Docker Services
+Run API and worker locally:
 
-```bash
-docker compose up -d
-```
-
-### 5. Run Database Migrations
-
-```bash
+```powershell
 python -m alembic upgrade head
-```
-
-### 6. Start FastAPI
-
-```bash
-python -m uvicorn app:app --reload
-```
-
-### 7. Start Redis Worker
-
-```bash
+python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
 python redis_queue/worker.py
 ```
 
----
+## Troubleshooting
 
-## API Documentation
+If pgAdmin cannot connect, verify you are using port `5433`, not `5432`:
 
-Swagger UI
-
-```
-http://localhost:8000/docs
+```powershell
+Test-NetConnection 127.0.0.1 -Port 5433
 ```
 
----
+If RedisInsight cannot connect, verify port `6380`:
 
-## Main APIs
-
-| Method | Endpoint | Description |
-|---------|----------|-------------|
-| GET | `/health/` | Health Check |
-| POST | `/upload/` | Upload Single Document |
-| POST | `/upload/bulk` | Upload Multiple Documents |
-| GET | `/documents/{document_id}/status` | Document Status |
-| GET | `/documents/{document_id}/text` | Extracted Text with optional structured OCR layout |
-
----
-
-## OCR Engines
-
-| Engine | Purpose |
-|---------|---------|
-| Native PDF | Searchable PDFs |
-| PaddleOCR | Images & Scanned PDFs |
-| Native Text | TXT / DOCX |
-
----
-
-## Layout-Preserving OCR
-
-PaddleOCR extraction now returns both plain extracted text and optional structured layout output. The plain `extracted_text` field remains the downstream processing input, while `structured_output` contains page, block, line, bounding box, and table metadata when available.
-
-When `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True`, the PaddleOCR extractor attempts PP-Structure/Layout (`PPStructure` or `PPStructureV3`) lazily during scanned PDF/image OCR. If PP-Structure is unavailable or fails for a page, extraction falls back to OCR bounding box reconstruction.
-
-Fallback reconstruction works by normalizing OCR boxes, grouping lines by vertical position, sorting each row left-to-right, inserting tabs for large horizontal gaps, inserting blank lines for larger vertical gaps, and marking repeated multi-fragment rows as table-like blocks. Multi-page scanned PDFs use a form-feed page break (`\f`) between page texts.
-
-Structured output is stored in `ocr_results.structured_output` and returned by `GET /documents/{document_id}/text`. Existing fields such as `extracted_text`, `extracted_text_path`, `page_count`, `confidence_score`, and `processing_time` are unchanged. OCR confidence still uses the existing line-score average and confidence evaluator.
-
-Current limitations:
-
-- Layout reconstruction is heuristic when PP-Structure is not available.
-- Complex nested tables, merged cells, rotated text, handwritten text, and heavily skewed scans may still need provider-specific post-processing.
-- Multi-column reading order is inferred from coordinates and may be imperfect when columns overlap vertically or have inconsistent gutters.
-- Table output from fallback OCR preserves visual rows with tabs but does not infer semantic column names beyond recognized text.
-
-Dependencies and configuration:
-
-- No new package is required beyond the existing `paddleocr`, `paddlepaddle`, `Pillow`, and `pymupdf` dependencies.
-- PP-Structure support depends on the installed PaddleOCR package exposing `PPStructure` or `PPStructureV3`.
-- Set `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=False` to skip PP-Structure attempts and use bounding-box reconstruction only.
-
----
-
-## Future Enhancements
-
-- GLM OCR integration
-- Baidu OCR integration
-- Cloud storage support (S3/MinIO)
-- Dev2 PII/PHI detection
-- Human review workflow
-- Audit logging
-- Production monitoring
-
----
-
-## Documentation
-
-Detailed project documentation is available in:
-
-```
-doc.md
+```powershell
+Test-NetConnection 127.0.0.1 -Port 6380
 ```
 
----
+If Docker reports container-name conflicts, use the live project command with both compose files:
 
-## License
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml up -d
+```
 
-This project is developed as a Proof of Concept (PoC) for document intelligence and OCR workflow evaluation.
+If worker logs show a NumPy/spaCy binary error, keep `numpy==1.26.4` in `requirements.txt` and rebuild:
+
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml build --no-cache
+```

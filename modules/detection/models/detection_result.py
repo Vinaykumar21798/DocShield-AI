@@ -36,6 +36,8 @@ class DetectionResult(BaseModel):
     confidence: Optional[float] = None
     start: Optional[int] = None
     end: Optional[int] = None
+    canonical_type: Optional[str] = None
+    entity_owner: Optional[str] = None
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -47,3 +49,7 @@ class DetectionResult(BaseModel):
             self.start = self.start_char
         if self.end is None:
             self.end = self.end_char
+        if self.canonical_type is None:
+            self.canonical_type = self.entity_type
+        if self.entity_owner is None:
+            self.entity_owner = self.detector

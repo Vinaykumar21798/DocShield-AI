@@ -1,8 +1,9 @@
-from presidio_analyzer import AnalyzerEngine
-from presidio_analyzer import RecognizerRegistry
+﻿import logging
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
+
+logger = logging.getLogger(__name__)
 
 
 FIELD_LABELS = {
@@ -62,26 +63,48 @@ class PresidioDetector(BaseDetector):
 
     def __init__(self):
         self._analyzer = None
+        self._analyzer_unavailable = False
 
     @property
     def analyzer(self):
+        if self._analyzer_unavailable:
+            raise RuntimeError("Presidio analyzer is unavailable")
+
         if self._analyzer is None:
-            registry = RecognizerRegistry()
-            registry.load_predefined_recognizers()
+            try:
+                import spacy
 
-            REMOVE = [
-                "NhsRecognizer",
-                "UsBankRecognizer",
-                "UsLicenseRecognizer",
-            ]
+                has_local_model = any(
+                    spacy.util.is_package(model_name)
+                    for model_name in ("en_core_web_lg", "en_core_web_sm")
+                )
+                if not has_local_model:
+                    raise RuntimeError(
+                        "No local spaCy English model is installed"
+                    )
 
-            for recognizer in list(registry.recognizers):
-                if recognizer.name in REMOVE:
-                    registry.remove_recognizer(recognizer.name)
+                from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
 
-            self._analyzer = AnalyzerEngine(
-                registry=registry,
-            )
+                registry = RecognizerRegistry()
+                registry.load_predefined_recognizers()
+
+                remove = [
+                    "NhsRecognizer",
+                    "UsBankRecognizer",
+                    "UsLicenseRecognizer",
+                ]
+
+                for recognizer in list(registry.recognizers):
+                    if recognizer.name in remove:
+                        registry.remove_recognizer(recognizer.name)
+
+                self._analyzer = AnalyzerEngine(
+                    registry=registry,
+                )
+            except Exception:
+                self._analyzer_unavailable = True
+                raise
+
         return self._analyzer
 
 
@@ -147,11 +170,18 @@ class PresidioDetector(BaseDetector):
         page_number=1,
     ):
 
-        results = self.analyzer.analyze(
-            text=text,
-            language="en",
-            entities=self.SUPPORTED_ENTITIES,
-        )
+        try:
+            results = self.analyzer.analyze(
+                text=text,
+                language="en",
+                entities=self.SUPPORTED_ENTITIES,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Presidio analyzer unavailable; using regex supplements only: %s",
+                exc,
+            )
+            results = []
 
         detections = []
         seen = set()
@@ -289,3 +319,4 @@ class PresidioDetector(BaseDetector):
                 )
 
         return detections
+

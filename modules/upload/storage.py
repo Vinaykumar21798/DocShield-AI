@@ -1,5 +1,7 @@
-from pathlib import Path
+﻿from pathlib import Path
 from uuid import uuid4
+
+from core.config import settings
 
 
 class StorageService:
@@ -7,7 +9,7 @@ class StorageService:
     Handles local file storage.
     """
 
-    UPLOAD_DIR = Path("storage/uploads")
+    UPLOAD_DIR = Path(settings.upload_dir)
 
     def __init__(self):
         self.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)

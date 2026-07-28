@@ -1,5 +1,6 @@
 import html
 import json
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
@@ -7,9 +8,10 @@ from fastapi.openapi.docs import swagger_ui_default_parameters
 from fastapi.responses import HTMLResponse
 
 from api.routes import api_router
+from core.config import settings
 
 
-SWAGGER_UI_BULK_UPLOAD_PATCH = """
+SWAGGER_UI_BULK_UPLOAD_PATCH = r"""
 <script>
 (function () {
     const BULK_UPLOAD_PATH = "/upload/bulk";
@@ -133,18 +135,23 @@ SWAGGER_UI_BULK_UPLOAD_STYLE = """
 """
 
 
+@asynccontextmanager
+async def lifespan(application: FastAPI):
+    if settings.startup_validation_enabled:
+        from database.session import run_startup_validation
+
+        run_startup_validation()
+
+    yield
+
+
 app = FastAPI(
     title="DocShield-AI",
     version="1.0.0",
     description="Backend API for document upload, OCR and PHI/PII processing.",
     docs_url=None,
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-def startup_validation():
-    from database.session import run_startup_validation
-    run_startup_validation()
 
 
 app.include_router(api_router)
@@ -204,6 +211,8 @@ def custom_swagger_ui_html(request: Request) -> HTMLResponse:
 def root():
     return {
         "status": "running",
-        "message": "DocShield-AI PII/PHI Document Intelligence PoC API",
+        "message": "DocShield-AI",
         "version": "1.0.0"
     }
+
+

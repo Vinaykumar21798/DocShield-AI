@@ -18,6 +18,11 @@ class WorkflowPlanner:
                 WorkflowStep.OCR_DECISION,
                 WorkflowStep.OCR_EXECUTION,
                 WorkflowStep.STORE_OCR_RESULTS,
+                WorkflowStep.DETECTION_EXECUTION,
+                WorkflowStep.STORE_DETECTION_RESULTS,
+                WorkflowStep.HUMAN_REVIEW,
+                WorkflowStep.REDACTION,
+                WorkflowStep.REPORT_GENERATION,
                 WorkflowStep.COMPLETE_WORKFLOW,
             )
         )
