@@ -1,7 +1,7 @@
 """create dev2 tables
 
 Revision ID: 247b84e8fd37
-Revises: 
+Revises: 0003_add_ocr_structured_output
 Create Date: 2026-07-23 13:41:38.582621
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '247b84e8fd37'
-down_revision: Union[str, Sequence[str], None] = None
+down_revision: Union[str, Sequence[str], None] = '0003_add_ocr_structured_output'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

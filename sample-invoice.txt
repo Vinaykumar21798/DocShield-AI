@@ -1,3 +1,0 @@
-Invoice Number INV-3001
-Bill To: Test Patient
-Amount Due: 99.00
