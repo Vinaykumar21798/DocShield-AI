@@ -18,7 +18,12 @@ class EntityMapper:
         "NURSE": "NURSE",
         "HEALTHCARE STAFF": "HEALTHCARE_STAFF",
         "HEALTHCARE_STAFF": "HEALTHCARE_STAFF",
-        "PROVIDER": "PERSON",
+        "PROVIDER": "PROVIDER",
+        "EMPLOYEE_ID": "EMPLOYEE_ID",
+        "DRIVING_LICENSE": "DRIVING_LICENSE",
+        "START_DATE": "START_DATE",
+        "SALARY": "SALARY",
+        "POLICY_NUMBER": "POLICY_NUMBER",
 
         # ==========================
         # ORGANIZATION
@@ -104,6 +109,7 @@ class EntityMapper:
         # ==========================
         "DATE": "DATE",
         "DATE_TIME": "DATE_TIME",
+        "VISIT_DATE": "VISIT_DATE",
         "TIME": "TIME",
         "AGE": "AGE",
 
@@ -221,6 +227,7 @@ class PrivacyMapper:
         "COUNTRY": "PII",
         "DATE": "PII",
         "DATE_TIME": "PII",
+        "DATE_OF_BIRTH": "PII",
         "TIME": "PII",
         "AGE": "PII",
         "AADHAAR": "PII",
@@ -248,11 +255,18 @@ class PrivacyMapper:
         "PIN_CODE": "PII",
         "ZIP_CODE": "PII",
         "DEVICE_ID": "PII",
+        "EMPLOYEE_ID": "PII",
+        "DOCUMENT_ID": "PII",
+        "GSTIN": "PII",
+        "INVOICE_NUMBER": "PII",
+        "START_DATE": "PII",
+        "SALARY": "PII",
 
         # ==========================
         # PHI
         # ==========================
         "PATIENT": "PHI",
+        "PROVIDER": "PHI",
         "DOCTOR": "PHI",
         "PHYSICIAN": "PHI",
         "NURSE": "PHI",
@@ -279,6 +293,9 @@ class PrivacyMapper:
         "POLICY_NUMBER": "PHI",
         "CLAIM_NUMBER": "PHI",
         "PATIENT_ID": "PHI",
+        "VISIT_DATE": "PHI",
+        "CPT_CODE": "PHI",
+        "ICD10_CODE": "PHI",
     }
 
     @classmethod

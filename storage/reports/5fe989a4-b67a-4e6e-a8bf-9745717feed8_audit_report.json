@@ -1,0 +1,88 @@
+{
+  "document_id": "5fe989a4-b67a-4e6e-a8bf-9745717feed8",
+  "document_type": "MEDICAL_RECORD",
+  "ocr_result_id": "8a43d1f5-aa86-4ae1-b218-b77a39714606",
+  "total_entities": 8,
+  "total_pii": 2,
+  "total_phi": 6,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/5fe989a4-b67a-4e6e-a8bf-9745717feed8_redacted.txt",
+  "detectors_used": [
+    "Regex",
+    "medspacy"
+  ],
+  "entities": [
+    {
+      "entity_id": "1aac24bb-9095-403a-8cd6-2a18caeeb830",
+      "entity_type": "INSURANCE_ID",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "27eab6af-4194-4ffc-8416-ce790f681645",
+      "entity_type": "DISEASE",
+      "privacy_category": "PHI",
+      "confidence_score": 0.85,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "medspacy"
+    },
+    {
+      "entity_id": "2f9a650b-badc-4a83-b03c-63ef0b3d7384",
+      "entity_type": "PROVIDER",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "5c84877a-1e17-4e47-af91-4b42009dbb2d",
+      "entity_type": "CPT_CODE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "7753c8dd-1c37-4280-940e-1e03f0ba0507",
+      "entity_type": "PATIENT",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "7fe8c342-373e-4d93-b2b2-bf538eef0a29",
+      "entity_type": "VISIT_DATE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "8bd10518-7f98-45e5-bfd7-65f2daf03db8",
+      "entity_type": "DATE_OF_BIRTH",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "f334087c-b3a3-440a-a5e5-8e8791b23ae2",
+      "entity_type": "SSN",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

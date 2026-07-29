@@ -44,6 +44,7 @@ class MedSpaCyDetector(BaseDetector):
         ("persistent fever", "SYMPTOM"),
         ("shortness of breath", "SYMPTOM"),
         ("chest pain", "SYMPTOM"),
+        ("back pain", "DIAGNOSIS"),
         ("fever", "SYMPTOM"),
         ("headache", "SYMPTOM"),
         ("paracetamol", "MEDICATION"),
@@ -98,7 +99,7 @@ class MedSpaCyDetector(BaseDetector):
             "patient", "doctor", "hospital", "diagnosis", "diagnoses", "complaint",
             "history", "symptom", "symptoms", "medication", "medicine", "drug", "prescription", "allergy",
             "procedure", "surgery", "lab", "laboratory", "blood", "glucose", "hemoglobin", "diabetes",
-            "hypertension", "asthma", "fever", "headache", "mri", "ct", "biopsy", "findings", "clinical",
+            "hypertension", "asthma", "fever", "headache", "pain", "mri", "ct", "biopsy", "findings", "clinical",
         }
 
         return not words.isdisjoint(medspacy_keywords)

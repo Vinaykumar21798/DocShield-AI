@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Jonathan Anderson
+DOB: 1966-12-09
+SSN: 463-74-9204
+Insurance ID: WMj-76210872
+Visit Date: 2023-11-01
+Provider: Sweeney, Clark and Thompson
+Procedure Code: CPT99406
+Diagnosis: Type 2 Diabetes
+Amount Billed: $403.00
+Amount Covered: $679.00

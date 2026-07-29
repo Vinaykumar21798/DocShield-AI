@@ -3,8 +3,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from dataclasses import dataclass
+from typing import Callable
 
 from modules.detection.confidence import ConfidenceCalculator
+from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.detectors.gliner_detector import GLiNERDetector
 from modules.detection.detectors.medspacy_detector import MedSpaCyDetector
 from modules.detection.detectors.ollama_validator import OllamaValidator
@@ -20,49 +23,234 @@ from modules.detection.pipeline_state import PipelineState
 
 logger = logging.getLogger(__name__)
 
+TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+@dataclass(frozen=True)
+class DynamicDetectionConfig:
+    """
+    Runtime knobs for low-cost dynamic detection orchestration.
+    """
+
+    high_confidence_threshold: float = 0.85
+    medium_confidence_threshold: float = 0.60
+    llm_validation_threshold: float = 0.60
+    semantic_reasoning_threshold: float = 0.80
+    stopping_candidate_threshold: int = 0
+    min_candidate_chars: int = 3
+    llm_context_window: int = 160
+    max_unresolved_llm_contexts: int = 8
+    unresolved_llm_enabled: bool = True
+
+    @classmethod
+    def from_env(cls) -> "DynamicDetectionConfig":
+        return cls(
+            high_confidence_threshold=cls._float_env(
+                "DETECTION_HIGH_CONFIDENCE_THRESHOLD",
+                cls.high_confidence_threshold,
+            ),
+            medium_confidence_threshold=cls._float_env(
+                "DETECTION_MEDIUM_CONFIDENCE_THRESHOLD",
+                cls.medium_confidence_threshold,
+            ),
+            llm_validation_threshold=cls._float_env(
+                "DETECTION_LLM_VALIDATION_THRESHOLD",
+                cls.llm_validation_threshold,
+            ),
+            semantic_reasoning_threshold=cls._float_env(
+                "DETECTION_SEMANTIC_REASONING_THRESHOLD",
+                cls.semantic_reasoning_threshold,
+            ),
+            stopping_candidate_threshold=cls._int_env(
+                "DETECTION_STOPPING_CANDIDATE_THRESHOLD",
+                cls.stopping_candidate_threshold,
+            ),
+            min_candidate_chars=cls._int_env(
+                "DETECTION_MIN_CANDIDATE_CHARS",
+                cls.min_candidate_chars,
+            ),
+            llm_context_window=cls._int_env(
+                "DETECTION_LLM_CONTEXT_WINDOW",
+                cls.llm_context_window,
+            ),
+            max_unresolved_llm_contexts=cls._int_env(
+                "DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS",
+                cls.max_unresolved_llm_contexts,
+            ),
+            unresolved_llm_enabled=cls._bool_env(
+                "DETECTION_UNRESOLVED_LLM_ENABLED",
+                cls.unresolved_llm_enabled,
+            ),
+        )
+
+    @staticmethod
+    def _float_env(name: str, default: float) -> float:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except ValueError:
+            logger.warning("Invalid float for %s=%s; using %s", name, value, default)
+            return default
+
+    @staticmethod
+    def _int_env(name: str, default: int) -> int:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        try:
+            return int(value)
+        except ValueError:
+            logger.warning("Invalid integer for %s=%s; using %s", name, value, default)
+            return default
+
+    @staticmethod
+    def _bool_env(name: str, default: bool) -> bool:
+        value = os.getenv(name)
+        if value is None:
+            return default
+        return value.strip().lower() in TRUE_VALUES
+
 
 class DetectionService:
     """
-    Sequential Detection Pipeline
+    Dynamic Detection Orchestrator
 
-    Regex
-        ↓
-    Presidio
-        ↓
-    GLiNER
-        ↓
-    MedSpaCy
-        ↓
-    Confidence
-        ↓
-    Ollama (LOW confidence only)
+    The public API remains detect(text, page_number=1). Internally, the service
+    routes detectors one at a time against PipelineState.current_text, which is
+    the original text with all previously accepted spans masked out.
     """
 
+    AUTHORITATIVE_OWNERS = {
+        # Regex
+        "email": "regex",
+        "phone_number": "regex",
+        "us_phone_number": "regex",
+        "pan_number": "regex",
+        "passport_number": "regex",
+        "aadhaar_number": "regex",
+        "ssn": "regex",
+        "mrn": "regex",
+        "medical_record_number": "regex",
+        "insurance_id": "regex",
+        "claim_number": "regex",
+        "ifsc_code": "regex",
+        "upi_id": "regex",
+        "url": "regex",
+        "ip_address": "regex",
+        "zip_code": "regex",
+        "pin_code": "regex",
+        "date_of_birth": "regex",
+        "visit_date": "regex",
+        "provider": "regex",
+        "credit_card": "regex",
+        "credit_card_number": "regex",
+        "bank_account": "regex",
+        "bank_account_number": "regex",
+        "cpt_code": "regex",
+        "icd10_code": "regex",
+        # Presidio
+        "person": "presidio",
+        "location": "presidio",
+        "date_time": "presidio",
+        "organization": "presidio",
+        "address": "presidio",
+        # GLiNER
+        "doctor": "gliner",
+        "patient": "gliner",
+        "hospital": "gliner",
+        "nurse": "gliner",
+        "physician": "gliner",
+        "healthcare staff": "gliner",
+        "healthcare_staff": "gliner",
+        "medical facility": "gliner",
+        "medical_facility": "gliner",
+        "healthcare organization": "gliner",
+        "healthcare_organization": "gliner",
+        # MedSpaCy
+        "problem": "medspacy",
+        "medication": "medspacy",
+        "procedure": "medspacy",
+        "lab": "medspacy",
+        "symptom": "medspacy",
+        "diagnosis": "medspacy",
+        "allergy": "medspacy",
+        "vital_sign": "medspacy",
+        "disease": "medspacy",
+        "clinical_findings": "medspacy",
+        "clinical finding": "medspacy",
+        "clinical_finding": "medspacy",
+    }
+
+    DETECTOR_PRIORITY = {
+        "regex": 4,
+        "presidio": 3,
+        "gliner": 2,
+        "medspacy": 1,
+        "qwen3b": 0,
+        "qwen8b": 0,
+    }
+
+    SPECIALIZED_TYPES = {
+        "email",
+        "phone_number",
+        "us_phone_number",
+        "pan_number",
+        "passport_number",
+        "aadhaar_number",
+        "ssn",
+        "mrn",
+        "medical_record_number",
+        "insurance_id",
+        "claim_number",
+        "ifsc_code",
+        "upi_id",
+        "url",
+        "ip_address",
+        "zip_code",
+        "pin_code",
+        "date_of_birth",
+        "visit_date",
+        "provider",
+        "credit_card",
+        "credit_card_number",
+        "bank_account_number",
+        "doctor",
+        "patient",
+        "nurse",
+        "physician",
+        "healthcare_staff",
+        "healthcare staff",
+        "medical_facility",
+        "medical facility",
+        "healthcare_organization",
+        "healthcare organization",
+        "hospital",
+        "disease",
+        "problem",
+        "medication",
+        "procedure",
+        "lab",
+        "symptom",
+        "diagnosis",
+        "allergy",
+        "vital_sign",
+        "clinical_finding",
+        "clinical finding",
+    }
+
     def __init__(self):
-        #
-        # Lightweight detector
-        #
         self.regex = RegexDetector()
 
-        #
-        # Heavy detectors
-        #
         self._presidio = None
         self._gliner = None
         self._medspacy = None
         self._qwen3b = None
 
-        #
-        # Validator
-        #
         self.validator = OllamaValidator()
-
-        #
-        # Detector Router
-        #
         self.router = DetectorSelector()
-
-    ###############################################################
+        self.config = DynamicDetectionConfig.from_env()
 
     @property
     def presidio(self):
@@ -71,16 +259,12 @@ class DetectionService:
             self._presidio = PresidioDetector()
         return self._presidio
 
-    ###############################################################
-
     @property
     def gliner(self):
         if self._gliner is None:
             logger.info("Loading GLiNER...")
             self._gliner = GLiNERDetector()
         return self._gliner
-
-    ###############################################################
 
     @property
     def medspacy(self):
@@ -89,8 +273,6 @@ class DetectionService:
             self._medspacy = MedSpaCyDetector()
         return self._medspacy
 
-    ###############################################################
-
     @property
     def qwen3b(self):
         if self._qwen3b is None:
@@ -98,44 +280,73 @@ class DetectionService:
             self._qwen3b = Qwen3BDetector()
         return self._qwen3b
 
-
-    ###############################################################
+    def _detector_getters(self) -> dict[str, Callable[[], BaseDetector]]:
+        return {
+            "regex": lambda: self.regex,
+            "presidio": lambda: self.presidio,
+            "gliner": lambda: self.gliner,
+            "medspacy": lambda: self.medspacy,
+        }
 
     def _run_detector(
         self,
-        detector,
+        detector: BaseDetector,
         state: PipelineState,
         page_number: int,
         custom_text: str | None = None,
-    ):
+        context_offset: int = 0,
+    ) -> list[DetectionResult]:
         """
-        Executes one detector and updates PipelineState.
+        Executes one detector against the current unmasked text and updates
+        PipelineState with newly accepted entities.
         """
         run_text = custom_text if custom_text is not None else state.current_text
         if not run_text or not run_text.strip():
-            return
+            state.add_entities([], detector.name)
+            return []
+
+        candidate_summary = state.remaining_candidate_summary(
+            min_chars=self.config.min_candidate_chars,
+        )
+        self._attach_orchestration_context(
+            detector,
+            state,
+            run_text,
+            candidate_summary,
+            context_offset,
+        )
 
         try:
             start_time = time.perf_counter()
-            entities = detector.detect(
+            raw_entities = detector.detect(
                 run_text,
                 page_number,
             )
             duration = time.perf_counter() - start_time
             state.log_time(detector.name, duration)
+            if context_offset:
+                raw_entities = self._offset_entities(raw_entities, context_offset)
 
-            if entities:
-                state.add_entities(
-                    entities,
-                    detector.name,
-                )
+            entities = self._filter_new_entities(raw_entities, state, detector.name)
+            state.add_entities(
+                entities,
+                detector.name,
+            )
+
+            if len(entities) != len(raw_entities):
                 logger.info(
-                    "%s detected %d entities",
+                    "%s produced %d entities; accepted %d on unmasked spans",
                     detector.name,
+                    len(raw_entities),
                     len(entities),
                 )
-            else:
-                state.add_entities([], detector.name)
+
+            logger.info(
+                "%s detected %d accepted entities",
+                detector.name,
+                len(entities),
+            )
+            return entities
 
         except Exception as exc:
             logger.exception(
@@ -146,8 +357,92 @@ class DetectionService:
                 f"{detector.name} failed"
             ) from exc
 
+    @staticmethod
+    def _filter_new_entities(
+        entities: list[DetectionResult],
+        state: PipelineState,
+        detector_name: str,
+    ) -> list[DetectionResult]:
+        accepted = []
+        for entity in entities:
+            if DetectionService._matches_previous_entity(
+                entity,
+                state.resolved_entities,
+            ):
+                logger.info(
+                    "Skipping %s entity from %s because it duplicates a previous entity",
+                    entity.entity_type,
+                    detector_name,
+                )
+                continue
 
-    ###############################################################
+            if state.is_span_unmasked(entity.start_char, entity.end_char):
+                accepted.append(entity)
+                continue
+
+            logger.info(
+                "Skipping %s entity from %s because span is already masked: %s-%s",
+                entity.entity_type,
+                detector_name,
+                entity.start_char,
+                entity.end_char,
+            )
+        return accepted
+
+    def _attach_orchestration_context(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        remaining_text: str,
+        candidate_summary: dict,
+        context_offset: int,
+    ) -> None:
+        setattr(
+            detector,
+            "orchestration_context",
+            {
+                "remaining_text": remaining_text,
+                "previous_entities": list(state.resolved_entities),
+                "remaining_candidates": candidate_summary,
+                "text_offset": context_offset,
+                "executed_detectors": list(state.executed_detectors),
+                "skipped_detectors": list(state.skipped_detectors),
+            },
+        )
+
+    @staticmethod
+    def _offset_entities(
+        entities: list[DetectionResult],
+        context_offset: int,
+    ) -> list[DetectionResult]:
+        for entity in entities:
+            entity.start_char += context_offset
+            entity.end_char += context_offset
+            entity.start = entity.start_char
+            entity.end = entity.end_char
+            entity.metadata["context_offset"] = context_offset
+        return entities
+
+    @staticmethod
+    def _matches_previous_entity(
+        entity: DetectionResult,
+        previous_entities: list[DetectionResult],
+    ) -> bool:
+        value = entity.entity_value.strip().lower()
+        entity_type = entity.entity_type.upper()
+        for previous in previous_entities:
+            if previous.entity_value.strip().lower() != value:
+                continue
+            if previous.entity_type.upper() != entity_type:
+                continue
+            if previous.page_number != entity.page_number:
+                continue
+            if (
+                previous.start_char == entity.start_char
+                and previous.end_char == entity.end_char
+            ):
+                return True
+        return False
 
     def detect(
         self,
@@ -161,298 +456,55 @@ class DetectionService:
             return []
 
         current_stage = "INITIALIZATION"
+        config = DynamicDetectionConfig.from_env()
+        self.config = config
+
         try:
             state = PipelineState(
                 original_text=text,
             )
 
-            #######################################################
-            # Stage 1: Regex Baseline
-            #######################################################
-            current_stage = "REGEX_BASELINE"
-            start_stage = time.perf_counter()
-            self._run_detector(
-                self.regex,
+            current_stage = "DYNAMIC_ORCHESTRATION"
+            domain, route = self._execute_dynamic_orchestration(
                 state,
                 page_number,
-            )
-            stage_duration = time.perf_counter() - start_stage
-            regex_entities = [e for e in state.resolved_entities if e.detector == "regex"]
-            logger.info(
-                "\n--- [Telemetry Report] ---"
-                f"\nPipeline Stage: {current_stage}"
-                f"\nDetector: regex"
-                f"\nExecution Time: {stage_duration:.3f}s"
-                f"\nDetected Entities: {len(regex_entities)}"
-                f"\nAccepted: {len(regex_entities)}"
-                f"\nRejected: 0"
-                f"\nEscalated: 0"
-                f"\nPersisted: 0 (Pending Stage 5)"
-                "\n--------------------------"
-            )
-
-            #######################################################
-            # Stage 2: Routing & Execution Plan
-            #######################################################
-            current_stage = "DETECTOR_ROUTING"
-            detectors_list = [
-                self.regex,
-                self.presidio,
-                self.gliner,
-                self.medspacy,
-            ]
-            plan = self.router.plan_execution(state, detectors_list)
-
-            current_stage = "PLANS_EXECUTION"
-            # Execute the plan (only active detectors in plan)
-            regex_masked_text = state.current_text
-            for detector in plan.selected_detectors:
-                start_det = time.perf_counter()
-                self._run_detector(
-                    detector,
-                    state,
-                    page_number,
-                    custom_text=regex_masked_text,
-                )
-                det_duration = time.perf_counter() - start_det
-                det_entities = [e for e in state.resolved_entities if e.detector == detector.name]
-                logger.info(
-                    "\n--- [Telemetry Report] ---"
-                    f"\nPipeline Stage: {current_stage}"
-                    f"\nDetector: {detector.name}"
-                    f"\nExecution Time: {det_duration:.3f}s"
-                    f"\nDetected Entities: {len(det_entities)}"
-                    f"\nAccepted: {len(det_entities)}"
-                    f"\nRejected: 0"
-                    f"\nEscalated: 0"
-                    f"\nPersisted: 0 (Pending Stage 5)"
-                    "\n--------------------------"
-                )
-
-            #######################################################
-            # Stage 3: Confidence & Escalation Heuristics
-            #######################################################
-            current_stage = "CONFIDENCE_CALIBRATION"
-            entities = ConfidenceCalculator.calculate(
-                state.resolved_entities
+                config,
             )
 
             current_stage = "SEMANTIC_REASONING_DECISION"
-            # Determine if Qwen 3B SLM semantic reasoning is needed
-            if self.qwen3b.should_run(state.current_text, state):
-                current_stage = "SEMANTIC_REASONING_EXECUTION"
-                start_qwen = time.perf_counter()
-                logger.info("Semantic reasoning required. Executing Qwen 3B SLM...")
-                self._run_detector(
-                    self.qwen3b,
-                    state,
-                    page_number,
-                )
-                qwen_duration = time.perf_counter() - start_qwen
-                qwen_entities = [e for e in state.resolved_entities if e.detector == "qwen3b"]
-                logger.info(
-                    "\n--- [Telemetry Report] ---"
-                    f"\nPipeline Stage: {current_stage}"
-                    f"\nDetector: qwen3b"
-                    f"\nExecution Time: {qwen_duration:.3f}s"
-                    f"\nDetected Entities: {len(qwen_entities)}"
-                    f"\nAccepted: {len(qwen_entities)}"
-                    f"\nRejected: 0"
-                    f"\nEscalated: 0"
-                    f"\nPersisted: 0 (Pending Stage 5)"
-                    "\n--------------------------"
-                )
-                # Recalibrate confidence levels after Qwen 3B extracts/updates entities
-                entities = ConfidenceCalculator.calculate(
-                    state.resolved_entities
-                )
-
-            #######################################################
-            # Stage 4: High-Reasoning LLM Validation (Qwen 8B)
-            #######################################################
-            current_stage = "LLM_VALIDATION"
-            high_entities = []
-            low_entities = []
-
-            for entity in entities:
-                level = entity.metadata.get(
-                    "confidence_level",
-                    "HIGH",
-                )
-                if level == "LOW":
-                    low_entities.append(entity)
-                else:
-                    high_entities.append(entity)
-
-            escalated_count = len(low_entities)
-            accepted_count = len(high_entities)
-            rejected_count = 0
-
-            if low_entities and os.getenv("BYPASS_LLM") != "true":
-                logger.info(
-                    "Validating %d low confidence entities via Qwen 8B LLM...",
-                    len(low_entities),
-                )
-                start_val = time.perf_counter()
-                low_entities = self.validator.validate_batch(
-                    context=text,
-                    entities=low_entities,
-                )
-                val_duration = time.perf_counter() - start_val
-                
-                # Count accepted vs rejected
-                for e in low_entities:
-                    if e.metadata.get("valid", True):
-                        accepted_count += 1
-                    else:
-                        rejected_count += 1
-                
-                logger.info(
-                    "\n--- [Telemetry Report] ---"
-                    f"\nPipeline Stage: {current_stage}"
-                    f"\nDetector: qwen8b_validator"
-                    f"\nExecution Time: {val_duration:.3f}s"
-                    f"\nDetected Entities: {len(low_entities)}"
-                    f"\nAccepted: {accepted_count}"
-                    f"\nRejected: {rejected_count}"
-                    f"\nEscalated: {escalated_count}"
-                    f"\nPersisted: 0 (Pending Stage 5)"
-                    "\n--------------------------"
-                )
-            elif low_entities:
-                logger.info("BYPASS_LLM is set to true. Skipping Qwen 8B validation for %d low confidence entities.", len(low_entities))
-
-            #######################################################
-            # Finalization & Telemetry Logging
-            #######################################################
-            current_stage = "FINALIZATION"
-            results = high_entities + low_entities
-
-            # Remove invalid entities
-            results = [
-                entity
-                for entity in results
-                if entity.metadata.get(
-                    "valid",
-                    True,
-                )
-            ]
-
-            # Normalize entity types and assign privacy categories (PII/PHI)
-            results = EntityMapper.normalize(results)
-
-            # 1. Apply deduplication (removes duplicates of the same type and value)
-            results = Deduplicator.deduplicate(results)
-
-            # 2. Resolve overlapping character boundaries by prioritizing authoritative detector ownership
-            AUTHORITATIVE_OWNERS = {
-                # Regex
-                "email": "regex", "phone_number": "regex", "us_phone_number": "regex",
-                "pan_number": "regex", "passport_number": "regex", "aadhaar_number": "regex",
-                "ssn": "regex", "mrn": "regex", "insurance_id": "regex", "claim_number": "regex",
-                "ifsc_code": "regex", "upi_id": "regex", "url": "regex", "ip_address": "regex",
-                "zip_code": "regex", "pin_code": "regex", "date_of_birth": "regex",
-                "credit_card": "regex", "cpt_code": "regex", "icd10_code": "regex",
-                
-                # Presidio
-                "person": "presidio", "location": "presidio", "date_time": "presidio",
-                "organization": "presidio", "address": "presidio",
-                
-                # GLiNER
-                "doctor": "gliner", "patient": "gliner", "hospital": "gliner",
-                "nurse": "gliner", "physician": "gliner", "healthcare staff": "gliner",
-                "healthcare_staff": "gliner", "medical facility": "gliner",
-                "medical_facility": "gliner", "healthcare organization": "gliner",
-                "healthcare_organization": "gliner",
-                
-                # MedSpaCy
-                "problem": "medspacy", "medication": "medspacy", "procedure": "medspacy",
-                "lab": "medspacy", "symptom": "medspacy", "diagnosis": "medspacy",
-                "allergy": "medspacy", "vital_sign": "medspacy", "disease": "medspacy",
-                "clinical_findings": "medspacy", "clinical finding": "medspacy",
-                "clinical_finding": "medspacy"
-            }
-
-            DETECTOR_PRIORITY = {
-                "regex": 4,
-                "presidio": 3,
-                "gliner": 2,
-                "medspacy": 1,
-                "qwen3b": 0,
-                "qwen8b": 0
-            }
-
-            SPECIALIZED_TYPES = {
-                # Regex
-                "email", "phone_number", "us_phone_number", "pan_number", "passport_number", "aadhaar_number",
-                "ssn", "mrn", "insurance_id", "claim_number", "ifsc_code", "upi_id", "url", "ip_address",
-                "zip_code", "pin_code", "date_of_birth", "credit_card", "cpt_code", "icd10_code",
-                
-                # Clinical / Healthcare
-                "doctor", "patient", "nurse", "physician", "healthcare_staff", "healthcare staff",
-                "medical_facility", "medical facility", "healthcare_organization", "healthcare organization",
-                "hospital", "disease", "problem", "medication", "procedure", "lab", "symptom", "diagnosis",
-                "allergy", "vital_sign", "clinical_finding", "clinical finding"
-            }
-
-            def get_sorting_key(entity: DetectionResult):
-                ent_type_lower = entity.entity_type.lower()
-                det_name_lower = entity.detector.lower()
-                
-                # Match authoritative owner?
-                owner = AUTHORITATIVE_OWNERS.get(ent_type_lower)
-                is_authoritative = 1 if (owner == det_name_lower) else 0
-                
-                # Is it a specialized clinical/healthcare type (vs generic person/org)?
-                type_rank = 1 if ent_type_lower in SPECIALIZED_TYPES else 0
-                
-                # Traditional detector priority: Regex (4) > Presidio (3) > GLiNER (2) > MedSpaCy (1) > Qwen (0)
-                det_priority = DETECTOR_PRIORITY.get(det_name_lower, 0)
-                
-                # Criteria: (is_authoritative, type_rank, det_priority, confidence_score, span_length)
-                return (
-                    is_authoritative,
-                    type_rank,
-                    det_priority,
-                    entity.confidence_score,
-                    entity.end_char - entity.start_char
-                )
-
-            # Sort descending (reverse=True) so authoritative matches go first
-            results.sort(key=get_sorting_key, reverse=True)
-
-            non_overlapping = []
-            for entity in results:
-                overlap = False
-                for accepted in non_overlapping:
-                    if entity.page_number == accepted.page_number:
-                        # Standard range overlap check
-                        if entity.start_char < accepted.end_char and entity.end_char > accepted.start_char:
-                            overlap = True
-                            break
-                if not overlap:
-                    non_overlapping.append(entity)
-
-            results = non_overlapping
-
-            # Update the pipeline state's final entities and telemetry
-            state.resolved_entities = results
-            state.finalize_confidence_summary()
-
-            # Sort by document position for return predictability
-            results.sort(
-                key=lambda entity: (
-                    entity.page_number,
-                    entity.start_char,
-                )
+            self._run_semantic_reasoning_if_needed(
+                state,
+                page_number,
+                config,
             )
 
+            current_stage = "LLM_VALIDATION"
+            entities = self._calibrate_confidence(
+                state.resolved_entities,
+                config,
+            )
+            entities = self._validate_low_confidence_entities(
+                text,
+                entities,
+                config,
+            )
+
+            current_stage = "FINALIZATION"
+            results = self._finalize_results(
+                state,
+                entities,
+                config,
+            )
 
             logger.info(
-                "Detection complete. %d entities. Skipped detectors: %s. Telemetry: %s",
+                "Detection complete. document_domain=%s route=%s entities=%d "
+                "skipped_detectors=%s telemetry=%s confidence_summary=%s",
+                domain,
+                "->".join(route),
                 len(results),
                 state.skipped_detectors,
                 state.execution_time,
+                state.confidence_summary,
             )
 
             return results
@@ -461,4 +513,374 @@ class DetectionService:
             logger.exception("Detection pipeline failed at stage: %s", current_stage)
             raise DetectionError(
                 f"Detection failed at Stage {current_stage}: {exc}"
-            ) from exc
+            ) from exc
+
+    def _execute_dynamic_orchestration(
+        self,
+        state: PipelineState,
+        page_number: int,
+        config: DynamicDetectionConfig,
+    ) -> tuple[str, tuple[str, ...]]:
+        domain = self.router.classify_domain(state.original_text)
+        route = self.router.route_for_domain(domain)
+        detector_getters = self._detector_getters()
+
+        logger.info(
+            "Dynamic detection route selected. domain=%s route=%s "
+            "stop_threshold=%s min_candidate_chars=%s",
+            domain,
+            "->".join(route),
+            config.stopping_candidate_threshold,
+            config.min_candidate_chars,
+        )
+
+        while True:
+            selection = self.router.select_next_detector(
+                state=state,
+                detector_getters=detector_getters,
+                route=route,
+                stopping_candidate_threshold=(
+                    config.stopping_candidate_threshold
+                ),
+                min_candidate_chars=config.min_candidate_chars,
+            )
+
+            if selection.detector is None:
+                logger.info(
+                    "%s Remaining candidates=%s preview=%s",
+                    selection.reason,
+                    selection.remaining_candidates["count"],
+                    selection.remaining_candidates["preview"],
+                )
+                break
+
+            detector = selection.detector
+            logger.info(
+                "Executing detector=%s reason=%s remaining_candidates=%s preview=%s",
+                detector.name,
+                selection.reason,
+                selection.remaining_candidates["count"],
+                selection.remaining_candidates["preview"],
+            )
+
+            before_count = len(state.resolved_entities)
+            new_entities = self._run_detector(
+                detector,
+                state,
+                page_number,
+                custom_text=state.current_text,
+            )
+            self._calibrate_confidence(state.resolved_entities, config)
+            remaining = state.remaining_candidate_summary(
+                min_chars=config.min_candidate_chars,
+            )
+            logger.info(
+                "Detector completed. detector=%s entities_found=%d "
+                "total_entities=%d remaining_candidates=%d preview=%s",
+                detector.name,
+                len(new_entities),
+                len(state.resolved_entities),
+                remaining["count"],
+                remaining["preview"],
+            )
+
+            if len(state.resolved_entities) == before_count and not new_entities:
+                logger.info(
+                    "Detector %s found no new entities; recalculated candidates=%d",
+                    detector.name,
+                    remaining["count"],
+                )
+
+        return domain, route
+
+    def _run_semantic_reasoning_if_needed(
+        self,
+        state: PipelineState,
+        page_number: int,
+        config: DynamicDetectionConfig,
+    ) -> None:
+        remaining = state.remaining_candidate_summary(
+            min_chars=config.min_candidate_chars,
+        )
+        unresolved_candidates = (
+            remaining["count"] > config.stopping_candidate_threshold
+        )
+        low_or_conflicted = (
+            self._has_low_confidence(
+                state.resolved_entities,
+                config.semantic_reasoning_threshold,
+            )
+            or self._has_overlapping_type_conflicts(state.resolved_entities)
+        )
+
+        if self._llm_bypassed():
+            if unresolved_candidates or low_or_conflicted:
+                logger.info(
+                    "Skipping Qwen/Ollama because BYPASS_LLM is true. "
+                    "unresolved_candidates=%s low_or_conflicted=%s",
+                    remaining["count"],
+                    low_or_conflicted,
+                )
+            return
+
+        if not config.unresolved_llm_enabled:
+            logger.info("Skipping Qwen 3B semantic extraction by configuration.")
+            return
+
+        if not unresolved_candidates:
+            logger.info(
+                "Skipping Qwen 3B semantic extraction: no unresolved candidate spans remain."
+            )
+            return
+
+        qwen = self.qwen3b
+        if qwen.client is None:
+            logger.info("Skipping Qwen 3B semantic extraction: Ollama client unavailable.")
+            return
+
+        contexts = state.candidate_contexts(
+            candidates=remaining["candidates"],
+            window=config.llm_context_window,
+            max_contexts=config.max_unresolved_llm_contexts,
+        )
+        if not contexts:
+            logger.info(
+                "Skipping Qwen 3B semantic extraction: no bounded unresolved contexts available."
+            )
+            return
+
+        total_new_entities = 0
+        for context in contexts:
+            logger.info(
+                "Executing Qwen 3B on bounded unresolved context. "
+                "context_start=%s context_end=%s candidate=%s",
+                context["start"],
+                context["end"],
+                context["candidate"],
+            )
+            new_entities = self._run_detector(
+                qwen,
+                state,
+                page_number,
+                custom_text=context["text"],
+                context_offset=context["start"],
+            )
+            total_new_entities += len(new_entities)
+
+        self._calibrate_confidence(state.resolved_entities, config)
+        logger.info(
+            "Qwen 3B bounded semantic extraction complete. contexts=%d new_entities=%d",
+            len(contexts),
+            total_new_entities,
+        )
+
+    def _validate_low_confidence_entities(
+        self,
+        original_text: str,
+        entities: list[DetectionResult],
+        config: DynamicDetectionConfig,
+    ) -> list[DetectionResult]:
+        high_entities = []
+        low_entities = []
+
+        for entity in entities:
+            if entity.confidence_score < config.llm_validation_threshold:
+                low_entities.append(entity)
+            else:
+                high_entities.append(entity)
+
+        if not low_entities:
+            logger.info("No low-confidence entities require Qwen 8B validation.")
+            return entities
+
+        if self._llm_bypassed():
+            logger.info(
+                "BYPASS_LLM is true. Skipping Qwen 8B validation for %d low-confidence entities.",
+                len(low_entities),
+            )
+            return entities
+
+        context = self._build_entity_context(
+            original_text,
+            low_entities,
+            config.llm_context_window,
+        )
+        logger.info(
+            "Validating %d low-confidence entities via Qwen 8B using bounded context.",
+            len(low_entities),
+        )
+        start_val = time.perf_counter()
+        validated_low_entities = self.validator.validate_batch(
+            context=context,
+            entities=low_entities,
+        )
+        val_duration = time.perf_counter() - start_val
+
+        accepted_count = sum(
+            1
+            for entity in validated_low_entities
+            if entity.metadata.get("valid", True)
+        )
+        rejected_count = len(validated_low_entities) - accepted_count
+        logger.info(
+            "Qwen 8B validation complete. duration=%.3fs escalated=%d accepted=%d rejected=%d",
+            val_duration,
+            len(low_entities),
+            accepted_count,
+            rejected_count,
+        )
+
+        return high_entities + validated_low_entities
+
+    def _finalize_results(
+        self,
+        state: PipelineState,
+        entities: list[DetectionResult],
+        config: DynamicDetectionConfig,
+    ) -> list[DetectionResult]:
+        results = [
+            entity
+            for entity in entities
+            if entity.metadata.get("valid", True)
+        ]
+
+        results = EntityMapper.normalize(results)
+        results = self._calibrate_confidence(results, config)
+        results = Deduplicator.deduplicate(results)
+        results = self._resolve_overlapping_spans(results)
+        results = self._calibrate_confidence(results, config)
+
+        for entity in results:
+            self._sync_compatibility_fields(entity)
+
+        state.resolved_entities = results
+        state.finalize_confidence_summary()
+
+        results.sort(
+            key=lambda entity: (
+                entity.page_number,
+                entity.start_char,
+            )
+        )
+        return results
+
+    def _resolve_overlapping_spans(
+        self,
+        results: list[DetectionResult],
+    ) -> list[DetectionResult]:
+        results.sort(key=self._overlap_sorting_key, reverse=True)
+
+        non_overlapping = []
+        for entity in results:
+            overlap = False
+            for accepted in non_overlapping:
+                if entity.page_number != accepted.page_number:
+                    continue
+                if (
+                    entity.start_char < accepted.end_char
+                    and entity.end_char > accepted.start_char
+                ):
+                    overlap = True
+                    break
+            if not overlap:
+                non_overlapping.append(entity)
+
+        return non_overlapping
+
+    def _overlap_sorting_key(self, entity: DetectionResult) -> tuple:
+        entity_type = entity.entity_type.lower()
+        detector_names = self._detector_names(entity.detector)
+        owner = self.AUTHORITATIVE_OWNERS.get(entity_type)
+        is_authoritative = 1 if owner in detector_names else 0
+        type_rank = 1 if entity_type in self.SPECIALIZED_TYPES else 0
+        detector_priority = max(
+            self.DETECTOR_PRIORITY.get(detector_name, 0)
+            for detector_name in detector_names
+        )
+
+        return (
+            is_authoritative,
+            type_rank,
+            detector_priority,
+            entity.confidence_score,
+            entity.end_char - entity.start_char,
+        )
+
+    @staticmethod
+    def _detector_names(detector: str) -> set[str]:
+        names = {
+            part.strip().lower()
+            for part in detector.split(",")
+            if part.strip()
+        }
+        return names or {"unknown"}
+
+    def _calibrate_confidence(
+        self,
+        entities: list[DetectionResult],
+        config: DynamicDetectionConfig,
+    ) -> list[DetectionResult]:
+        return ConfidenceCalculator.calculate(
+            entities,
+            high_threshold=config.high_confidence_threshold,
+            medium_threshold=config.medium_confidence_threshold,
+        )
+
+    @staticmethod
+    def _has_low_confidence(
+        entities: list[DetectionResult],
+        threshold: float,
+    ) -> bool:
+        return any(entity.confidence_score < threshold for entity in entities)
+
+    @staticmethod
+    def _has_overlapping_type_conflicts(
+        entities: list[DetectionResult],
+    ) -> bool:
+        for index, left in enumerate(entities):
+            for right in entities[index + 1:]:
+                if left.page_number != right.page_number:
+                    continue
+                if left.start_char >= right.end_char or left.end_char <= right.start_char:
+                    continue
+                if left.entity_type != right.entity_type:
+                    return True
+        return False
+
+    @staticmethod
+    def _build_entity_context(
+        text: str,
+        entities: list[DetectionResult],
+        window: int,
+    ) -> str:
+        snippets = []
+        seen = set()
+        for entity in entities:
+            start, end = PipelineState._bounded_context_bounds(
+                len(text),
+                entity.start_char,
+                entity.end_char,
+                window,
+            )
+            key = (start, end)
+            if key in seen:
+                continue
+            seen.add(key)
+            snippets.append(
+                f"[{start}:{end}] {text[start:end]}"
+            )
+        return "\n\n".join(snippets)
+
+    @staticmethod
+    def _sync_compatibility_fields(entity: DetectionResult) -> None:
+        entity.text = entity.entity_value
+        entity.confidence = entity.confidence_score
+        entity.start = entity.start_char
+        entity.end = entity.end_char
+        entity.canonical_type = entity.entity_type
+        if entity.entity_owner is None:
+            entity.entity_owner = entity.detector
+
+    @staticmethod
+    def _llm_bypassed() -> bool:
+        return os.getenv("BYPASS_LLM", "false").strip().lower() in TRUE_VALUES

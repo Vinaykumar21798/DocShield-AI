@@ -1,0 +1,52 @@
+{
+  "document_id": "8439d8eb-a886-49f9-ae86-f759f1ccc803",
+  "document_type": "UNKNOWN",
+  "ocr_result_id": "ecd8dfb1-b976-4994-96f9-a1fc4a15393e",
+  "total_entities": 4,
+  "total_pii": 4,
+  "total_phi": 0,
+  "pending_reviews": 1,
+  "redacted_file_path": "storage/redacted/8439d8eb-a886-49f9-ae86-f759f1ccc803_redacted.txt",
+  "detectors_used": [
+    "Regex",
+    "presidio"
+  ],
+  "entities": [
+    {
+      "entity_id": "210356be-d610-4e98-ab2d-469f7ed91bf0",
+      "entity_type": "SSN",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "5af26270-73c6-4f1b-95f8-7946ec081601",
+      "entity_type": "ORGANIZATION",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "presidio"
+    },
+    {
+      "entity_id": "d8537448-b1e1-4159-9d5d-c009d4cdfd10",
+      "entity_type": "DATE_OF_BIRTH",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "e4ffdcc4-367b-4a86-af94-94def998060b",
+      "entity_type": "ZIP_CODE",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "is_review_required": true,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

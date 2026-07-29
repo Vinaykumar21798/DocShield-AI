@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Michael Robinson
+DOB: 2006-01-13
+SSN: 581-11-5467
+Insurance ID: Fcg-35528379
+Visit Date: 2024-01-13
+Provider: Rojas-Gutierrez
+Procedure Code: CPT99213
+Diagnosis: Back Pain
+Amount Billed: $662.00
+Amount Covered: $354.00

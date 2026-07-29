@@ -1,4 +1,5 @@
-﻿import logging
+import logging
+import re
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
@@ -23,9 +24,31 @@ FIELD_LABELS = {
     "upi",
     "account",
     "account holder",
+    "agreement id",
+    "authorized signatory",
+    "bank account",
+    "claim number",
+    "company information",
+    "contact information",
+    "customer name",
+    "driving license",
+    "emergency contact",
+    "employee id",
+    "enterprise service agreement",
+    "footer",
+    "gstin",
+    "ifsc",
+    "insurance company",
+    "invoice number",
+    "legal section",
+    "medical information",
+    "organization",
+    "passport no",
+    "policy number",
+    "start date",
+    "visit date",
+    "witness",
 }
-
-
 HOSPITAL_SUFFIXES = (
     "hospital",
     "hospitals",
@@ -45,6 +68,41 @@ TITLE_ONLY = {
     "mrs.",
     "ms",
     "ms.",
+}
+
+PERSON_NAME_TOKEN = r"[A-Z][a-z]+(?:['-][A-Z][a-z]+)*"
+PERSON_NAME_PATTERN = rf"{PERSON_NAME_TOKEN}(?:\s+{PERSON_NAME_TOKEN}){{1,3}}"
+CREDENTIAL_SUFFIX_PATTERN = r"(?:DVM|MD|DO|DDS|PhD|CPA|Esq\.?|RN|NP|PA-C)"
+
+PERSON_CONTEXT_PATTERNS = (
+    re.compile(
+        rf"\b(?:verify that|certify that|confirm that)\s+"
+        rf"(?P<person>{PERSON_NAME_PATTERN})"
+        rf"(?:\s+{CREDENTIAL_SUFFIX_PATTERN})?\s+"
+        r"(?=is|was|has|currently|will|,)",
+    ),
+    re.compile(
+        rf"(?im)^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact|Employee Name|Candidate Name|Staff Member)"
+        rf"[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?"
+        rf"(?P<person>{PERSON_NAME_PATTERN})"
+        rf"(?:\s+{CREDENTIAL_SUFFIX_PATTERN})?[ \t]*$",
+    ),
+)
+NON_PERSON_FALLBACK_VALUES = FIELD_LABELS | TITLE_ONLY | {
+    "employment verification",
+    "hr department",
+    "human resources",
+}
+
+ORG_FALLBACK_LABELS = FIELD_LABELS | {
+    "company information",
+    "contact information",
+    "enterprise service agreement",
+    "footer",
+    "insurance",
+    "insurance company",
+    "legal section",
+    "medical information",
 }
 
 
@@ -275,11 +333,17 @@ class PresidioDetector(BaseDetector):
                 )
             )
 
+        self._add_supplemental_person_detections(text, page_number, detections, seen)
+
         # Supplementary Organization regex (case sensitive to match proper noun patterns)
         import re
         org_pattern = r'\b[A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+)*\s+(?:Corporation|Corp\b|Inc\b|Inc\.|Llc|Ltd|Company|Association|Group|Solutions)\b'
         for match in re.finditer(org_pattern, text):
             val = match.group()
+            normalized_val = " ".join(val.split()).lower().rstrip(":")
+            if normalized_val in ORG_FALLBACK_LABELS:
+                continue
+
             start, end = match.start(), match.end()
             key = ("ORGANIZATION", val.lower(), start, end)
             if key not in seen:
@@ -320,3 +384,58 @@ class PresidioDetector(BaseDetector):
 
         return detections
 
+    def _add_supplemental_person_detections(
+        self,
+        text: str,
+        page_number: int,
+        detections: list[DetectionResult],
+        seen: set[tuple[str, str, int, int]],
+    ) -> None:
+        for pattern in PERSON_CONTEXT_PATTERNS:
+            for match in pattern.finditer(text):
+                value = match.group("person").strip()
+                if not self._is_valid_person_fallback(value):
+                    continue
+
+                start = match.start("person")
+                end = match.end("person")
+                key = ("PERSON", value.lower(), start, end)
+                if key in seen:
+                    continue
+
+                seen.add(key)
+                detections.append(
+                    DetectionResult(
+                        entity_type="PERSON",
+                        entity_value=value,
+                        confidence_score=0.88,
+                        start_char=start,
+                        end_char=end,
+                        page_number=page_number,
+                        detector=self.name,
+                        metadata={"recognizer": "PatternRecognizer_EmploymentPerson"},
+                    )
+                )
+
+    @staticmethod
+    def _is_valid_person_fallback(value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+
+        if normalized_key in NON_PERSON_FALLBACK_VALUES:
+            return False
+
+        if re.search(r"\d|@|://|www\.", normalized):
+            return False
+
+        if normalized_key.endswith(HOSPITAL_SUFFIXES):
+            return False
+
+        tokens = normalized.split()
+        if not 2 <= len(tokens) <= 4:
+            return False
+
+        return all(
+            re.fullmatch(PERSON_NAME_TOKEN, token)
+            for token in tokens
+        )

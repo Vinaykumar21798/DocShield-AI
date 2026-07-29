@@ -1,4 +1,4 @@
-﻿import re
+import re
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
@@ -6,11 +6,25 @@ from modules.detection.models.detection_result import DetectionResult
 
 class RegexDetector(BaseDetector):
 
+    NAME_TOKEN_PATTERN = r"[A-Z][A-Za-z]*(?:['-][A-Z][A-Za-z]+)*"
+    LABELED_NAME_PATTERN = (
+        rf"{NAME_TOKEN_PATTERN}(?:[ \t]+{NAME_TOKEN_PATTERN}){{0,3}}"
+    )
+    DATE_VALUE_PATTERN = (
+        r"(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}-[A-Za-z]{3}-\d{4})"
+    )
+
     @property
     def name(self) -> str:
         return "Regex"
 
     PATTERNS = {
+
+        "DOCUMENT_ID":
+            r"(?im)^\s*(?:Agreement ID|Document ID|Reference Number)[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9-]{5,})[ \t]*$",
+
+        "DATE":
+            rf"(?im)^\s*Date[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
 
         "EMAIL":
             r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
@@ -21,14 +35,23 @@ class RegexDetector(BaseDetector):
         "AADHAAR_NUMBER":
             r"\b\d{4}\s?\d{4}\s?\d{4}\b",
 
+        "EMPLOYEE_ID":
+            r"(?im)^\s*(?:[-*][ \t]*)?Employee ID[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)[ \t]*$",
+
         "PAN_NUMBER":
             r"\b[A-Z]{5}[0-9]{4}[A-Z]\b",
 
+        "DRIVING_LICENSE":
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:Driving License|Driver License|Driving Licence|Driver Licence)[ \t]*[:\-][ \t]*([A-Z]{2}\d{2}[ \t-]?\d{7,12})[ \t]*$",
+
         "PASSPORT_NUMBER":
-            r"\b[A-Z][0-9]{7}\b",
+            r"\b[A-Z][0-9]{7,8}\b",
 
         "CREDIT_CARD":
             r"\b(?:\d[ -]?){13,16}\b",
+
+        "GSTIN":
+            r"\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b",
 
         "IFSC_CODE":
             r"\b[A-Z]{4}0[A-Z0-9]{6}\b",
@@ -48,26 +71,71 @@ class RegexDetector(BaseDetector):
         "SSN":
             r"\b\d{3}-\d{2}-\d{4}\b",
 
+        "PERSON":
+            rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?({LABELED_NAME_PATTERN})[ \t]*$)"
+            rf"|(?ims:\bagreement\s+is\s+signed\s+between\b[^\r\n]*(?:\r?\n)[ \t]*and[ \t]+({LABELED_NAME_PATTERN})\.?)",
+        "PATIENT":
+            rf"\bPatient(?:[ \t]+Name)?[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b",
+
         "US_PHONE_NUMBER":
-            r"\b(?:\+1[-. \t]?)?(?:\(\d{3}\)|\d{3})[-. \t]?\d{3}[-. \t]?\d{4}\b",
+            r"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{3}\)|\d{3})[-. \t]?\d{3}[-. \t]?\d{4}\b",
 
         "DATE_OF_BIRTH":
-            r"\b(?:DOB|Date of Birth)[ \t]*[:\-]?[ \t]*(\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2})\b",
+            rf"\b(?:DOB|Date of Birth)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
+
+        "START_DATE":
+            rf"(?im)^\s*(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
+
+        "VISIT_DATE":
+            rf"\b(?:Visit Date|Service Date|Date of Service|Collection Date|Admission Date|Discharge Date)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
+
+        "DOCTOR":
+            rf"(?im)^\s*(?:Doctor|Physician|Consultant)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$",
+
+        "HOSPITAL":
+            r"(?im)^\s*(?:Hospital|Clinic|Medical Facility)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,6})[ \t]*$",
+
+        "ORGANIZATION":
+            rf"(?im:^\s*(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}})[ \t]*$)"
+            rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}}\s+(?:Pvt[ \t]+Ltd|Ltd|Inc|Corp|Corporation|LLC|Company|Group|Association))\b)",
+        "PROVIDER":
+            rf"\bProvider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
+
+        "ADDRESS":
+            r"(?ims)^\s*(?:[-*][ \t]*)?(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*\r?\n|\Z)",
 
         "ZIP_CODE":
             r"\b\d{5}(?:-\d{4})?\b",
 
         "BANK_ACCOUNT":
-            r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
+            r"(?im)^\s*(?:[-*][ \t]*)?Bank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
 
         "MRN":
             r"\bMRN[-: \t]?\d+\b",
+
+        "INVOICE_NUMBER":
+            r"(?im)^\s*(?:Invoice Number|Invoice No|Invoice ID)[ \t]*[:\-][ \t]*([A-Z]{2,}-[A-Z0-9-]+)[ \t]*$",
+
+        "POLICY_NUMBER":
+            r"(?im)^\s*(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)[ \t]*$",
 
         "CLAIM_NUMBER":
             r"\bCLM[-: \t]?[A-Z0-9-]+\b",
 
         "INSURANCE_ID":
             r"\b(?:INS|POL|POLICY|(?!CPT|DOB|SSN)[a-zA-Z]{3})[-: \t]?(?=[a-zA-Z0-9-]*\d)[a-zA-Z0-9-]{5,15}\b",
+
+        "SALARY":
+            r"(?im)^\s*(?:[-*][ \t]*)?Salary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
+
+        "DIAGNOSIS":
+            r"(?im)^\s*Diagnosis[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
+
+        "MEDICATION":
+            r"(?im)^\s*Medication[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
+
+        "PROCEDURE":
+            r"(?im)^\s*Procedure[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
 
         "CPT_CODE":
             r"\b(?:CPT[-: \t]?)?\d{5}\b",
@@ -76,69 +144,176 @@ class RegexDetector(BaseDetector):
             r"\b[A-TV-Z][0-9]{2}(?:\.[A-Z0-9]{1,4})?\b",
         }
     ENTITY_PRIORITY = {
-    "CREDIT_CARD": 100,
-    "BANK_ACCOUNT": 98,
-    "PASSPORT_NUMBER": 90,
-    "PAN_NUMBER": 80,
-    "AADHAAR_NUMBER": 70,
-    "IFSC_CODE": 60,
-    "UPI_ID": 50,
-    "PHONE_NUMBER": 40,
-    "EMAIL": 30,
-    "URL": 20,
-    "IP_ADDRESS": 10,
-    "PIN_CODE": 5,
-    "SSN": 95,
-    "MRN": 92,
-    "CLAIM_NUMBER": 91,
-    "INSURANCE_ID": 90,
-    "DATE_OF_BIRTH": 85,
-    "US_PHONE_NUMBER": 45,
-    "ZIP_CODE": 6,
-    "CPT_CODE": 25,
-    "ICD10_CODE": 24,
-}
-
+        "BANK_ACCOUNT": 101,
+        "CREDIT_CARD": 100,
+        "SSN": 96,
+        "DOCUMENT_ID": 94,
+        "MRN": 92,
+        "CLAIM_NUMBER": 91,
+        "POLICY_NUMBER": 91,
+        "INSURANCE_ID": 90,
+        "PASSPORT_NUMBER": 90,
+        "EMPLOYEE_ID": 89,
+        "GSTIN": 88,
+        "DRIVING_LICENSE": 87,
+        "PATIENT": 86,
+        "PERSON": 86,
+        "DOCTOR": 86,
+        "HOSPITAL": 86,
+        "DATE_OF_BIRTH": 85,
+        "VISIT_DATE": 84,
+        "START_DATE": 84,
+        "PROVIDER": 83,
+        "ADDRESS": 82,
+        "DIAGNOSIS": 82,
+        "MEDICATION": 82,
+        "PROCEDURE": 82,
+        "PAN_NUMBER": 80,
+        "SALARY": 75,
+        "ORGANIZATION": 74,
+        "AADHAAR_NUMBER": 70,
+        "IFSC_CODE": 60,
+        "UPI_ID": 50,
+        "DATE": 50,
+        "US_PHONE_NUMBER": 45,
+        "PHONE_NUMBER": 40,
+        "EMAIL": 30,
+        "INVOICE_NUMBER": 30,
+        "CPT_CODE": 25,
+        "ICD10_CODE": 24,
+        "URL": 20,
+        "IP_ADDRESS": 10,
+        "ZIP_CODE": 6,
+        "PIN_CODE": 5,
+    }
     CONTEXT = {
-
+        "DOCUMENT_ID": ["agreement id", "document id", "reference number"],
+        "DATE": ["date"],
         "EMAIL": ["email", "mail"],
-
         "PHONE_NUMBER": ["phone", "mobile", "contact"],
-
+        "US_PHONE_NUMBER": ["phone", "mobile", "contact"],
+        "EMPLOYEE_ID": ["employee id"],
         "AADHAAR_NUMBER": ["aadhaar", "uid"],
-
         "PAN_NUMBER": ["pan"],
-
         "PASSPORT_NUMBER": ["passport"],
-
+        "DRIVING_LICENSE": ["driving license", "driver license"],
         "CREDIT_CARD": ["card", "visa", "mastercard"],
-
-        "BANK_ACCOUNT": ["iban", "bank", "account", "acc"],
-
+        "BANK_ACCOUNT": ["iban", "bank", "account", "bank account"],
+        "GSTIN": ["gstin", "gst"],
         "IFSC_CODE": ["ifsc", "bank"],
-
         "UPI_ID": ["upi", "payment"],
-
         "IP_ADDRESS": ["ip"],
-
         "PIN_CODE": ["pin", "zipcode", "postal"],
         "SSN": ["ssn", "social security"],
-
-        "US_PHONE_NUMBER": ["phone", "mobile", "contact"],
-
+        "PERSON": ["customer name", "witness", "authorized signatory", "emergency contact"],
+        "PATIENT": ["patient", "patient name"],
         "DATE_OF_BIRTH": ["dob", "date of birth"],
-
+        "START_DATE": ["start date", "joining date", "hire date"],
+        "VISIT_DATE": ["visit date", "service date", "date of service", "collection date"],
+        "DOCTOR": ["doctor", "physician", "consultant"],
+        "HOSPITAL": ["hospital", "clinic", "medical facility"],
+        "ORGANIZATION": ["organization", "company", "insurance company", "agreement", "signed between"],
+        "PROVIDER": ["provider"],
+        "ADDRESS": ["address", "mailing address", "home address", "office address"],
         "ZIP_CODE": ["zip", "zipcode", "postal"],
-
         "MRN": ["mrn", "medical record"],
-
+        "INVOICE_NUMBER": ["invoice"],
+        "POLICY_NUMBER": ["policy"],
         "CLAIM_NUMBER": ["claim"],
-
         "INSURANCE_ID": ["insurance", "policy"],
-
+        "SALARY": ["salary"],
+        "DIAGNOSIS": ["diagnosis"],
+        "MEDICATION": ["medication"],
+        "PROCEDURE": ["procedure"],
         "CPT_CODE": ["cpt"],
-
         "ICD10_CODE": ["diagnosis", "icd"],
+    }
+    GROUP_VALUE_ENTITIES = {
+        "ADDRESS",
+        "BANK_ACCOUNT",
+        "DATE",
+        "DATE_OF_BIRTH",
+        "DIAGNOSIS",
+        "DOCTOR",
+        "DOCUMENT_ID",
+        "DRIVING_LICENSE",
+        "EMPLOYEE_ID",
+        "HOSPITAL",
+        "INVOICE_NUMBER",
+        "MEDICATION",
+        "ORGANIZATION",
+        "PATIENT",
+        "PERSON",
+        "POLICY_NUMBER",
+        "PROCEDURE",
+        "PROVIDER",
+        "SALARY",
+        "START_DATE",
+        "VISIT_DATE",
+    }
+    LABELED_NAME_PLACEHOLDERS = {
+        "anonymous",
+        "na",
+        "n a",
+        "none",
+        "not available",
+        "not applicable",
+        "null",
+        "redacted",
+        "tbd",
+        "to be determined",
+        "unavailable",
+        "unknown",
+        "withheld",
+    }
+
+    LABELED_NAME_ROLE_VALUES = {
+        "account holder",
+        "billing department",
+        "card holder",
+        "claims department",
+        "customer service",
+        "help desk",
+        "insurance company",
+        "main hospital",
+        "medical center",
+        "policy holder",
+    }
+
+    NON_PERSON_NAME_TERMS = {
+        "account",
+        "amount",
+        "benefit",
+        "benefits",
+        "billing",
+        "billed",
+        "card",
+        "center",
+        "claim",
+        "clinic",
+        "company",
+        "corp",
+        "corporation",
+        "covered",
+        "customer",
+        "department",
+        "diagnosis",
+        "group",
+        "help",
+        "holder",
+        "hospital",
+        "inc",
+        "insurance",
+        "lab",
+        "laboratory",
+        "llc",
+        "ltd",
+        "medical",
+        "pharmacy",
+        "policy",
+        "procedure",
+        "service",
+        "unknown",
     }
 
     def detect(
@@ -153,33 +328,66 @@ class RegexDetector(BaseDetector):
 
             for match in re.finditer(pattern, text):
 
-                value = match.group()
+                value, start_char, end_char = self.extract_value_span(
+                    entity,
+                    match,
+                )
 
                 # Enforce contextual verification for CPT_CODE to prevent ZIP_CODE collisions
                 if entity == "CPT_CODE":
-                    if not self.has_context(entity, text, match.start()):
+                    if not self.has_context(entity, text, start_char):
+                        continue
+
+                # Avoid classifying bank account numbers as credit cards.
+                if entity == "CREDIT_CARD":
+                    if self.has_context("BANK_ACCOUNT", text, start_char):
+                        continue
+                    if not self.validate(entity, value):
+                        continue
+
+                # Enforce contextual verification for ADDRESS to avoid masking placeholders.
+                if entity == "ADDRESS":
+                    if not self.validate_address_value(value):
                         continue
 
                 # Enforce contextual verification for ZIP_CODE to avoid matching street numbers
                 if entity == "ZIP_CODE":
-                    if not self.validate_zip_code(value, text, match.start()):
+                    if not self.validate_zip_code(value, text, start_char):
                         continue
 
                 # Enforce contextual verification for PIN_CODE to avoid matching salaries/numbers
                 if entity == "PIN_CODE":
-                    if not self.validate_pin_code(value, text, match.start()):
+                    if not self.validate_pin_code(value, text, start_char):
                         continue
 
                 # Avoid treating invoice/reference IDs as insurance IDs without insurance context.
                 if entity == "INSURANCE_ID":
-                    if not self.validate_insurance_id(value, text, match.start()):
+                    if not self.validate_insurance_id(value, text, start_char):
+                        continue
+
+                # Label-based names are accepted only when the value itself
+                # still looks like a person, not a placeholder or organization.
+                if entity in {"PATIENT", "PROVIDER", "PERSON", "DOCTOR"}:
+                    if not self.validate_labeled_person_value(value):
+                        continue
+
+                if entity == "HOSPITAL":
+                    if not self.validate_facility_value(value):
+                        continue
+
+                if entity == "ORGANIZATION":
+                    if not self.validate_organization_value(value):
+                        continue
+
+                if entity in {"DIAGNOSIS", "MEDICATION", "PROCEDURE"}:
+                    if not self.validate_labeled_text_value(value):
                         continue
 
                 confidence = self.calculate_confidence(
                     entity,
                     value,
                     text,
-                    match.start(),
+                    start_char,
                 )
 
                 detections.append(
@@ -187,8 +395,8 @@ class RegexDetector(BaseDetector):
                         entity_type=entity,
                         entity_value=value,
                         confidence_score=confidence,
-                        start_char=match.start(),
-                        end_char=match.end(),
+                        start_char=start_char,
+                        end_char=end_char,
                         page_number=page_number,
                         detector=self.name,
                         metadata={
@@ -225,6 +433,26 @@ class RegexDetector(BaseDetector):
         )
 
         return filtered
+
+    @staticmethod
+    def extract_value_span(
+        entity: str,
+        match: re.Match,
+    ) -> tuple[str, int, int]:
+        if entity in RegexDetector.GROUP_VALUE_ENTITIES and match.lastindex:
+            for group_index in range(1, match.lastindex + 1):
+                value = match.group(group_index)
+                if value is None:
+                    continue
+
+                start = match.start(group_index)
+                end = match.end(group_index)
+                leading = len(value) - len(value.lstrip())
+                trailing = len(value.rstrip())
+                return value.strip(), start + leading, start + trailing
+
+        return match.group(), match.start(), match.end()
+
     def has_overlap(
             self,
             start: int,
@@ -288,15 +516,27 @@ class RegexDetector(BaseDetector):
         if entity == "CREDIT_CARD":
             return self.luhn(value)
 
+        if entity == "BANK_ACCOUNT":
+            return self.validate_bank_account_value(value)
+
         if entity == "AADHAAR_NUMBER":
             return len(re.sub(r"\D", "", value)) == 12
 
         if entity == "PAN_NUMBER":
             return bool(re.fullmatch(r"[A-Z]{5}[0-9]{4}[A-Z]", value))
 
+        if entity == "PASSPORT_NUMBER":
+            return bool(re.fullmatch(r"[A-Z][0-9]{7,8}", value))
+
+        if entity == "DRIVING_LICENSE":
+            return bool(re.fullmatch(r"[A-Z]{2}\d{2}[ \t-]?\d{7,12}", value))
+
+        if entity == "GSTIN":
+            return bool(re.fullmatch(r"\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]", value))
+
         if entity == "PHONE_NUMBER":
             return len(re.sub(r"\D", "", value)[-10:]) == 10
-            
+
         if entity == "SSN":
             return bool(re.fullmatch(r"\d{3}-\d{2}-\d{4}", value))
 
@@ -305,6 +545,30 @@ class RegexDetector(BaseDetector):
             if digits.startswith("1"):
                 digits = digits[1:]
             return len(digits) == 10
+
+        if entity in {"PATIENT", "PROVIDER", "PERSON", "DOCTOR"}:
+            return self.validate_labeled_person_value(value)
+
+        if entity == "HOSPITAL":
+            return self.validate_facility_value(value)
+
+        if entity == "ORGANIZATION":
+            return self.validate_organization_value(value)
+
+        if entity == "ADDRESS":
+            return self.validate_address_value(value)
+
+        if entity in {"DATE", "DATE_OF_BIRTH", "START_DATE", "VISIT_DATE"}:
+            return self.validate_date_value(value)
+
+        if entity in {"DOCUMENT_ID", "EMPLOYEE_ID", "INVOICE_NUMBER", "POLICY_NUMBER"}:
+            return bool(re.fullmatch(r"[A-Z0-9][A-Z0-9-]{4,}", value.strip().upper()))
+
+        if entity == "SALARY":
+            return bool(re.fullmatch(r"\$?[ \t]*\d[\d,]*(?:\.\d{2})?", value.strip()))
+
+        if entity in {"DIAGNOSIS", "MEDICATION", "PROCEDURE"}:
+            return self.validate_labeled_text_value(value)
 
         if entity == "ZIP_CODE":
             return bool(re.fullmatch(r"\d{5}(-\d{4})?", value))
@@ -319,12 +583,128 @@ class RegexDetector(BaseDetector):
             return len(value) > 8
 
         if entity == "CPT_CODE":
-            return len(value) == 5
+            normalized = re.sub(r"[^A-Za-z0-9]", "", value).upper()
+            if normalized.startswith("CPT"):
+                normalized = normalized[3:]
+            return bool(re.fullmatch(r"\d{5}", normalized))
 
         if entity == "ICD10_CODE":
             return bool(re.fullmatch(r"[A-TV-Z][0-9]{2}(\.[A-Z0-9]{1,4})?", value))
 
         return True
+
+    def validate_bank_account_value(self, value: str) -> bool:
+        normalized = re.sub(r"[\s-]+", "", value.strip()).upper()
+        if normalized.startswith(("IBAN", "ACCOUNT")):
+            return False
+        if normalized.isdigit():
+            return 8 <= len(normalized) <= 18
+        return bool(re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]{11,30}", normalized))
+
+    def validate_date_value(self, value: str) -> bool:
+        return bool(re.fullmatch(self.DATE_VALUE_PATTERN, value.strip(), re.IGNORECASE))
+
+    def validate_labeled_text_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+        if len(normalized) < 3:
+            return False
+        if normalized_key in self.LABELED_NAME_PLACEHOLDERS:
+            return False
+        return not re.fullmatch(r"[-_/.,\s]+", normalized)
+
+    def validate_facility_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+        if not self.validate_labeled_text_value(normalized):
+            return False
+        return any(
+            keyword in normalized_key
+            for keyword in ("hospital", "clinic", "medical", "care", "health")
+        )
+
+    def validate_organization_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+        if not self.validate_labeled_text_value(normalized):
+            return False
+        if normalized_key in {"company information", "organization", "insurance company"}:
+            return False
+        return bool(re.search(r"[A-Za-z]{3,}", normalized))
+
+    def validate_address_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+
+        if not normalized or len(normalized) < 5:
+            return False
+
+        if normalized_key in self.LABELED_NAME_PLACEHOLDERS:
+            return False
+
+        if re.fullmatch(r"(?i)(n/?a|none|unknown|not available|not applicable|redacted)", normalized):
+            return False
+
+        # UK postcode or military APO/FPO/DPO formats are common in OCR output.
+        if re.search(r"\b[A-Z]{1,2}\d[A-Z\d]?[ \t]*\d[A-Z]{2}\b", normalized):
+            return True
+
+        if re.search(r"\b(?:APO|FPO|DPO)\s+(?:AA|AE|AP)\s+\d{5}(?:-\d{4})?\b", normalized):
+            return True
+
+        if re.search(r"\b\d{5}(?:-\d{4})?\b", normalized) and re.search(r"\b[A-Z]{2}\b", normalized):
+            return True
+
+        if re.search(r"\b(?:P\.?O\.? Box|Suite|Apt|Apartment|Unit)\b", normalized, re.IGNORECASE):
+            return True
+
+        street_suffixes = (
+            "Avenue", "Ave", "Boulevard", "Blvd", "Court", "Ct", "Drive", "Dr",
+            "Lane", "Ln", "Road", "Rd", "Street", "St", "Way",
+        )
+        suffix_pattern = "|".join(street_suffixes)
+        if re.search(rf"\b\d+[A-Za-z]?\s+.+\s+(?:{suffix_pattern})\.?\b", normalized):
+            return True
+
+        return bool(re.search(r",\s*[A-Z][A-Za-z .'-]+(?:,\s*[A-Z]{2})?\b", normalized))
+
+    def validate_labeled_person_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = re.sub(r"[^a-z0-9]+", " ", normalized.lower()).strip()
+
+        if not normalized or len(normalized) < 3:
+            return False
+
+        if normalized_key in self.LABELED_NAME_PLACEHOLDERS:
+            return False
+
+        if normalized_key in self.LABELED_NAME_ROLE_VALUES:
+            return False
+
+        if re.search(r"\d|@|://|www\.|[$]", normalized):
+            return False
+
+        terms = set(re.findall(r"[a-z]+", normalized_key))
+        if terms & self.NON_PERSON_NAME_TERMS:
+            return False
+
+        tokens = re.findall(
+            rf"(?:Dr\.?|Mr\.?|Mrs\.?|Ms\.?|Prof\.?|{self.NAME_TOKEN_PATTERN})",
+            normalized,
+        )
+        name_tokens = [
+            token
+            for token in tokens
+            if token.lower().rstrip(".") not in {"dr", "mr", "mrs", "ms", "prof"}
+        ]
+
+        if not name_tokens:
+            return False
+
+        return all(
+            re.fullmatch(self.NAME_TOKEN_PATTERN, token)
+            for token in name_tokens
+        )
 
     def validate_zip_code(self, value: str, text: str, start: int) -> bool:
         """
@@ -360,7 +740,7 @@ class RegexDetector(BaseDetector):
         """
         # Check if preceded by currency or salary markers
         preceding = text[max(0, start - 15):start].strip()
-        if any(curr in preceding.lower() for curr in ["$", "â‚¹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
+        if any(curr in preceding.lower() for curr in ["$", "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
             return False
 
         INDIAN_STATES = {
@@ -405,4 +785,3 @@ class RegexDetector(BaseDetector):
             total += n
 
         return total % 10 == 0
-

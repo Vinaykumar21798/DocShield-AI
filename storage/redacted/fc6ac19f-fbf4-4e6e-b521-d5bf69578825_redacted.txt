@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: [REDACTED_PATIENT]
+[REDACTED_DATE_OF_BIRTH]
+SSN: [REDACTED_SSN]
+Insurance ID: [REDACTED_INSURANCE_ID]
+
+Visit Date: 2023-07-09
+Provider: Parks-Morgan
+Procedure Code: [REDACTED_CPT_CODE]
+Diagnosis Migraine
+Amount Billed: $356.00
+AmountCovered: $412.00

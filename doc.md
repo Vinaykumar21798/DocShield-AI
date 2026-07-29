@@ -22,7 +22,7 @@ Completed:
 - Native PDF extraction with PyMuPDF.
 - PaddleOCR extraction for scanned PDFs and images.
 - Optional layout-preserving OCR metadata.
-- PII/PHI entity detection pipeline.
+- Dynamic PII/PHI entity detection orchestrator with candidate-based stopping, detector routing, masking, confidence calibration, deduplication, and bounded Qwen/Ollama escalation.
 - Worker retry behavior.
 - Docker Compose setup for API, worker, migration, Postgres, and Redis.
 - Local pytest coverage for workflow, API, PaddleOCR layout parsing, and worker retry logic.
@@ -47,7 +47,7 @@ Pending / future work:
 | `database/migrations` | Alembic migration scripts |
 | `modules/upload` | File validation, storage, DB record creation, Redis publish |
 | `modules/extraction` | Native text/PDF extraction and PaddleOCR extraction |
-| `modules/detection` | PII/PHI detection, confidence, deduplication, masking support |
+| `modules/detection` | Dynamic PII/PHI detection orchestration, candidate routing, confidence, deduplication, masking support |
 | `orchestration` | End-to-end document processing workflow |
 | `redis_queue` | Redis producer, consumer, worker, job schema |
 | `storage` | Uploaded files and generated text/report artifacts |
@@ -73,6 +73,35 @@ Client uploads document
   -> Workflow creates audit report JSON artifact
   -> Workflow marks document/job completed
 ```
+
+Detection sub-flow:
+
+```text
+Extracted text
+  -> Build PipelineState and mask manager
+  -> Classify detection domain from text signals
+  -> Select route:
+       financial       Regex -> GLiNER when candidates remain
+       healthcare      Regex -> MedSpaCy -> GLiNER when candidates remain
+       corporate/legal Regex -> GLiNER -> Presidio when candidates remain
+       generic         Regex -> Presidio -> GLiNER -> MedSpaCy when applicable
+  -> Execute one detector on remaining unmasked text
+  -> Pass orchestration_context with previous entities and remaining candidates
+  -> Mask accepted spans
+  -> Recalculate unresolved entity candidate spans
+  -> Continue to next detector if candidates remain, even if current detector found none
+  -> Stop when no unresolved entity candidates remain or route is exhausted
+  -> Run Qwen/Ollama only on bounded unresolved/low-confidence snippets when enabled
+  -> Normalize, recalibrate confidence, deduplicate, and resolve overlaps
+```
+
+Current detection coverage highlights:
+
+- Regex handles structured/labeled fields for document IDs, names/roles, addresses, organizations, employment IDs, government IDs, bank/IFSC/GSTIN/invoice values, insurance values, dates, salary, and clinical values.
+- Regex extracts only the field value span where labels are present, rejects placeholders/generic labels, avoids ZIP/address collisions, and avoids treating bank accounts as credit cards.
+- Presidio adds supplemental person detection for employment-verification prose.
+- MedSpaCy includes additional pain-related clinical cues such as back pain.
+- Deduplication merges duplicate detector hits only for the same entity type/value/page/span and preserves repeated values at different spans.
 
 Failure path:
 
@@ -325,6 +354,72 @@ Expected local files:
 - Redacted text in `storage/redacted/`.
 - Audit report JSON in `storage/reports/`.
 
+### Docker Detection Orchestrator Check
+
+Run the focused detection/orchestrator tests inside the API container:
+
+```powershell
+docker exec docshield-ai-live-api pytest tests/test_detection.py -q
+docker exec docshield-ai-live-api pytest tests/test_regex_detector.py -q
+```
+
+Run the full test suite inside Docker:
+
+```powershell
+docker exec docshield-ai-live-api pytest -q
+```
+
+Run a live upload through API, Redis, worker, database, redaction, and report generation:
+
+```powershell
+@"
+Patient Name: Jane Patient
+Email: jane.patient@example.com
+Phone: 9876543210
+Diagnosis: Hypertension
+Medication: Metformin
+"@ | Set-Content -Path .\docker-detection-smoke.txt
+
+$response = Invoke-RestMethod `
+  -Uri http://localhost:8001/upload/ `
+  -Method Post `
+  -Form @{ file = Get-Item .\docker-detection-smoke.txt }
+
+$documentId = $response.document.document_id
+for ($i = 0; $i -lt 30; $i++) {
+  $status = Invoke-RestMethod "http://localhost:8001/documents/$documentId/status"
+  if ($status.document_status -in @("COMPLETED", "FAILED")) { $status; break }
+  Start-Sleep -Seconds 2
+}
+```
+
+Verify API outputs:
+
+```powershell
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/text"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reviews"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/redactions"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reports"
+```
+
+Verify detector routing and candidate decisions in worker logs:
+
+```powershell
+docker logs docshield-ai-live-worker --tail 200 | Select-String -Pattern "Dynamic detection|Executing detector|remaining_candidates|Qwen"
+```
+
+Verify persisted entities:
+
+```powershell
+docker exec docshield-ai-live-postgres psql -U postgres -d pii_phi_document_intelligence_poc -c "select document_id, entity_type, entity_value, detector, confidence_score from entities order by created_at desc limit 20;"
+```
+
+Verify generated storage artifacts:
+
+```powershell
+docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f | sort"
+```
+
 ## 12. Supported Upload Types
 
 Supported extensions:
@@ -403,6 +498,8 @@ Important current test areas:
 - Structured PaddleOCR output persistence.
 - PaddleOCR layout reconstruction.
 - Worker retry behavior.
+- Dynamic detection orchestrator routing, masking, candidate-based stopping, detector context handoff, bounded Qwen/Ollama context, and low-confidence validation context.
+- Regex detector coverage for labeled healthcare, employment, enterprise/legal/financial fields, military-style addresses, placeholder rejection, and bank-account/credit-card separation.
 
 ## 16. Troubleshooting
 
@@ -468,5 +565,7 @@ document_processing
 
 - `BYPASS_LLM=True` in Docker compose keeps Ollama validation optional.
 - `OLLAMA_REQUIRED=False` means startup will not fail when Ollama is unavailable.
+- Detection defaults are configurable with `DETECTION_HIGH_CONFIDENCE_THRESHOLD`, `DETECTION_MEDIUM_CONFIDENCE_THRESHOLD`, `DETECTION_LLM_VALIDATION_THRESHOLD`, `DETECTION_SEMANTIC_REASONING_THRESHOLD`, `DETECTION_STOPPING_CANDIDATE_THRESHOLD`, `DETECTION_MIN_CANDIDATE_CHARS`, `DETECTION_LLM_CONTEXT_WINDOW`, `DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS`, and `DETECTION_UNRESOLVED_LLM_ENABLED`.
+- Qwen/Ollama receives only bounded unresolved candidate snippets or bounded low-confidence entity snippets; full document text is not sent to the LLM path.
 - `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True` enables layout attempts when supported by the installed PaddleOCR package.
 - Do not upgrade NumPy to 2.x with the current spaCy/thinc/medspacy stack unless the Docker worker is retested.

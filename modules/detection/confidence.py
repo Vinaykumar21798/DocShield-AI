@@ -18,7 +18,19 @@ class ConfidenceCalculator:
     def calculate(
         cls,
         detections: list[DetectionResult],
+        high_threshold: float | None = None,
+        medium_threshold: float | None = None,
     ) -> list[DetectionResult]:
+        high_threshold = (
+            cls.HIGH_CONFIDENCE_THRESHOLD
+            if high_threshold is None
+            else high_threshold
+        )
+        medium_threshold = (
+            cls.MEDIUM_CONFIDENCE_THRESHOLD
+            if medium_threshold is None
+            else medium_threshold
+        )
 
         for detection in detections:
 
@@ -55,11 +67,11 @@ class ConfidenceCalculator:
 
             detection.confidence_score = round(final_score, 3)
 
-            if final_score >= cls.HIGH_CONFIDENCE_THRESHOLD:
+            if final_score >= high_threshold:
 
                 level = "HIGH"
 
-            elif final_score >= cls.MEDIUM_CONFIDENCE_THRESHOLD:
+            elif final_score >= medium_threshold:
 
                 level = "MEDIUM"
 

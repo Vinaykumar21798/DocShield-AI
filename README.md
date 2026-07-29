@@ -27,9 +27,43 @@ This repo is API-only right now. The frontend was removed for the current phase.
 | Queue | Redis |
 | Worker | Python worker process |
 | OCR | PyMuPDF, PaddleOCR |
-| Detection | Regex, Presidio, MedSpaCy, GLiNER, optional Ollama validation |
+| Detection | Dynamic orchestrator over Regex, Presidio, MedSpaCy, GLiNER, optional Qwen/Ollama validation |
 | Storage | Local filesystem or Docker volume |
 | Tests | Pytest |
+
+## Dynamic Detection Orchestrator
+
+The detection pipeline is dynamically routed inside `modules/detection` without changing API contracts, database tables, or workflow steps.
+
+Core behavior:
+
+- Routes detectors by document domain: financial, healthcare, corporate/legal, or generic.
+- Runs one detector at a time on remaining unmasked candidate spans.
+- If a detector finds no entities, the orchestrator continues to the next appropriate detector when candidates remain.
+- Passes each detector an `orchestration_context` containing remaining text, previous entities, remaining candidates, and executed/skipped detectors.
+- Stops on remaining entity candidates, not just leftover text, so labels or harmless prose do not trigger unnecessary model work.
+- Uses Qwen/Ollama only for unresolved candidate snippets or low-confidence entity snippets. It never sends the full document.
+- Final output is normalized, confidence-calibrated, deduplicated, overlap-resolved, and compatible with existing APIs and DB models.
+- Regex detection now extracts clean value spans from labeled fields such as patient/provider/doctor names, organizations, addresses, employment IDs, government IDs, financial IDs, insurance fields, dates, and clinical fields.
+- Placeholder or generic labeled values are rejected, and bank account values are kept separate from credit-card matches.
+- Deduplication is span-aware: the same value at different document positions is preserved as separate redaction targets, while duplicate detector hits on the same span are merged.
+- Presidio includes supplemental person detection for employment-verification prose.
+
+Default knobs are in `.env.example`:
+
+```env
+DETECTION_HIGH_CONFIDENCE_THRESHOLD=0.85
+DETECTION_MEDIUM_CONFIDENCE_THRESHOLD=0.60
+DETECTION_LLM_VALIDATION_THRESHOLD=0.60
+DETECTION_SEMANTIC_REASONING_THRESHOLD=0.80
+DETECTION_STOPPING_CANDIDATE_THRESHOLD=0
+DETECTION_MIN_CANDIDATE_CHARS=3
+DETECTION_LLM_CONTEXT_WINDOW=160
+DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS=8
+DETECTION_UNRESOLVED_LLM_ENABLED=True
+```
+
+Docker Compose currently keeps `BYPASS_LLM=True`, so Qwen/Ollama paths are skipped unless you explicitly enable and provide Ollama.
 
 ## Project Structure
 
@@ -180,6 +214,73 @@ Check worker logs if processing does not complete:
 
 ```powershell
 docker logs docshield-ai-live-worker --tail 100
+```
+
+## Check In Docker
+
+After Docker is running, verify the orchestrator from inside the API container:
+
+```powershell
+docker exec docshield-ai-live-api pytest tests/test_detection.py -q
+docker exec docshield-ai-live-api pytest tests/test_regex_detector.py -q
+docker exec docshield-ai-live-api pytest -q
+```
+
+Run a live API/worker smoke test with a local sample file:
+
+```powershell
+@"
+Patient Name: Jane Patient
+Email: jane.patient@example.com
+Phone: 9876543210
+Diagnosis: Hypertension
+Medication: Metformin
+"@ | Set-Content -Path .\docker-detection-smoke.txt
+
+$response = Invoke-RestMethod `
+  -Uri http://localhost:8001/upload/ `
+  -Method Post `
+  -Form @{ file = Get-Item .\docker-detection-smoke.txt }
+
+$documentId = $response.document.document_id
+$documentId
+```
+
+Poll until the worker completes:
+
+```powershell
+for ($i = 0; $i -lt 30; $i++) {
+  $status = Invoke-RestMethod "http://localhost:8001/documents/$documentId/status"
+  if ($status.document_status -in @("COMPLETED", "FAILED")) { $status; break }
+  Start-Sleep -Seconds 2
+}
+```
+
+Inspect outputs:
+
+```powershell
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/text"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reviews"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/redactions"
+Invoke-RestMethod "http://localhost:8001/documents/$documentId/reports"
+```
+
+Check worker logs for detector routing:
+
+```powershell
+docker logs docshield-ai-live-worker --tail 200 | Select-String -Pattern "Dynamic detection|Executing detector|remaining_candidates|Qwen"
+```
+
+Check stored entities in PostgreSQL:
+
+```powershell
+docker exec docshield-ai-live-postgres psql -U postgres -d pii_phi_document_intelligence_poc -c "select document_id, entity_type, entity_value, detector, confidence_score from entities order by created_at desc limit 20;"
+```
+
+Check generated artifacts:
+
+```powershell
+docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f | sort"
 ```
 
 ## Main APIs

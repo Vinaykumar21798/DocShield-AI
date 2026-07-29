@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: [REDACTED_PATIENT]
+[REDACTED_DATE_OF_BIRTH]
+SSN: [REDACTED_SSN]
+Insurance ID: [REDACTED_INSURANCE_ID]
+Visit Date: 2024-01-13
+Provider: Rojas-Gutierrez
+Procedure Code: [REDACTED_CPT_CODE]
+Diagnosis: Back Pain
+Amount Billed: $662.00
+Amount Covered: $354.00
