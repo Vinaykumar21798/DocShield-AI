@@ -12,6 +12,7 @@ class ExtractedTextResponse(BaseModel):
     document_status: str
     processing_status: Optional[str] = None
     workflow_stage: Optional[str] = None
+    last_completed_stage: Optional[str] = None
 
     ocr_result_id: str
     extraction_method: str

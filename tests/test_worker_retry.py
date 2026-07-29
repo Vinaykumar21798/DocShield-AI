@@ -83,6 +83,7 @@ def test_worker_requeues_failed_job_when_retry_budget_remains(
     processing_job = get_processing_job(session_factory, document_id)
     assert processing_job.job_status == "PENDING"
     assert processing_job.workflow_stage == "RETRY_QUEUED"
+    assert processing_job.last_completed_stage == "DOCUMENT_CLASSIFICATION"
     assert processing_job.retry_count == 1
     assert len(producer.published) == 1
     assert producer.published[0].document_id == job.document_id
@@ -104,6 +105,8 @@ def test_worker_leaves_failed_job_when_retry_budget_is_exhausted(
 
     processing_job = get_processing_job(session_factory, document_id)
     assert processing_job.job_status == "FAILED"
+    assert processing_job.workflow_stage == "OCR_DECISION"
+    assert processing_job.last_completed_stage == "DOCUMENT_CLASSIFICATION"
     assert processing_job.retry_count == 1
     assert "Stored document file not found" in processing_job.error_message
     assert producer.published == []

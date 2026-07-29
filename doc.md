@@ -2,15 +2,17 @@
 
 ## 1. Purpose
 
-DocShield-AI is an API-only document intelligence backend. It accepts uploaded documents, stores metadata, queues work in Redis, processes documents through a worker, extracts text/OCR layout, detects sensitive entities, creates review records, writes redaction artifacts, and generates audit reports.
+DocShield-AI is a document intelligence PoC with a FastAPI backend and a lightweight static frontend served by the same API process. It accepts uploaded documents, stores metadata, queues work in Redis, processes documents through a worker, extracts text/OCR layout, detects sensitive entities, creates review records, writes redaction artifacts, and generates audit reports.
 
-The frontend is intentionally not part of the current repo state.
+The API is the primary product surface. The bundled frontend is a static PoC workspace mounted at `/ui` for local upload, status tracking, review, extracted-text preview, and artifact download.
 
 ## 2. Current Status
 
 Completed:
 
 - FastAPI application and Swagger/OpenAPI docs.
+- Static PoC frontend mounted at `/ui`.
+- Custom Swagger UI patch for multi-file upload.
 - PostgreSQL schema, SQLAlchemy models, repositories, and Alembic migrations.
 - Redis queue producer, consumer, and worker.
 - Single and bulk document upload APIs.
@@ -42,6 +44,7 @@ Pending / future work:
 | `app.py` | FastAPI app, routers, Swagger UI customization, startup validation |
 | `api/routes` | REST endpoints for upload, documents, reviews, redactions, reports, health |
 | `api/schemas` | Pydantic request/response contracts |
+| `frontend` | Static PoC UI served from `/ui` when the folder exists |
 | `database/models` | SQLAlchemy tables |
 | `database/repositories` | Database access helpers |
 | `database/migrations` | Alembic migration scripts |
@@ -115,6 +118,10 @@ Worker retry path:
 FAILED -> RETRY_QUEUED/PENDING -> PROCESSING
 ```
 
+`workflow_stage` records the active or failed stage. `last_completed_stage`
+is the durable checkpoint used by retries to resume after persisted outputs
+such as OCR results, detection rows, or redaction files.
+
 ## 5. Docker Setup
 
 Recommended command for local validation with Docker Desktop, pgAdmin4, RedisInsight, and local storage files:
@@ -136,6 +143,7 @@ Expected services:
 | Service | Expected state | Host access |
 | --- | --- | --- |
 | `api` | running | `http://localhost:8001` |
+| `ui` | served by `api` | `http://localhost:8001/ui/` |
 | `worker` | running | no host port |
 | `migrate` | exited 0 | no host port |
 | `postgres` | healthy | `127.0.0.1:5433` |
@@ -151,6 +159,12 @@ Swagger UI:
 
 ```text
 http://localhost:8001/docs
+```
+
+PoC UI:
+
+```text
+http://localhost:8001/ui/
 ```
 
 ## 6. Local GUI Override
@@ -170,11 +184,13 @@ services:
       - "8001:8000"
     volumes: !override
       - ./storage:/app/storage
+      - paddle_models:/root/.paddlex
 
   worker:
     container_name: docshield-ai-live-worker
     volumes: !override
       - ./storage:/app/storage
+      - paddle_models:/root/.paddlex
 
   postgres:
     container_name: docshield-ai-live-postgres
@@ -227,7 +243,7 @@ from documents
 order by created_at desc
 limit 20;
 
-select document_id, job_status, workflow_stage, error_message, retry_count
+select document_id, job_status, workflow_stage, last_completed_stage, error_message, retry_count
 from processing_jobs
 order by created_at desc
 limit 20;
@@ -297,6 +313,7 @@ http://localhost:8001
 
 | Method | Endpoint | Purpose |
 | --- | --- | --- |
+| GET | `/` | Root status payload |
 | GET | `/health/` | Service health |
 | POST | `/upload/` | Upload one document |
 | POST | `/upload/bulk` | Upload multiple documents |
@@ -312,13 +329,21 @@ http://localhost:8001
 
 ## 11. Smoke Test
 
-Upload the sample invoice:
+Create and upload a local sample file:
 
 ```powershell
+@"
+Patient Name: Jane Patient
+Email: jane.patient@example.com
+Phone: 9876543210
+Diagnosis: Hypertension
+Medication: Metformin
+"@ | Set-Content -Path .\docshield-smoke.txt
+
 $response = Invoke-RestMethod `
   -Uri http://localhost:8001/upload/ `
   -Method Post `
-  -Form @{ file = Get-Item .\sample-invoice.txt }
+  -Form @{ file = Get-Item .\docshield-smoke.txt }
 
 $documentId = $response.document.document_id
 $documentId
@@ -353,6 +378,12 @@ Expected local files:
 - Extracted text in `storage/extracted_text/`.
 - Redacted text in `storage/redacted/`.
 - Audit report JSON in `storage/reports/`.
+
+The same workflow can be exercised from the static UI:
+
+```text
+http://localhost:8001/ui/
+```
 
 ### Docker Detection Orchestrator Check
 
@@ -435,11 +466,13 @@ Supported extensions:
 .txt
 ```
 
-The Docker compose environment sets:
+Bulk upload accepts up to 100 files per request. The current upload validator enforces a 20 MB per-file limit in code:
 
 ```text
-MAX_FILE_SIZE_MB=100
+modules/upload/validator.py
 ```
+
+The Docker compose environment also sets `MAX_FILE_SIZE_MB=100`, but the validator's hard-coded 20 MB limit is authoritative until that setting is wired into upload validation.
 
 ## 13. OCR Behavior
 
@@ -565,6 +598,7 @@ document_processing
 
 - `BYPASS_LLM=True` in Docker compose keeps Ollama validation optional.
 - `OLLAMA_REQUIRED=False` means startup will not fail when Ollama is unavailable.
+- `STARTUP_VALIDATION_ENABLED=True` runs database startup validation during FastAPI lifespan startup.
 - Detection defaults are configurable with `DETECTION_HIGH_CONFIDENCE_THRESHOLD`, `DETECTION_MEDIUM_CONFIDENCE_THRESHOLD`, `DETECTION_LLM_VALIDATION_THRESHOLD`, `DETECTION_SEMANTIC_REASONING_THRESHOLD`, `DETECTION_STOPPING_CANDIDATE_THRESHOLD`, `DETECTION_MIN_CANDIDATE_CHARS`, `DETECTION_LLM_CONTEXT_WINDOW`, `DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS`, and `DETECTION_UNRESOLVED_LLM_ENABLED`.
 - Qwen/Ollama receives only bounded unresolved candidate snippets or bounded low-confidence entity snippets; full document text is not sent to the LLM path.
 - `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True` enables layout attempts when supported by the installed PaddleOCR package.

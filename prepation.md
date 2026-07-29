@@ -518,7 +518,7 @@ WorkflowPlanner returns a fixed ordered plan: load document, update status, clas
 Answer:
 
 ```text
-The worker catches workflow failures, updates the processing job, and requeues when retry count is below the configured limit. The processing job tracks retry_count, workflow_stage, status, and error_message.
+The worker catches workflow failures, updates the processing job, and requeues when retry count is below the configured limit. The processing job tracks retry_count, workflow_stage, last_completed_stage, status, and error_message. Retries use last_completed_stage as the checkpoint for resume.
 ```
 
 ### Q7. Why local storage instead of S3 or MinIO?
@@ -734,7 +734,7 @@ file path availability between API and worker
 Response:
 
 ```text
-The workflow stage stored in processing_jobs tells us where it stopped. The worker has retry handling, and failed jobs can be diagnosed from error_message and logs.
+processing_jobs.workflow_stage tells us the active or failed stage, while last_completed_stage is the checkpoint used for retry resume. Failed jobs can also be diagnosed from error_message and logs.
 ```
 
 ### Problem 5 - False positive entity

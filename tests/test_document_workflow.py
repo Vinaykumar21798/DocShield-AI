@@ -13,6 +13,7 @@ from database.models import (
     Report,
 )
 from modules.classification.service import DocumentType
+from modules.detection.models.detection_result import DetectionResult
 from modules.extraction.native import TextExtractionResult
 from modules.extraction.ocr import OCREngine
 from modules.extraction.service import ExtractionService
@@ -87,6 +88,7 @@ def test_workflow_completes_native_text_document(
     assert saved_document.document_type == DocumentType.INVOICE.value
     assert saved_job.job_status == "COMPLETED"
     assert saved_job.workflow_stage == "COMPLETE_WORKFLOW"
+    assert saved_job.last_completed_stage == "COMPLETE_WORKFLOW"
     assert ocr_result.extraction_method == OCREngine.NATIVE_TEXT.value
     assert ocr_result.is_searchable is True
     assert "Invoice Number INV-1001" in ocr_result.extracted_text
@@ -168,6 +170,8 @@ def test_workflow_marks_document_and_job_failed_when_file_is_missing(
 
     assert saved_document.status == "FAILED"
     assert saved_job.job_status == "FAILED"
+    assert saved_job.workflow_stage == "OCR_DECISION"
+    assert saved_job.last_completed_stage == "DOCUMENT_CLASSIFICATION"
     assert "Stored document file not found" in saved_job.error_message
     assert saved_job.completed_at is not None
     assert ocr_results == []
@@ -185,6 +189,29 @@ class FakePaddleExtractor:
             processing_time=0.01,
             structured_output=self.structured_output,
         )
+
+
+class FailingTextExtractor:
+    def extract(self, document):
+        raise AssertionError("OCR extraction should not run during resume")
+
+
+class FakeDetectionService:
+    def detect(self, text):
+        email = "jane.patient@example.com"
+        start = text.index(email)
+        return [
+            DetectionResult(
+                entity_type="EMAIL",
+                entity_value=email,
+                privacy_category="PII",
+                confidence_score=0.95,
+                start_char=start,
+                end_char=start + len(email),
+                page_number=1,
+                detector="fake-detector",
+            )
+        ]
 
 
 def test_workflow_persists_structured_ocr_output(
@@ -235,3 +262,70 @@ def test_workflow_persists_structured_ocr_output(
     assert ocr_result.extraction_method == OCREngine.PADDLEOCR.value
     assert ocr_result.structured_output == structured_output
     assert text_response.structured_output == structured_output
+
+
+def test_workflow_resumes_from_stored_ocr_checkpoint(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    missing_path = tmp_path / "missing.txt"
+    document, processing_job = create_document_with_job(
+        db_session,
+        missing_path,
+    )
+    document.document_type = DocumentType.INVOICE.value
+    processing_job.job_status = "PENDING"
+    processing_job.workflow_stage = "RETRY_QUEUED"
+    processing_job.last_completed_stage = "STORE_OCR_RESULTS"
+    processing_job.retry_count = 1
+
+    text = (
+        "Invoice Number INV-1001\n"
+        "Email: jane.patient@example.com\n"
+    )
+    db_session.add(
+        OCRResult(
+            document_id=document.id,
+            extraction_method=OCREngine.NATIVE_TEXT.value,
+            is_searchable=True,
+            extracted_text=text,
+            extracted_text_path=(
+                Path("storage/extracted_text") / f"{document.id}.txt"
+            ).as_posix(),
+            page_count=1,
+            confidence_score=0.99,
+            processing_time=0.01,
+        )
+    )
+    db_session.commit()
+
+    state = DocumentProcessingWorkflow(
+        db_session,
+        native_text_extractor=FailingTextExtractor(),
+        detection_service=FakeDetectionService(),
+    ).execute(document.id)
+
+    saved_job = (
+        db_session.query(ProcessingJob)
+        .filter(ProcessingJob.document_id == document.id)
+        .one()
+    )
+    ocr_result_count = (
+        db_session.query(OCRResult)
+        .filter(OCRResult.document_id == document.id)
+        .count()
+    )
+
+    assert state.status == "COMPLETED"
+    assert saved_job.job_status == "COMPLETED"
+    assert saved_job.workflow_stage == "COMPLETE_WORKFLOW"
+    assert saved_job.last_completed_stage == "COMPLETE_WORKFLOW"
+    assert ocr_result_count == 1
+
+    redacted_text_file = tmp_path / state.redacted_file_path
+    assert redacted_text_file.exists()
+    assert "[REDACTED_EMAIL]" in redacted_text_file.read_text(
+        encoding="utf-8",
+    )

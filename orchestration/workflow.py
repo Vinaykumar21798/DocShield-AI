@@ -1,7 +1,7 @@
 import json
 import logging
 from pathlib import Path
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, Tuple
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -72,6 +72,38 @@ REDACTED_TEXT_DIR = Path("storage/redacted")
 REPORTS_DIR = Path("storage/reports")
 HUMAN_REVIEW_THRESHOLD = 0.80
 
+STARTUP_WORKFLOW_STEPS = {
+    WorkflowStep.LOAD_DOCUMENT,
+    WorkflowStep.UPDATE_PROCESSING_STATUS,
+}
+
+RESUME_START_STEP_BY_CHECKPOINT = {
+    WorkflowStep.LOAD_DOCUMENT: WorkflowStep.DOCUMENT_CLASSIFICATION,
+    WorkflowStep.UPDATE_PROCESSING_STATUS: WorkflowStep.DOCUMENT_CLASSIFICATION,
+    WorkflowStep.DOCUMENT_CLASSIFICATION: WorkflowStep.OCR_DECISION,
+    WorkflowStep.OCR_DECISION: WorkflowStep.OCR_DECISION,
+    WorkflowStep.OCR_EXECUTION: WorkflowStep.OCR_DECISION,
+    WorkflowStep.STORE_OCR_RESULTS: WorkflowStep.DETECTION_EXECUTION,
+    WorkflowStep.DETECTION_EXECUTION: WorkflowStep.DETECTION_EXECUTION,
+    WorkflowStep.STORE_DETECTION_RESULTS: WorkflowStep.HUMAN_REVIEW,
+    WorkflowStep.HUMAN_REVIEW: WorkflowStep.REDACTION,
+    WorkflowStep.REDACTION: WorkflowStep.REPORT_GENERATION,
+    WorkflowStep.REPORT_GENERATION: WorkflowStep.COMPLETE_WORKFLOW,
+    WorkflowStep.COMPLETE_WORKFLOW: WorkflowStep.COMPLETE_WORKFLOW,
+}
+
+OCR_RESTORE_CHECKPOINTS = {
+    WorkflowStep.STORE_OCR_RESULTS,
+    WorkflowStep.DETECTION_EXECUTION,
+    WorkflowStep.STORE_DETECTION_RESULTS,
+    WorkflowStep.HUMAN_REVIEW,
+    WorkflowStep.REDACTION,
+}
+
+REDACTION_RESTORE_CHECKPOINTS = {
+    WorkflowStep.REDACTION,
+}
+
 
 class DocumentWorkflowError(Exception):
     """
@@ -88,6 +120,12 @@ class DocumentNotFoundError(DocumentWorkflowError):
 class ProcessingJobNotFoundError(DocumentWorkflowError):
     """
     Raised when a workflow cannot find a processing job for the document.
+    """
+
+
+class ResumeCheckpointUnavailableError(DocumentWorkflowError):
+    """
+    Raised when persisted data for a checkpoint cannot be restored.
     """
 
 
@@ -176,6 +214,7 @@ class DocumentProcessingWorkflow:
     def execute(self, document_id: str) -> WorkflowState:
         state = WorkflowState(document_id=str(document_id))
         plan = self.planner.create_plan()
+        plan_steps = tuple(plan.steps)
 
         self.logger.info(
             "Starting document processing workflow for document_id=%s",
@@ -183,7 +222,64 @@ class DocumentProcessingWorkflow:
         )
 
         try:
-            for step in plan.steps:
+            self._run_step(
+                state,
+                WorkflowStep.LOAD_DOCUMENT,
+                checkpoint=False,
+            )
+            checkpoint_step = self._get_checkpoint_step(
+                state.processing_job,
+                plan_steps,
+            )
+
+            if (
+                checkpoint_step == WorkflowStep.COMPLETE_WORKFLOW
+                and state.processing_job is not None
+                and state.processing_job.job_status == "COMPLETED"
+            ):
+                state.status = DOCUMENT_STATUS_COMPLETED
+                self.logger.info(
+                    "Workflow already completed for document_id=%s",
+                    state.document_id,
+                )
+                return state
+
+            resume_start_step = self._get_resume_start_step(checkpoint_step)
+            is_resuming = self._is_resume_checkpoint(checkpoint_step)
+
+            if is_resuming:
+                self.logger.info(
+                    "Resuming workflow for document_id=%s "
+                    "last_completed_stage=%s resume_step=%s",
+                    state.document_id,
+                    checkpoint_step.value,
+                    resume_start_step.value,
+                )
+
+            self._run_step(
+                state,
+                WorkflowStep.UPDATE_PROCESSING_STATUS,
+                checkpoint=not is_resuming,
+            )
+
+            if is_resuming:
+                try:
+                    self._restore_state_for_resume(state, checkpoint_step)
+                except ResumeCheckpointUnavailableError as exc:
+                    self.logger.warning(
+                        "Checkpoint restore failed for document_id=%s "
+                        "last_completed_stage=%s: %s. Restarting from "
+                        "document classification.",
+                        state.document_id,
+                        checkpoint_step.value,
+                        exc,
+                    )
+                    resume_start_step = WorkflowStep.DOCUMENT_CLASSIFICATION
+
+            for step in self._steps_from(plan_steps, resume_start_step):
+                if step in STARTUP_WORKFLOW_STEPS:
+                    continue
+
                 self._run_step(state, step)
 
             self.logger.info(
@@ -200,6 +296,7 @@ class DocumentProcessingWorkflow:
         self,
         state: WorkflowState,
         step: WorkflowStep,
+        checkpoint: bool = True,
     ) -> None:
         self.logger.info(
             "Starting workflow step=%s document_id=%s",
@@ -208,22 +305,145 @@ class DocumentProcessingWorkflow:
         )
 
         if state.processing_job is not None:
-            self._update_workflow_stage(state.processing_job, step)
+            state.processing_job = self._update_workflow_stage(
+                state.processing_job,
+                step,
+            )
 
         handler = self._step_handlers[step]
         handler(state)
 
-        if (
-            step == WorkflowStep.LOAD_DOCUMENT
-            and state.processing_job is not None
-        ):
-            self._update_workflow_stage(state.processing_job, step)
+        if checkpoint and state.processing_job is not None:
+            state.processing_job = self._update_last_completed_stage(
+                state.processing_job,
+                step,
+            )
 
         self.logger.info(
             "Completed workflow step=%s document_id=%s",
             step.value,
             state.document_id,
         )
+
+    @staticmethod
+    def _is_resume_checkpoint(
+        checkpoint_step: Optional[WorkflowStep],
+    ) -> bool:
+        return (
+            checkpoint_step is not None
+            and checkpoint_step not in STARTUP_WORKFLOW_STEPS
+        )
+
+    @staticmethod
+    def _get_checkpoint_step(
+        processing_job: Optional[ProcessingJob],
+        plan_steps: Tuple[WorkflowStep, ...],
+    ) -> Optional[WorkflowStep]:
+        if processing_job is None:
+            return None
+
+        checkpoint_value = processing_job.last_completed_stage
+
+        if (
+            not checkpoint_value
+            and processing_job.job_status == "COMPLETED"
+        ):
+            checkpoint_value = processing_job.workflow_stage
+
+        if not checkpoint_value:
+            return None
+
+        try:
+            checkpoint_step = WorkflowStep(checkpoint_value)
+        except ValueError:
+            return None
+
+        if checkpoint_step not in plan_steps:
+            return None
+
+        return checkpoint_step
+
+    @staticmethod
+    def _get_resume_start_step(
+        checkpoint_step: Optional[WorkflowStep],
+    ) -> WorkflowStep:
+        if checkpoint_step is None:
+            return WorkflowStep.DOCUMENT_CLASSIFICATION
+
+        return RESUME_START_STEP_BY_CHECKPOINT.get(
+            checkpoint_step,
+            WorkflowStep.DOCUMENT_CLASSIFICATION,
+        )
+
+    @staticmethod
+    def _steps_from(
+        plan_steps: Tuple[WorkflowStep, ...],
+        start_step: WorkflowStep,
+    ) -> Tuple[WorkflowStep, ...]:
+        try:
+            start_index = plan_steps.index(start_step)
+        except ValueError:
+            return tuple()
+
+        return plan_steps[start_index:]
+
+    def _restore_state_for_resume(
+        self,
+        state: WorkflowState,
+        checkpoint_step: WorkflowStep,
+    ) -> None:
+        if checkpoint_step in OCR_RESTORE_CHECKPOINTS:
+            self._restore_ocr_result(state)
+
+        if checkpoint_step in REDACTION_RESTORE_CHECKPOINTS:
+            self._restore_redaction_result(state)
+
+    def _restore_ocr_result(self, state: WorkflowState) -> None:
+        ocr_result = self.ocr_result_repository.get_latest_by_document_id(
+            self.db,
+            state.document_id,
+        )
+
+        if ocr_result is None:
+            raise ResumeCheckpointUnavailableError(
+                "No OCR result exists for checkpoint restore."
+            )
+
+        extracted_text = ocr_result.extracted_text
+
+        if extracted_text is None and ocr_result.extracted_text_path:
+            extracted_text_path = Path(ocr_result.extracted_text_path)
+            if extracted_text_path.exists():
+                extracted_text = extracted_text_path.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                )
+
+        state.ocr_result = ocr_result
+        state.ocr_engine = ocr_result.extraction_method
+        state.is_searchable = ocr_result.is_searchable
+        state.extracted_text = extracted_text or ""
+        state.extracted_text_path = ocr_result.extracted_text_path
+        state.structured_output = ocr_result.structured_output
+        state.page_count = ocr_result.page_count or 0
+        state.confidence_score = ocr_result.confidence_score or 0.0
+        state.raw_confidence_score = state.confidence_score
+        state.processing_time = ocr_result.processing_time or 0.0
+
+    def _restore_redaction_result(self, state: WorkflowState) -> None:
+        redaction = (
+            self.db.query(Redaction)
+            .filter(Redaction.document_id == state.document_id)
+            .order_by(Redaction.created_at.desc())
+            .first()
+        )
+
+        if redaction is None:
+            raise ResumeCheckpointUnavailableError(
+                "No redaction result exists for checkpoint restore."
+            )
+
+        state.redacted_file_path = redaction.redacted_file_path
 
     def _load_document_context(self, state: WorkflowState) -> None:
         document = self.document_repository.get_document_by_id(
@@ -451,6 +671,9 @@ class DocumentProcessingWorkflow:
 
         for entity in entity_repository.get_by_document_id(document.id):
             if not entity.is_review_required:
+                continue
+
+            if review_repository.get_by_entity_id(entity.id) is not None:
                 continue
 
             review_repository.create(
@@ -754,8 +977,19 @@ class DocumentProcessingWorkflow:
         self,
         processing_job: ProcessingJob,
         step: WorkflowStep,
-    ) -> None:
-        self.processing_job_repository.update_workflow_stage(
+    ) -> ProcessingJob:
+        return self.processing_job_repository.update_workflow_stage(
+            self.db,
+            processing_job,
+            step.value,
+        )
+
+    def _update_last_completed_stage(
+        self,
+        processing_job: ProcessingJob,
+        step: WorkflowStep,
+    ) -> ProcessingJob:
+        return self.processing_job_repository.update_last_completed_stage(
             self.db,
             processing_job,
             step.value,

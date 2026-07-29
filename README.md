@@ -2,7 +2,7 @@
 
 DocShield-AI is a FastAPI backend for document ingestion, OCR/text extraction, PII/PHI detection, human-review records, redaction artifacts, and audit reports.
 
-This repo includes the FastAPI backend and a lightweight static PoC UI served at /ui/ by the same API process.
+This repo includes the FastAPI backend and a lightweight static PoC UI served at `/ui/` by the same API process.
 
 ## What It Does
 
@@ -16,6 +16,7 @@ This repo includes the FastAPI backend and a lightweight static PoC UI served at
 - Create review, redaction, and report records.
 - Save generated artifacts under `storage/`.
 - Expose REST APIs through FastAPI and Swagger/OpenAPI.
+- Provide a static PoC workspace for uploads, status polling, review actions, extracted-text preview, and artifact downloads.
 
 ## Tech Stack
 
@@ -29,6 +30,7 @@ This repo includes the FastAPI backend and a lightweight static PoC UI served at
 | OCR | PyMuPDF, PaddleOCR |
 | Detection | Dynamic orchestrator over Regex, Presidio, MedSpaCy, GLiNER, optional Qwen/Ollama validation |
 | Storage | Local filesystem or Docker volume |
+| Frontend | Static HTML/CSS/JavaScript mounted by FastAPI at `/ui` |
 | Tests | Pytest |
 
 ## Dynamic Detection Orchestrator
@@ -78,6 +80,10 @@ DocShield-AI/
 |   |-- migrations/
 |   |-- models/
 |   |-- repositories/
+|-- frontend/
+|   |-- index.html
+|   |-- app.js
+|   |-- styles.css
 |-- modules/
 |   |-- classification/
 |   |-- detection/
@@ -113,6 +119,7 @@ Expected exposed ports:
 | Service | Host URL / Port |
 | --- | --- |
 | API | `http://localhost:8001` |
+| PoC UI | `http://localhost:8001/ui/` |
 | Swagger UI | `http://localhost:8001/docs` |
 | PostgreSQL | `127.0.0.1:5433` |
 | Redis | `127.0.0.1:6380` |
@@ -121,6 +128,12 @@ Health check:
 
 ```powershell
 Invoke-RestMethod http://localhost:8001/health/
+```
+
+Open the static UI:
+
+```text
+http://localhost:8001/ui/
 ```
 
 ## pgAdmin4 Connection
@@ -191,10 +204,18 @@ If you run only `docker-compose.yml`, files are stored in the Docker named volum
 ## Test Upload
 
 ```powershell
+@"
+Patient Name: Jane Patient
+Email: jane.patient@example.com
+Phone: 9876543210
+Diagnosis: Hypertension
+Medication: Metformin
+"@ | Set-Content -Path .\docshield-smoke.txt
+
 $response = Invoke-RestMethod `
   -Uri http://localhost:8001/upload/ `
   -Method Post `
-  -Form @{ file = Get-Item .\sample-invoice.txt }
+  -Form @{ file = Get-Item .\docshield-smoke.txt }
 
 $documentId = $response.document.document_id
 $documentId
@@ -287,6 +308,7 @@ docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f 
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
+| GET | `/` | Root status payload |
 | GET | `/health/` | Health check |
 | POST | `/upload/` | Upload one document |
 | POST | `/upload/bulk` | Upload multiple documents |
@@ -309,6 +331,8 @@ docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f 
 - BMP
 - DOCX
 - TXT
+
+Bulk upload accepts up to 100 files per request. The current validator enforces a 20 MB per-file limit in `modules/upload/validator.py`; `MAX_FILE_SIZE_MB` is present in environment config but is not yet wired into upload validation.
 
 ## Local Python Development
 

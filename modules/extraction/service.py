@@ -147,6 +147,9 @@ class ExtractionService:
             workflow_stage=(
                 processing_job.workflow_stage if processing_job else None
             ),
+            last_completed_stage=(
+                processing_job.last_completed_stage if processing_job else None
+            ),
             ocr_result_id=ocr_result.id,
             extraction_method=ocr_result.extraction_method,
             is_searchable=ocr_result.is_searchable,
@@ -184,6 +187,9 @@ class ExtractionService:
             ),
             workflow_stage=(
                 processing_job.workflow_stage if processing_job else None
+            ),
+            last_completed_stage=(
+                processing_job.last_completed_stage if processing_job else None
             ),
             queue_name=(processing_job.queue_name if processing_job else None),
             worker_id=(processing_job.worker_id if processing_job else None),

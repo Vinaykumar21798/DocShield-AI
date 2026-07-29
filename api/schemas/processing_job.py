@@ -8,6 +8,7 @@ class ProcessingJobBase(BaseModel):
     document_id: str
     workflow_stage: str
     queue_name: str
+    last_completed_stage: Optional[str] = None
 
 
 class ProcessingJobCreate(ProcessingJobBase):
@@ -16,6 +17,7 @@ class ProcessingJobCreate(ProcessingJobBase):
 
 class ProcessingJobUpdate(BaseModel):
     workflow_stage: Optional[str] = None
+    last_completed_stage: Optional[str] = None
     job_status: Optional[str] = None
     worker_id: Optional[str] = None
     retry_count: Optional[int] = None

@@ -40,6 +40,11 @@ class ProcessingJob(Base):
         default="DOCUMENT_UPLOAD",
     )
 
+    last_completed_stage = Column(
+        String(100),
+        nullable=True,
+    )
+
     queue_name = Column(
         String(100),
         nullable=True,

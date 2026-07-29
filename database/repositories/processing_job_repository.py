@@ -91,6 +91,21 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             },
         )
 
+    def update_last_completed_stage(
+        self,
+        db: Session,
+        job: ProcessingJob,
+        stage: str,
+    ) -> ProcessingJob:
+
+        return self.update(
+            db,
+            job,
+            {
+                "last_completed_stage": stage,
+            },
+        )
+
     def assign_worker(
         self,
         db: Session,
@@ -153,6 +168,8 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             job,
             {
                 "job_status": "COMPLETED",
+                "workflow_stage": "COMPLETE_WORKFLOW",
+                "last_completed_stage": "COMPLETE_WORKFLOW",
                 "error_message": None,
                 "completed_at": datetime.utcnow(),
             },

@@ -14,6 +14,7 @@ class DocumentStatusResponse(BaseModel):
     processing_job_id: Optional[str] = None
     processing_status: Optional[str] = None
     workflow_stage: Optional[str] = None
+    last_completed_stage: Optional[str] = None
     queue_name: Optional[str] = None
     worker_id: Optional[str] = None
     retry_count: int = 0
