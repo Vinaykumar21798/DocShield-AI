@@ -1,11 +1,13 @@
 import html
 import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.docs import swagger_ui_default_parameters
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
 from api.routes import api_router
 from core.config import settings
@@ -155,6 +157,13 @@ app = FastAPI(
 
 
 app.include_router(api_router)
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
+if FRONTEND_DIR.exists():
+    app.mount(
+        "/ui",
+        StaticFiles(directory=FRONTEND_DIR, html=True),
+        name="docshield-ui",
+    )
 
 
 def _swagger_ui_parameters() -> str:

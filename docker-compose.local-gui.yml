@@ -8,11 +8,13 @@ services:
       - "8001:8000"
     volumes: !override
       - ./storage:/app/storage
+      - paddle_models:/root/.paddlex
 
   worker:
     container_name: docshield-ai-live-worker
     volumes: !override
       - ./storage:/app/storage
+      - paddle_models:/root/.paddlex
 
   postgres:
     container_name: docshield-ai-live-postgres

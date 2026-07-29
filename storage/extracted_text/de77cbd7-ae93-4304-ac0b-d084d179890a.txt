@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Mrs. Kathy Johnson MD
+DOB: 2000-02-25
+SSN: 330-10-4129
+Insurance ID: NoC-33499721
+Visit Date: 2023-05-23
+Provider: Elliott, Fuller and Lewis
+Procedure Code: CPT99406
+Diagnosis: Migraine
+Amount Billed: $264.00
+Amount Covered: $225.00

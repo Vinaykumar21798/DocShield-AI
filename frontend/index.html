@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DocShield-AI PoC</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a class="brand" href="/ui/" aria-label="DocShield-AI home">
+      <img class="brand-logo" src="./datafactz_logo.png" alt="DataFactZ">
+      <span class="brand-copy">
+        <strong>DocShield-AI</strong>
+        <span>PII/PHI document intelligence PoC</span>
+      </span>
+    </a>
+    <div class="header-controls">
+      <label class="api-field" for="apiBase">
+        <span>API</span>
+        <input id="apiBase" name="apiBase" type="url" autocomplete="off">
+      </label>
+      <button class="button ghost" id="healthBtn" type="button">Check API</button>
+      <span class="status-pill neutral" id="healthBadge">Not checked</span>
+    </div>
+  </header>
+
+  <main class="app-main">
+    <section class="page-title" aria-labelledby="pageHeading">
+      <div>
+        <h1 id="pageHeading">Document redaction workspace</h1>
+        <p>Upload a document, track extraction, review detected entities, and download audit artifacts.</p>
+      </div>
+      <div class="workflow" aria-label="PoC workflow">
+        <span class="workflow-item is-active">Upload</span>
+        <span class="workflow-item">Detect</span>
+        <span class="workflow-item">Review</span>
+        <span class="workflow-item">Export</span>
+      </div>
+    </section>
+
+    <section class="dashboard-grid" aria-label="DocShield workspace">
+      <section class="panel upload-panel" aria-labelledby="uploadHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="uploadHeading">Upload</h2>
+            <p>PDF, image, DOCX, and TXT documents.</p>
+          </div>
+        </div>
+        <form id="uploadForm" class="upload-form">
+          <label class="drop-zone" id="dropZone" for="fileInput">
+            <span class="drop-icon" aria-hidden="true"></span>
+            <span class="drop-title">Choose files</span>
+            <span class="drop-subtitle" id="fileSummary">No files selected</span>
+            <input id="fileInput" name="files" type="file" multiple>
+          </label>
+          <div class="file-list" id="fileList" aria-live="polite"></div>
+          <button class="button primary full-width" type="submit">Upload documents</button>
+        </form>
+      </section>
+
+      <section class="panel recent-panel" aria-labelledby="recentHeading">
+        <div class="panel-heading inline">
+          <div>
+            <h2 id="recentHeading">Recent documents</h2>
+            <p id="recentCount">No tracked documents.</p>
+          </div>
+          <button class="button ghost compact" id="clearRecentBtn" type="button">Clear</button>
+        </div>
+        <div class="document-list" id="documentList"></div>
+      </section>
+
+      <section class="panel status-panel" aria-labelledby="statusHeading">
+        <div class="panel-heading inline">
+          <div>
+            <h2 id="statusHeading">Document status</h2>
+            <p id="activeFilename">Select or upload a document.</p>
+          </div>
+          <span class="status-pill neutral" id="processingBadge">Idle</span>
+        </div>
+        <div class="document-lookup">
+          <label for="documentIdInput">Document ID</label>
+          <div class="input-row">
+            <input id="documentIdInput" type="text" autocomplete="off" placeholder="Paste a document ID">
+            <button class="button secondary" id="loadDocumentBtn" type="button">Load</button>
+            <button class="button ghost" id="refreshBtn" type="button">Refresh</button>
+          </div>
+        </div>
+        <dl class="status-details" id="statusDetails">
+          <div><dt>Status</dt><dd>-</dd></div>
+          <div><dt>Stage</dt><dd>-</dd></div>
+          <div><dt>OCR</dt><dd>-</dd></div>
+          <div><dt>Retries</dt><dd>-</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel metrics-panel" aria-labelledby="metricsHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="metricsHeading">Audit summary</h2>
+            <p id="reportTimestamp">Waiting for report data.</p>
+          </div>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><span>Total entities</span><strong id="metricEntities">0</strong></div>
+          <div class="metric accent"><span>PII</span><strong id="metricPii">0</strong></div>
+          <div class="metric warm"><span>PHI</span><strong id="metricPhi">0</strong></div>
+          <div class="metric dark"><span>Pending review</span><strong id="metricPending">0</strong></div>
+        </div>
+      </section>
+
+      <section class="panel findings-panel" aria-labelledby="findingsHeading">
+        <div class="panel-heading inline">
+          <div>
+            <h2 id="findingsHeading">Review queue</h2>
+            <p id="reviewSummary">No review items loaded.</p>
+          </div>
+          <div class="toolbar">
+            <button class="button ghost compact" id="toggleValuesBtn" type="button">Reveal values</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="reviews-table">
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Value</th>
+                <th>Category</th>
+                <th>Confidence</th>
+                <th>Status</th>
+                <th>Decision</th>
+              </tr>
+            </thead>
+            <tbody id="reviewsBody">
+              <tr><td colspan="6" class="empty-state">No document selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel preview-panel" aria-labelledby="previewHeading">
+        <div class="panel-heading inline">
+          <div>
+            <h2 id="previewHeading">Extracted text</h2>
+            <p id="textMeta">Text appears after extraction completes.</p>
+          </div>
+          <button class="button ghost compact" id="copyTextBtn" type="button">Copy</button>
+        </div>
+        <pre class="text-preview" id="textPreview">No extracted text loaded.</pre>
+      </section>
+
+      <section class="panel artifacts-panel" aria-labelledby="artifactsHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="artifactsHeading">Artifacts</h2>
+            <p>Redacted text and JSON audit report outputs.</p>
+          </div>
+        </div>
+        <div class="artifact-list" id="artifactList">
+          <div class="empty-state">No artifacts loaded.</div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js"></script>
+</body>
+</html>

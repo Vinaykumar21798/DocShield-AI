@@ -1,8 +1,8 @@
-# DocShield-AI
+﻿# DocShield-AI
 
 DocShield-AI is a FastAPI backend for document ingestion, OCR/text extraction, PII/PHI detection, human-review records, redaction artifacts, and audit reports.
 
-This repo is API-only right now. The frontend was removed for the current phase.
+This repo includes the FastAPI backend and a lightweight static PoC UI served at /ui/ by the same API process.
 
 ## What It Does
 
