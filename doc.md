@@ -23,6 +23,7 @@ Completed:
 - Native text extraction for TXT and DOCX.
 - Native PDF extraction with PyMuPDF.
 - PaddleOCR extraction for scanned PDFs and images.
+- Mixed PDF extraction that uses PyMuPDF on searchable pages and PaddleOCR only on scanned pages.
 - Optional layout-preserving OCR metadata.
 - Dynamic PII/PHI entity detection orchestrator with candidate-based stopping, detector routing, masking, confidence calibration, deduplication, and bounded Qwen/Ollama escalation.
 - Worker retry behavior.
@@ -49,7 +50,7 @@ Pending / future work:
 | `database/repositories` | Database access helpers |
 | `database/migrations` | Alembic migration scripts |
 | `modules/upload` | File validation, storage, DB record creation, Redis publish |
-| `modules/extraction` | Native text/PDF extraction and PaddleOCR extraction |
+| `modules/extraction` | Native text/PDF extraction, mixed PDF extraction, and PaddleOCR extraction |
 | `modules/detection` | Dynamic PII/PHI detection orchestration, candidate routing, confidence, deduplication, masking support |
 | `orchestration` | End-to-end document processing workflow |
 | `redis_queue` | Redis producer, consumer, worker, job schema |
@@ -82,12 +83,13 @@ Detection sub-flow:
 ```text
 Extracted text
   -> Build PipelineState and mask manager
-  -> Classify detection domain from text signals
+  -> Classify detection domain from document classification and text signals
   -> Select route:
-       financial       Regex -> GLiNER when candidates remain
-       healthcare      Regex -> MedSpaCy -> GLiNER when candidates remain
-       corporate/legal Regex -> GLiNER -> Presidio when candidates remain
-       generic         Regex -> Presidio -> GLiNER -> MedSpaCy when applicable
+       financial       Regex -> Presidio -> GLiNER when candidates remain
+       corporate/legal Regex -> Presidio -> GLiNER when candidates remain
+       generic         Regex -> Presidio -> GLiNER when candidates remain
+       mixed           Regex -> Presidio -> MedSpaCy -> GLiNER when candidates remain
+       healthcare      Regex -> Presidio -> MedSpaCy -> GLiNER when candidates remain
   -> Execute one detector on remaining unmasked text
   -> Pass orchestration_context with previous entities and remaining candidates
   -> Mask accepted spans
@@ -482,8 +484,11 @@ Extraction routing:
 | --- | --- |
 | Searchable PDF | Native PDF extraction with PyMuPDF |
 | Scanned PDF | PaddleOCR |
+| Mixed PDF | PyMuPDF for searchable pages, PaddleOCR only for scanned pages |
 | Image | PaddleOCR |
 | TXT/DOCX | Native text extraction |
+
+Mixed PDF outputs include page-level `is_searchable`, `extraction_source`, `searchable_pages`, and `ocr_pages` metadata in `structured_output`.
 
 PaddleOCR can return both:
 

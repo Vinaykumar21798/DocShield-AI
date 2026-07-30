@@ -15,7 +15,7 @@ from database.models import (
 from modules.classification.service import DocumentType
 from modules.detection.models.detection_result import DetectionResult
 from modules.extraction.native import TextExtractionResult
-from modules.extraction.ocr import OCREngine
+from modules.extraction.ocr import OCRDecision, OCREngine
 from modules.extraction.service import ExtractionService
 from orchestration.workflow import DocumentProcessingWorkflow
 
@@ -191,13 +191,46 @@ class FakePaddleExtractor:
         )
 
 
+class FakeMixedPDFDecisionEngine:
+    def decide(self, document):
+        return OCRDecision(
+            engine=OCREngine.MIXED_PDF,
+            is_searchable=False,
+            reason="Synthetic mixed PDF for workflow test.",
+        )
+
+
+class FakeMixedPDFExtractor:
+    def __init__(self):
+        self.document = None
+
+    def extract(self, document):
+        self.document = document
+        return TextExtractionResult(
+            extracted_text=(
+                "Invoice Number INV-4004\n"
+                "Email: jane.patient@example.com\n"
+            ),
+            page_count=2,
+            confidence_score=0.92,
+            processing_time=0.02,
+            structured_output={
+                "engine": "MIXED_PDF",
+                "searchable_pages": [1],
+                "ocr_pages": [2],
+                "pages": [],
+            },
+        )
+
+
 class FailingTextExtractor:
     def extract(self, document):
         raise AssertionError("OCR extraction should not run during resume")
 
 
 class FakeDetectionService:
-    def detect(self, text):
+    def detect(self, text, document_type=None):
+        self.document_type = document_type
         email = "jane.patient@example.com"
         start = text.index(email)
         return [
@@ -329,3 +362,44 @@ def test_workflow_resumes_from_stored_ocr_checkpoint(
     assert "[REDACTED_EMAIL]" in redacted_text_file.read_text(
         encoding="utf-8",
     )
+
+
+def test_workflow_uses_mixed_pdf_extractor(
+    db_session,
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    pdf_path = tmp_path / "mixed.pdf"
+    pdf_path.write_bytes(b"%PDF-1.4\n")
+    document, _ = create_document_with_job(
+        db_session,
+        pdf_path,
+        filename="mixed.pdf",
+        file_type="application/pdf",
+    )
+    fake_mixed_extractor = FakeMixedPDFExtractor()
+    fake_detection = FakeDetectionService()
+
+    state = DocumentProcessingWorkflow(
+        db_session,
+        ocr_decision_engine=FakeMixedPDFDecisionEngine(),
+        mixed_pdf_extractor=fake_mixed_extractor,
+        detection_service=fake_detection,
+    ).execute(document.id)
+
+    ocr_result = (
+        db_session.query(OCRResult)
+        .filter(OCRResult.document_id == document.id)
+        .one()
+    )
+
+    assert state.status == "COMPLETED"
+    assert fake_mixed_extractor.document.id == document.id
+    assert ocr_result.extraction_method == OCREngine.MIXED_PDF.value
+    assert ocr_result.is_searchable is False
+    assert ocr_result.page_count == 2
+    assert ocr_result.structured_output["engine"] == "MIXED_PDF"
+    assert ocr_result.structured_output["searchable_pages"] == [1]
+    assert ocr_result.structured_output["ocr_pages"] == [2]
+    assert fake_detection.document_type == DocumentType.INVOICE.value

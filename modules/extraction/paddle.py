@@ -163,6 +163,13 @@ class PaddleOCRExtractionService:
         )
 
     def _extract_pdf(self, file_path: Path) -> List[OCRPageText]:
+        return self.extract_pdf_pages(file_path)
+
+    def extract_pdf_pages(
+        self,
+        file_path: Path,
+        page_numbers: Optional[Sequence[int]] = None,
+    ) -> List[OCRPageText]:
         try:
             import fitz
         except ImportError as exc:
@@ -174,23 +181,28 @@ class PaddleOCRExtractionService:
 
         try:
             with fitz.open(file_path) as pdf_document:
+                target_page_numbers = self._normalize_pdf_page_numbers(
+                    page_numbers,
+                    pdf_document.page_count,
+                )
                 with TemporaryDirectory(
                     prefix="paddleocr_pages_",
                     dir=str(file_path.parent),
                 ) as temp_dir:
                     temp_path = Path(temp_dir)
 
-                    for page_number in range(pdf_document.page_count):
-                        page = pdf_document.load_page(page_number)
+                    for page_number in target_page_numbers:
+                        page_index = page_number - 1
+                        page = pdf_document.load_page(page_index)
                         image_path = self._render_pdf_page(
                             page,
                             temp_path,
-                            page_number,
+                            page_index,
                         )
                         page_results.append(
                             self._extract_image(
                                 image_path,
-                                page_number=page_number + 1,
+                                page_number=page_number,
                             )
                         )
 
@@ -200,6 +212,21 @@ class PaddleOCRExtractionService:
             ) from exc
 
         return page_results
+
+    @staticmethod
+    def _normalize_pdf_page_numbers(
+        page_numbers: Optional[Sequence[int]],
+        page_count: int,
+    ) -> Tuple[int, ...]:
+        if page_numbers is None:
+            return tuple(range(1, page_count + 1))
+
+        normalized = sorted({int(page_number) for page_number in page_numbers})
+        return tuple(
+            page_number
+            for page_number in normalized
+            if 1 <= page_number <= page_count
+        )
 
     def _render_pdf_page(
         self,

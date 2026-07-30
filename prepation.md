@@ -164,7 +164,7 @@ GET /documents/{document_id}/text
 Explain:
 
 ```text
-The extraction path is selected dynamically. Searchable PDFs use native extraction. TXT and DOCX use native text extraction. Scanned PDFs and images use PaddleOCR.
+The extraction path is selected dynamically. Searchable PDF pages use native PyMuPDF extraction. Scanned PDF pages and images use PaddleOCR. Mixed PDFs are handled per page, so only scanned pages are OCRed and then merged with native text output.
 ```
 
 ### Step 8 - Show PII/PHI Findings
@@ -262,7 +262,7 @@ Topics:
 - PII/PHI detection strategy
 - Dynamic detection orchestrator
 - Domain-based detector routing
-- Regex, Presidio, GLiNER, MedSpaCy, optional Qwen/Ollama
+- Regex, Presidio, MedSpaCy, GLiNER, optional Qwen/Ollama
 - PipelineState and MaskManager
 - Candidate-based stopping
 - Deduplication and overlap resolution
@@ -300,7 +300,7 @@ Use this explanation when showing the technical architecture diagram.
 ```text
 The PoC has seven logical layers.
 
-The UI layer is a static frontend served by FastAPI. The application layer exposes upload, document, review, redaction, report, and health APIs. The async layer uses Redis to decouple upload latency from heavy document processing. The worker layer executes the ordered document workflow. The extraction layer chooses native parsing or PaddleOCR depending on file type and searchability. The AI detection layer runs a dynamic orchestrator over Regex, Presidio, GLiNER, MedSpaCy, and optional Qwen/Ollama. The storage layer persists metadata in PostgreSQL and artifacts under local storage.
+The UI layer is a static frontend served by FastAPI. The application layer exposes upload, document, review, redaction, report, and health APIs. The async layer uses Redis to decouple upload latency from heavy document processing. The worker layer executes the ordered document workflow. The extraction layer chooses native parsing, PaddleOCR, or mixed per-page PDF extraction depending on file type and page searchability. The AI detection layer runs a dynamic orchestrator over Regex, Presidio, MedSpaCy, GLiNER, and optional Qwen/Ollama. The storage layer persists metadata in PostgreSQL and artifacts under local storage.
 ```
 
 Main runtime components:
@@ -313,7 +313,7 @@ Main runtime components:
 | `modules/upload` | File validation, storage, DB records, Redis publish |
 | `redis_queue` | Producer, consumer, worker, job schema |
 | `orchestration/workflow.py` | End-to-end document processing workflow |
-| `modules/extraction` | Native text/PDF extraction, PaddleOCR, OCR confidence |
+| `modules/extraction` | Native text/PDF extraction, mixed per-page PDF extraction, PaddleOCR, OCR confidence |
 | `modules/classification` | Rules-based document classification |
 | `modules/detection` | Dynamic PII/PHI detection orchestration |
 | `database` | SQLAlchemy models, repositories, Alembic migrations |
@@ -377,10 +377,11 @@ The orchestrator is designed to maximize precision first, then recall. Regex han
 Detection route examples:
 
 ```text
-financial       Regex -> GLiNER
-healthcare      Regex -> MedSpaCy -> GLiNER
-corporate/legal Regex -> GLiNER -> Presidio
-generic/mixed   Regex -> Presidio -> GLiNER -> MedSpaCy
+financial       Regex -> Presidio -> GLiNER
+corporate/legal Regex -> Presidio -> GLiNER
+generic         Regex -> Presidio -> GLiNER
+mixed           Regex -> Presidio -> MedSpaCy -> GLiNER
+healthcare      Regex -> Presidio -> MedSpaCy -> GLiNER
 ```
 
 Why Regex first:
@@ -650,7 +651,7 @@ Yes. The review API supports reviewer decisions. The UI provides approve and rej
 Answer:
 
 ```text
-Yes. Scanned PDFs and images are routed to PaddleOCR. Searchable PDFs and native text files use native extraction.
+Yes. Scanned PDFs and images are routed to PaddleOCR. Searchable PDFs and native text files use native extraction. Mixed PDFs are split per page so searchable pages use PyMuPDF and only scanned pages use OCR.
 ```
 
 ### Q8. What if OCR is wrong?
@@ -764,7 +765,7 @@ Misses can happen due to OCR quality, unsupported pattern, or detector routing. 
 Response:
 
 ```text
-Detector order depends on document domain. Healthcare routes run Regex -> MedSpaCy -> GLiNER. Generic or mixed routes run Regex -> Presidio -> GLiNER -> MedSpaCy. Also, once Regex accepts a span, it is masked, so later detectors do not reprocess it.
+Detector order follows a low-cost progressive strategy. Financial, corporate, legal, and generic routes run Regex -> Presidio -> GLiNER. Healthcare and mixed routes run Regex -> Presidio -> MedSpaCy -> GLiNER. Once Regex or another detector accepts a span, it is masked, so later detectors do not reprocess it.
 ```
 
 ### Problem 8 - Report total differs from expected
@@ -783,12 +784,13 @@ The report counts persisted entities after deduplication and overlap resolution.
 | --- | --- |
 | Scanned PDF | Routed to PaddleOCR |
 | Searchable PDF | Routed to native PDF extraction |
+| Mixed PDF | Searchable pages use PyMuPDF; scanned pages use PaddleOCR only |
 | TXT/DOCX | Routed to native text extraction |
 | Image upload | Routed to PaddleOCR |
 | Poor image quality | OCR confidence may be lower; should trigger review in production |
 | Rotated/skewed scan | PaddleOCR options can help; production may need stronger preprocessing |
 | Handwriting | Current PoC may not handle well; future OCR/model enhancement |
-| Multi-page PDF | Pages are processed and merged with page break markers |
+| Multi-page PDF | Pages are processed and merged with page break markers; mixed PDFs are split by page searchability |
 | Table-heavy invoice | OCR extracts text and optional layout metadata; table structure may need production tuning |
 | Same entity appears multiple times | Preserved as separate redaction targets if spans differ |
 | Duplicate detector hit on same span | Deduplicated |
@@ -819,7 +821,7 @@ The report counts persisted entities after deduplication and overlap resolution.
 | Worker process | Isolates heavy OCR/detection from upload API |
 | Local storage | Simple PoC artifact persistence, replaceable later |
 | PaddleOCR | Handles scanned PDFs and images |
-| PyMuPDF/native extraction | Faster for searchable PDFs |
+| PyMuPDF/native extraction | Faster for searchable PDF pages |
 | Regex first | Fast, explainable, high precision for structured fields |
 | Dynamic detector routing | Avoids running every detector on every document |
 | Masking accepted spans | Prevents duplicate detections and reduces later detector noise |
@@ -925,7 +927,7 @@ If Regex resolves all candidate spans and no unresolved candidates remain, the o
 ### Why did GLiNER run instead of MedSpaCy?
 
 ```text
-Detector order depends on document domain. Healthcare route prioritizes MedSpaCy before GLiNER. Generic and mixed routes put GLiNER before MedSpaCy. Also, any Regex-detected diagnosis span is masked and not reprocessed by MedSpaCy.
+Detector order depends on document domain. Healthcare and mixed routes run Regex -> Presidio -> MedSpaCy -> GLiNER, so MedSpaCy handles clinical terms before GLiNER is used as the expensive semantic fallback. Regex-detected diagnosis spans are masked and not reprocessed by later detectors.
 ```
 
 ### How do we classify PII vs PHI?

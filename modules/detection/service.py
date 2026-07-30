@@ -117,7 +117,8 @@ class DetectionService:
     """
     Dynamic Detection Orchestrator
 
-    The public API remains detect(text, page_number=1). Internally, the service
+    The public API remains detect(text, page_number=1) with an optional
+    document_type hint. Internally, the service
     routes detectors one at a time against PipelineState.current_text, which is
     the original text with all previously accepted spans masked out.
     """
@@ -448,6 +449,7 @@ class DetectionService:
         self,
         text: str,
         page_number: int = 1,
+        document_type: str | None = None,
     ) -> list[DetectionResult]:
         """
         Main detection pipeline.
@@ -469,6 +471,7 @@ class DetectionService:
                 state,
                 page_number,
                 config,
+                document_type,
             )
 
             current_stage = "SEMANTIC_REASONING_DECISION"
@@ -520,14 +523,19 @@ class DetectionService:
         state: PipelineState,
         page_number: int,
         config: DynamicDetectionConfig,
+        document_type: str | None = None,
     ) -> tuple[str, tuple[str, ...]]:
-        domain = self.router.classify_domain(state.original_text)
+        domain = self.router.classify_domain(
+            state.original_text,
+            document_type=document_type,
+        )
         route = self.router.route_for_domain(domain)
         detector_getters = self._detector_getters()
 
         logger.info(
-            "Dynamic detection route selected. domain=%s route=%s "
+            "Dynamic detection route selected. document_type=%s domain=%s route=%s "
             "stop_threshold=%s min_candidate_chars=%s",
+            document_type,
             domain,
             "->".join(route),
             config.stopping_candidate_threshold,

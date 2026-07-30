@@ -1,4 +1,4 @@
-﻿# DocShield-AI
+# DocShield-AI
 
 DocShield-AI is a FastAPI backend for document ingestion, OCR/text extraction, PII/PHI detection, human-review records, redaction artifacts, and audit reports.
 
@@ -10,8 +10,8 @@ This repo includes the FastAPI backend and a lightweight static PoC UI served at
 - Store document metadata in PostgreSQL.
 - Push processing jobs to Redis.
 - Run background processing through the worker.
-- Extract text from TXT, DOCX, searchable PDFs, scanned PDFs, and images.
-- Preserve optional layout metadata for PaddleOCR outputs.
+- Extract text from TXT, DOCX, searchable PDFs, scanned PDFs, mixed PDFs, and images.
+- Detect PDF searchability per page, OCR only scanned pages in mixed PDFs, and preserve optional layout metadata for PaddleOCR outputs.
 - Detect sensitive entities and persist confidence scores.
 - Create review, redaction, and report records.
 - Save generated artifacts under `storage/`.
@@ -40,6 +40,7 @@ The detection pipeline is dynamically routed inside `modules/detection` without 
 Core behavior:
 
 - Routes detectors by document domain: financial, healthcare, corporate/legal, or generic.
+- Uses a low-cost progressive order: Regex -> Presidio -> MedSpaCy -> GLiNER for healthcare/mixed documents, and Regex -> Presidio -> GLiNER for other documents.
 - Runs one detector at a time on remaining unmasked candidate spans.
 - If a detector finds no entities, the orchestrator continues to the next appropriate detector when candidates remain.
 - Passes each detector an `orchestration_context` containing remaining text, previous entities, remaining candidates, and executed/skipped detectors.

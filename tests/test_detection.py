@@ -151,7 +151,7 @@ def test_dynamic_orchestrator_masks_text_between_detector_stages(monkeypatch):
     assert [e.entity_value for e in presidio.contexts[0]["previous_entities"]] == ["Alpha"]
 
 
-def test_financial_route_uses_regex_then_gliner_without_presidio(monkeypatch):
+def test_financial_route_runs_presidio_before_gliner(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "true")
     text = (
         "Bank statement\n"
@@ -170,6 +170,7 @@ def test_financial_route_uses_regex_then_gliner_without_presidio(monkeypatch):
             "end": email_start + len("ravi@example.com"),
         },
     )
+    presidio = FakeDetector("presidio", result=None)
     gliner = FakeDetector(
         "gliner",
         {
@@ -181,7 +182,7 @@ def test_financial_route_uses_regex_then_gliner_without_presidio(monkeypatch):
     )
     service = service_with_detectors(
         regex,
-        FailDetector("presidio"),
+        presidio,
         gliner,
         FailDetector("medspacy"),
     )
@@ -189,8 +190,47 @@ def test_financial_route_uses_regex_then_gliner_without_presidio(monkeypatch):
     results = service.detect(text)
 
     assert [item.detector for item in results] == ["gliner", "regex"]
+    assert presidio.seen_texts
     assert gliner.seen_texts
+    assert "ravi@example.com" not in presidio.seen_texts[0]
     assert "ravi@example.com" not in gliner.seen_texts[0]
+    assert gliner.contexts[0]["executed_detectors"] == ["regex", "presidio"]
+
+
+def test_healthcare_route_runs_medspacy_before_gliner(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    text = "Clinical note\nPatient Name: Maya Rao\nDiagnosis: Back Pain"
+    diagnosis_start = text.index("Back Pain")
+    medspacy = FakeDetector(
+        "medspacy",
+        {
+            "type": "DIAGNOSIS",
+            "value": "Back Pain",
+            "start": diagnosis_start,
+            "end": diagnosis_start + len("Back Pain"),
+        },
+    )
+    gliner = FakeDetector("gliner", result=None)
+    service = service_with_detectors(
+        FakeDetector("regex", result=None),
+        FakeDetector("presidio", result=None),
+        gliner,
+        medspacy,
+    )
+
+    results = service.detect(text)
+
+    assert [item.entity_value for item in results] == ["Back Pain"]
+    assert medspacy.contexts[0]["executed_detectors"] == [
+        "regex",
+        "presidio",
+    ]
+    assert gliner.contexts[0]["executed_detectors"] == [
+        "regex",
+        "presidio",
+        "medspacy",
+    ]
+    assert "Back Pain" not in gliner.seen_texts[0]
 
 
 def test_llm_validation_receives_only_low_confidence_entities_with_bounded_context(

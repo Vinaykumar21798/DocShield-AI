@@ -62,6 +62,10 @@ class DetectorSelector:
         "laboratory",
         "lab report",
     }
+    STRONG_HEALTHCARE_CUES = HEALTHCARE_CUES - {
+        "patient",
+    }
+
     CORPORATE_CUES = {
         "employee",
         "designation",
@@ -105,34 +109,70 @@ class DetectorSelector:
     }
 
     DOMAIN_ROUTES = {
-        "financial": ("regex", "gliner"),
-        "healthcare": ("regex", "medspacy", "gliner"),
-        "corporate": ("regex", "gliner", "presidio"),
-        "legal": ("regex", "gliner", "presidio"),
-        "generic": ("regex", "presidio", "gliner", "medspacy"),
-        "mixed": ("regex", "presidio", "gliner", "medspacy"),
+        "financial": ("regex", "presidio", "gliner"),
+        "healthcare": ("regex", "presidio", "medspacy", "gliner"),
+        "corporate": ("regex", "presidio", "gliner"),
+        "legal": ("regex", "presidio", "gliner"),
+        "generic": ("regex", "presidio", "gliner"),
+        "mixed": ("regex", "presidio", "medspacy", "gliner"),
     }
 
-    def select(self, text: str) -> DetectionStrategy:
-        domain = self.classify_domain(text)
+    DOCUMENT_TYPE_DOMAINS = {
+        "bank_statement": "financial",
+        "contract": "legal",
+        "financial": "financial",
+        "generic": "generic",
+        "healthcare": "healthcare",
+        "identity_document": "generic",
+        "insurance": "financial",
+        "invoice": "financial",
+        "lab_report": "healthcare",
+        "legal": "legal",
+        "medical": "healthcare",
+        "medical_record": "healthcare",
+        "prescription": "healthcare",
+        "receipt": "financial",
+        "tax_form": "financial",
+    }
+
+    def select(
+        self,
+        text: str,
+        document_type: str | None = None,
+    ) -> DetectionStrategy:
+        domain = self.classify_domain(text, document_type=document_type)
         strategy = DetectionStrategy(
             document_type="medical" if domain == "healthcare" else domain,
             language="en",
-            use_presidio=domain in {"corporate", "legal", "generic", "mixed"},
+            use_presidio=True,
             use_gliner=True,
-            use_medspacy=domain in {"healthcare", "generic", "mixed"},
+            use_medspacy=domain in {"healthcare", "mixed"},
             use_ollama=True,
         )
         strategy.selected_detectors = list(self.route_for_domain(domain))
         return strategy
 
-    def classify_domain(self, text: str) -> str:
+    def classify_domain(
+        self,
+        text: str,
+        document_type: str | None = None,
+    ) -> str:
         text_lower = text.lower()
+        document_domain = self.domain_for_document_type(document_type)
 
         has_healthcare = any(
             cue in text_lower
             for cue in self.HEALTHCARE_CUES
         )
+
+        if document_domain == "healthcare":
+            return "healthcare"
+
+        if document_domain is not None:
+            if self.has_strong_healthcare_cue(text_lower):
+                return "healthcare"
+            return document_domain
+
         has_corporate = any(
             cue in text_lower
             for cue in self.CORPORATE_CUES
@@ -146,8 +186,10 @@ class DetectorSelector:
             for cue in self.FINANCIAL_CUES
         )
 
+        if has_healthcare:
+            return "healthcare"
+
         domain_hits = sum((
-            has_healthcare,
             has_financial,
             has_legal,
             has_corporate,
@@ -156,8 +198,6 @@ class DetectorSelector:
         if domain_hits > 1:
             return "mixed"
 
-        if has_healthcare:
-            return "healthcare"
         if has_financial:
             return "financial"
         if has_legal:
@@ -165,6 +205,22 @@ class DetectorSelector:
         if has_corporate:
             return "corporate"
         return "generic"
+
+    def has_strong_healthcare_cue(self, text_lower: str) -> bool:
+        return any(
+            cue in text_lower
+            for cue in self.STRONG_HEALTHCARE_CUES
+        )
+
+    def domain_for_document_type(self, document_type: str | None) -> str | None:
+        if not document_type:
+            return None
+
+        normalized = document_type.strip().lower()
+        normalized = normalized.replace("-", "_").replace(" ", "_")
+        if normalized == "unknown":
+            return None
+        return self.DOCUMENT_TYPE_DOMAINS.get(normalized)
 
     def route_for_domain(self, domain: str) -> tuple[str, ...]:
         return self.DOMAIN_ROUTES.get(domain, self.DOMAIN_ROUTES["generic"])

@@ -50,6 +50,7 @@ from modules.extraction.native import (
     NativeTextExtractionService,
     TextExtractionResult,
 )
+from modules.extraction.mixed_pdf import MixedPDFExtractionService
 from modules.extraction.ocr import OCRDecisionEngine, OCREngine
 from modules.extraction.paddle import PaddleOCRExtractionService
 from orchestration.execution_plan import WorkflowStep
@@ -146,6 +147,7 @@ class DocumentProcessingWorkflow:
         native_pdf_extractor: Optional[NativePDFExtractionService] = None,
         native_text_extractor: Optional[NativeTextExtractionService] = None,
         paddle_ocr_extractor: Optional[PaddleOCRExtractionService] = None,
+        mixed_pdf_extractor: Optional[MixedPDFExtractionService] = None,
         classification_service: Optional[
             DocumentClassificationService
         ] = None,
@@ -182,6 +184,10 @@ class DocumentProcessingWorkflow:
                     settings.paddleocr_layout_analysis_enabled
                 ),
             )
+        )
+        self.mixed_pdf_extractor = (
+            mixed_pdf_extractor
+            or MixedPDFExtractionService(self.paddle_ocr_extractor)
         )
         self.planner = planner or WorkflowPlanner()
         self.worker_id = worker_id
@@ -532,6 +538,13 @@ class DocumentProcessingWorkflow:
             self._refine_document_classification(state)
             return
 
+        if ocr_engine == OCREngine.MIXED_PDF.value:
+            extraction_result = self.mixed_pdf_extractor.extract(document)
+            self._apply_extraction_result(state, extraction_result)
+            self._evaluate_ocr_confidence(state)
+            self._refine_document_classification(state)
+            return
+
         if ocr_engine == OCREngine.NATIVE_TEXT.value:
             extraction_result = self.native_text_extractor.extract(document)
             self._apply_extraction_result(state, extraction_result)
@@ -605,6 +618,7 @@ class DocumentProcessingWorkflow:
 
         state.detected_entities = self.detection_service.detect(
             state.extracted_text,
+            document_type=state.document_type,
         )
         self.logger.info(
             "Detection completed for document_id=%s entity_count=%s",
