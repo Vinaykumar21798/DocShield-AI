@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Sara Jensen
+DOB: 1975-06-28
+SSN: 131-69-7783
+Insurance ID: SwQ-69248959
+Visit Date: 2024-03-26
+Provider: Stuart-Ho
+Procedure Code: CPT99213
+Diagnosis: Hypertension
+Amount Billed: $513.00
+Amount Covered: $385.00

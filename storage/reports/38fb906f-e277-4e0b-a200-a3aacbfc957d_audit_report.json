@@ -1,0 +1,78 @@
+{
+  "document_id": "38fb906f-e277-4e0b-a200-a3aacbfc957d",
+  "document_type": "MEDICAL_RECORD",
+  "ocr_result_id": "42d5a5bb-5f0a-47fe-a50c-9efdbb870438",
+  "total_entities": 7,
+  "total_pii": 2,
+  "total_phi": 5,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/38fb906f-e277-4e0b-a200-a3aacbfc957d_redacted.txt",
+  "detectors_used": [
+    "Regex"
+  ],
+  "entities": [
+    {
+      "entity_id": "06c7c3ac-bdbf-4fa5-9787-b63b72fec56f",
+      "entity_type": "PROVIDER",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "1442bb47-7afe-4388-91d5-8c7a28a2045a",
+      "entity_type": "INSURANCE_ID",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "303561f7-5127-45bc-9644-105d2ad94d4b",
+      "entity_type": "VISIT_DATE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "50501712-34af-417f-90ff-6638913991e9",
+      "entity_type": "PATIENT",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "a1ac1700-129c-4d0d-a35c-d67513eb1ba9",
+      "entity_type": "DATE_OF_BIRTH",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "bd5b9c65-ed02-4910-be4f-c0a2e6f34fab",
+      "entity_type": "CPT_CODE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "c6a982c3-5763-429f-9b08-46a61f00ce59",
+      "entity_type": "SSN",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

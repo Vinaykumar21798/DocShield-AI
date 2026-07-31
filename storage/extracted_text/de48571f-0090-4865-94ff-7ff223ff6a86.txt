@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Lonnie Taylor
+DOB: 2001-08-10
+SSN: 347-08-2950
+Insurance ID: naV-77733127
+Visit Date: 2023-06-21
+Provider: Meadows Group
+Procedure Code: CPT99406
+Diagnosis: Hypertension
+Amount Billed: $982.00
+Amount Covered: $139.00

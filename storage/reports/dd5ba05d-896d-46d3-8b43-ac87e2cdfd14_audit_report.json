@@ -1,0 +1,79 @@
+{
+  "document_id": "dd5ba05d-896d-46d3-8b43-ac87e2cdfd14",
+  "document_type": "UNKNOWN",
+  "ocr_result_id": "07f90819-97c5-43cd-a094-86d1760119bd",
+  "total_entities": 7,
+  "total_pii": 7,
+  "total_phi": 0,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/dd5ba05d-896d-46d3-8b43-ac87e2cdfd14_redacted.txt",
+  "detectors_used": [
+    "Regex",
+    "presidio"
+  ],
+  "entities": [
+    {
+      "entity_id": "37b66e6c-7a76-4ccf-bd19-1365506b4d24",
+      "entity_type": "PERSON",
+      "privacy_category": "PII",
+      "confidence_score": 0.88,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "presidio"
+    },
+    {
+      "entity_id": "42d0a713-bafd-4822-abdd-603ca685c0b0",
+      "entity_type": "ADDRESS",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "43fcae72-84b4-434d-a9ce-216eee028ab5",
+      "entity_type": "SALARY",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "4dda98ad-acea-4cc8-8c1a-a526fc114870",
+      "entity_type": "DATE_OF_BIRTH",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "874fdfdc-e2ad-4154-ba6c-9613663e7fe0",
+      "entity_type": "ORGANIZATION",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "presidio"
+    },
+    {
+      "entity_id": "bc2f0190-2c83-45d2-8ee1-f544b59da7b8",
+      "entity_type": "SSN",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "c92c59a8-1c46-4925-9ad3-45e0f3d83e64",
+      "entity_type": "EMPLOYEE_ID",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

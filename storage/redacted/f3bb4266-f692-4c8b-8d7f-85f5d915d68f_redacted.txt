@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: [REDACTED_PATIENT]
+DOB: [REDACTED_DATE_OF_BIRTH]
+SSN: [REDACTED_SSN]
+Insurance ID: [REDACTED_INSURANCE_ID]
+Visit Date: [REDACTED_VISIT_DATE]
+Provider: [REDACTED_PROVIDER], Escobar and Smith
+Procedure Code: [REDACTED_CPT_CODE]
+Diagnosis: [REDACTED_DIAGNOSIS]
+Amount Billed: $227.00
+Amount Covered: $428.00

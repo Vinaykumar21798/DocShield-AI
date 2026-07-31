@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Donald Elliott
+DOB 1964-02-08
+SSN: 171-12-1436
+Insurance ID: uCF-85940974
+
+Visit Date: 2024-10-04
+Provider: Baker, Wellsand Marshall
+Procedure Code: CPT82306
+Diagnosis Migraine
+Amount Billed: $512.00
+AmountCovered: $305.00

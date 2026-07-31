@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Monica Johnson
+DOB: 1978-01-18
+SSN: 403-54-4120
+Insurance ID: iMd-68896619
+Visit Date: 2024-12-03
+Provider: Walton-Robbins
+Procedure Code: CPT70450
+Diagnosis: Hypertension
+Amount Billed: $217.00
+Amount Covered: $207.00

@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Karl Travis
+DOB 1957-02-04
+SSN: 532-60-3153
+Insurance ID: Obh-70487577
+
+Visit Date: 2025-02-02
+Provider: Ortega, Johnson and Weaver
+Procedure Code: CPT99406
+Diagnosis Routine Checkup
+Amount Billed: $413.00
+AmountCovered: $512.00

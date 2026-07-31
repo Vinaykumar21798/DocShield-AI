@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Jessica Pacheco
+DOB 1970-09-18
+SSN: 612-69-1319
+Insurance ID: qVM-32811898
+
+Visit Date: 2024-04-29
+Provider: Hill and Sons
+Procedure Code: CPT99213
+Diagnosis Back Pain
+Amount Billed: $82.00
+AmountCovered: $561.00

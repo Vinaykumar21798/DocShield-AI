@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Lonnie Taylor
+DOB: 2001-08-10
+SSN: 347-08-2950
+Insurance ID: naV-77733127
+Visit Date: 2024-08-28
+Provider: Harrison-Edwards
+Procedure Code: CPT99213
+Diagnosis: Back Pain
+Amount Billed: $825.00
+Amount Covered: $151.00

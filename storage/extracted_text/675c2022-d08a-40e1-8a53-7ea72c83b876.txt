@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Judith Church
+DOB: 1974-07-13
+SSN: 059-12-7911
+Insurance ID: aim-41598513
+Visit Date: 2023-08-07
+Provider: Wilson-Campbell
+Procedure Code: CPT99213
+Diagnosis: Hypertension
+Amount Billed: $832.00
+Amount Covered: $495.00

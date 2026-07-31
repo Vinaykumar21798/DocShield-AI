@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Rebecca Boone
+DOB: 1978-10-15
+SSN: 672-46-8137
+Insurance ID: ZbV-39181272
+Visit Date: 2024-07-21
+Provider: Griffin, Payne and Hurley
+Procedure Code: CPT99406
+Diagnosis: Migraine
+Amount Billed: $689.00
+Amount Covered: $351.00

@@ -1,0 +1,87 @@
+{
+  "document_id": "fad1ce09-d2f8-4cba-b81a-00fbee7bb32e",
+  "document_type": "MEDICAL_RECORD",
+  "ocr_result_id": "18cbfaf6-6b4b-4c47-9e07-44508a5cbc77",
+  "total_entities": 8,
+  "total_pii": 2,
+  "total_phi": 6,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/fad1ce09-d2f8-4cba-b81a-00fbee7bb32e_redacted.txt",
+  "detectors_used": [
+    "Regex"
+  ],
+  "entities": [
+    {
+      "entity_id": "3b81c9b6-2530-47e6-9c74-0dff5048eba4",
+      "entity_type": "PATIENT",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "595076d1-59fb-456c-a48c-f75c45a75e66",
+      "entity_type": "DATE_OF_BIRTH",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "22ff2e24-7ce0-44fe-9c5b-3310086f3db5",
+      "entity_type": "SSN",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "3117daa6-b6c3-4809-b4b1-105b7ab5ca0c",
+      "entity_type": "VISIT_DATE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "a4dd8632-fa92-4ec1-ae23-9adc856ef084",
+      "entity_type": "PROVIDER",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "3c36dd28-b740-44e8-b929-7bd5dd5dd070",
+      "entity_type": "CPT_CODE",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "421ca969-6d47-4159-91a0-f126856ea56f",
+      "entity_type": "DIAGNOSIS",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "c035717a-5990-4eac-b28c-eab526ba9049",
+      "entity_type": "INSURANCE_ID",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

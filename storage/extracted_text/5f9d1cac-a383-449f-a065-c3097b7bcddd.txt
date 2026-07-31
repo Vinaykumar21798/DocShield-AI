@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Jonathan Anderson
+DOB 1966-12-09
+SSN: 463-74-9204
+Insurance ID: WMj-76210872
+
+Visit Date: 2024-07-27
+Provider: Francis-Potter
+Procedure Code: CPT99213
+Diagnosis Back Pain
+Amount Billed: $478.00
+AmountCovered: $200.00

@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Alicia Gibbs
+DOB: 1962-08-16
+SSN: 185-46-3574
+Insurance ID: yrl-85786693
+Visit Date: 2023-09-10
+Provider: Hobbs, Collins and Mcbride
+Procedure Code: CPT99213
+Diagnosis: Migraine
+Amount Billed: $712.00
+Amount Covered: $534.00

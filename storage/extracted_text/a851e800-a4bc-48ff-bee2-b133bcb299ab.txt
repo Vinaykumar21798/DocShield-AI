@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Elizabeth Patterson
+DOB: 1990-11-17
+SSN: 200-63-6289
+Insurance ID: WhJ-43014171
+Visit Date: 2024-01-06
+Provider: Young-Tucker
+Procedure Code: CPT82306
+Diagnosis: Hypertension
+Amount Billed: $665.00
+Amount Covered: $107.00

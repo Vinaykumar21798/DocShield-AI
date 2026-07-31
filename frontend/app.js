@@ -113,7 +113,9 @@
           // Keep the HTTP status detail.
         }
       }
-      throw new Error(detail);
+      const error = new Error(detail);
+      error.status = response.status;
+      throw error;
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -248,6 +250,25 @@
       persistState();
       renderDocumentList();
     }
+  }
+
+  function removeTrackedDocument(documentId) {
+    state.documents = state.documents.filter((document) => document.id !== documentId);
+    if (state.activeDocumentId === documentId) {
+      state.activeDocumentId = "";
+      els.documentIdInput.value = "";
+    }
+    persistState();
+    renderDocumentList();
+  }
+
+  function renderEmptyDashboard() {
+    renderStatus(null);
+    renderText(null);
+    renderReviews([]);
+    renderMetrics([], [], []);
+    renderArtifacts([], []);
+    renderWorkflow(0);
   }
 
   function renderDocumentList() {
@@ -517,19 +538,32 @@
     renderDocumentList();
     setBadge(els.processingBadge, "Loading", "warning");
 
+    let status;
+    try {
+      status = await apiFetch(`/documents/${encodeURIComponent(id)}/status`);
+    } catch (error) {
+      if (error.status === 404) {
+        removeTrackedDocument(id);
+        stopPolling();
+      }
+      renderEmptyDashboard();
+      if (!quiet) {
+        showToast(`Status lookup failed: ${error.message}`, true);
+      }
+      return;
+    }
+
     const requests = await Promise.allSettled([
-      apiFetch(`/documents/${encodeURIComponent(id)}/status`),
-      apiFetch(`/documents/${encodeURIComponent(id)}/text`),
+      status.has_extracted_text ? apiFetch(`/documents/${encodeURIComponent(id)}/text`) : Promise.resolve(null),
       apiFetch(`/documents/${encodeURIComponent(id)}/reviews`),
       apiFetch(`/documents/${encodeURIComponent(id)}/reports`),
       apiFetch(`/documents/${encodeURIComponent(id)}/redactions`),
     ]);
 
-    const status = requests[0].status === "fulfilled" ? requests[0].value : null;
-    const text = requests[1].status === "fulfilled" ? requests[1].value : null;
-    const reviews = requests[2].status === "fulfilled" ? requests[2].value : [];
-    const reports = requests[3].status === "fulfilled" ? requests[3].value : [];
-    const redactions = requests[4].status === "fulfilled" ? requests[4].value : [];
+    const text = requests[0].status === "fulfilled" ? requests[0].value : null;
+    const reviews = requests[1].status === "fulfilled" ? requests[1].value : [];
+    const reports = requests[2].status === "fulfilled" ? requests[2].value : [];
+    const redactions = requests[3].status === "fulfilled" ? requests[3].value : [];
 
     renderStatus(status);
     renderText(text);
@@ -538,12 +572,7 @@
     renderArtifacts(reports, redactions);
     updateWorkflow(status, reviews, reports, redactions);
 
-    if (!status && !quiet) {
-      const error = requests[0].reason ? requests[0].reason.message : "Document status unavailable.";
-      showToast(`Status lookup failed: ${error}`, true);
-    }
-
-    if (status && isTerminalStatus(status)) {
+    if (isTerminalStatus(status)) {
       stopPolling();
     }
   }

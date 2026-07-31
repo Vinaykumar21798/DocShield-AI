@@ -1,0 +1,11 @@
+From: [REDACTED_EMAIL]
+To: [REDACTED_EMAIL]
+Subject: Medical Claim Follow-up
+ 
+Hello Hunter Harris,
+ 
+We received your claim for procedure CPT6954. Please provide your insurance ID ([REDACTED_INSURANCE_ID]) so we can complete processing.
+ 
+Best,
+Richard Williamson
+Medical Claims Dept.

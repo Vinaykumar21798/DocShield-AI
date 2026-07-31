@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: David Dillon
+DOB: 1956-06-13
+SSN: 121-12-6177
+Insurance ID: HdA-17827474
+Visit Date: 2023-08-28
+Provider: Collins Group
+Procedure Code: CPT99213
+Diagnosis: Hypertension
+Amount Billed: $435.00
+Amount Covered: $413.00

@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Sara Jensen
+DOB: 1975-06-28
+SSN: 131-69-7783
+Insurance ID: SwQ-69248959
+Visit Date: 2024-03-25
+Provider: Lane-Oliver
+Procedure Code: CPT70450
+Diagnosis: Back Pain
+Amount Billed: $841.00
+Amount Covered: $610.00

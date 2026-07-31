@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Stephen Cummings
+DOB: 1991-09-11
+SSN: 093-27-7553
+Insurance ID: Jgn-52881390
+Visit Date: 2023-08-14
+Provider: Ward Inc
+Procedure Code: CPT70450
+Diagnosis: Migraine
+Amount Billed: $121.00
+Amount Covered: $612.00

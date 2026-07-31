@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Drew Russell
+DOB: 1981-08-25
+SSN: 189-92-9834
+Insurance ID: Lxi-01171010
+Visit Date: 2024-12-22
+Provider: Petty Ltd
+Procedure Code: CPT70450
+Diagnosis: Routine Checkup
+Amount Billed: $750.00
+Amount Covered: $774.00

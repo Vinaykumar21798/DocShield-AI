@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Lori Bowen
+DOB: 2001-12-18
+SSN: 710-86-7443
+Insurance ID: Yei-78855246
+Visit Date: 2025-03-12
+Provider: Parker, Roy and Clark
+Procedure Code: CPT99406
+Diagnosis: Routine Checkup
+Amount Billed: $232.00
+Amount Covered: $411.00

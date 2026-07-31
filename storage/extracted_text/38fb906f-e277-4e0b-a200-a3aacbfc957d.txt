@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Jonathan Hudson
+DOB 1975-12-03
+SSN: 558-33-8660
+Insurance ID: hnB-48520335
+
+Visit Date: 2023-09-15
+Provider: Pruitt PLC
+Procedure Code: CPT70450
+Diagnosis Routine Checkup
+Amount Billed: $314.00
+AmountCovered: $476.00

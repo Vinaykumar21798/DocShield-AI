@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Brian Blackburn
+DOB: 1974-12-10
+SSN: 307-91-3108
+Insurance ID: XzE-01333760
+Visit Date: 2024-04-25
+Provider: Taylor-Mcfarland
+Procedure Code: CPT99213
+Diagnosis: Routine Checkup
+Amount Billed: $782.00
+Amount Covered: $176.00

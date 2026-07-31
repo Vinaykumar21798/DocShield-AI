@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Ryan Warren
+DOB: 1952-09-26
+SSN: 771-13-4983
+Insurance ID: NGk-67326890
+Visit Date: 2024-12-24
+Provider: Davis Ltd
+Procedure Code: CPT99213
+Diagnosis: Type 2 Diabetes
+Amount Billed: $386.00
+Amount Covered: $162.00

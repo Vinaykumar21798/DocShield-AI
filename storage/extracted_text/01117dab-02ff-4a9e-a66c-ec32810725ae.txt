@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Lisa Dean
+DOB: 1972-05-11
+SSN: 879-48-8877
+Insurance ID: sNy-04622118
+Visit Date: 2023-04-19
+Provider: Ruiz-Pugh
+Procedure Code: CPT70450
+Diagnosis: Routine Checkup
+Amount Billed: $567.00
+Amount Covered: $411.00

@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.openapi.docs import swagger_ui_default_parameters
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from api.routes import api_router
@@ -165,6 +165,10 @@ if FRONTEND_DIR.exists():
         name="docshield-ui",
     )
 
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 def _swagger_ui_parameters() -> str:
     parameters = swagger_ui_default_parameters.copy()

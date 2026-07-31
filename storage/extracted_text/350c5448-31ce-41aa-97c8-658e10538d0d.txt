@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Erica Barnett
+DOB: 1984-02-15
+SSN: 190-93-6909
+Insurance ID: dvS-47540322
+Visit Date: 2023-08-29
+Provider: Bradshaw and Sons
+Procedure Code: CPT70450
+Diagnosis: Back Pain
+Amount Billed: $470.00
+Amount Covered: $98.00

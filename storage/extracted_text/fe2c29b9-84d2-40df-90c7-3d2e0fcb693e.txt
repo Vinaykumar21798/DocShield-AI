@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Anthony Ramos
+DOB: 1989-02-07
+SSN: 301-10-6468
+Insurance ID: aGn-07476372
+Visit Date: 2024-11-21
+Provider: Molina, Estrada and Stanley
+Procedure Code: CPT82306
+Diagnosis: Back Pain
+Amount Billed: $285.00
+Amount Covered: $184.00

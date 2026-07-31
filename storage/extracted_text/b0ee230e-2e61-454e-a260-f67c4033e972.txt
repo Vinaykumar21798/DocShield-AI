@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Jonathan Hudson
+DOB: 1975-12-03
+SSN: 558-33-8660
+Insurance ID: hnB-48520335
+Visit Date: 2023-07-13
+Provider: Vargas Inc
+Procedure Code: CPT82306
+Diagnosis: Routine Checkup
+Amount Billed: $647.00
+Amount Covered: $394.00

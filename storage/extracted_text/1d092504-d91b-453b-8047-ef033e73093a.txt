@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Shari Torres
+DOB: 2004-09-08
+SSN: 888-43-6062
+Insurance ID: Prf-39854824
+Visit Date: 2024-01-31
+Provider: Edwards and Sons
+Procedure Code: CPT82306
+Diagnosis: Hypertension
+Amount Billed: $829.00
+Amount Covered: $228.00

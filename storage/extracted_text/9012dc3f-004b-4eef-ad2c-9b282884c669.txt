@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Jason Park
+DOB: 1952-10-02
+SSN: 263-98-9558
+Insurance ID: NoB-54580951
+Visit Date: 2024-12-23
+Provider: Simmons Ltd
+Procedure Code: CPT82306
+Diagnosis: Migraine
+Amount Billed: $926.00
+Amount Covered: $220.00

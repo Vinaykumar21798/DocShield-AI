@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Lisa Dean
+DOB: 1972-05-11
+SSN: 879-48-8877
+Insurance ID: sNy-04622118
+Visit Date: 2024-07-05
+Provider: Carlson, Martin and Velasquez
+Procedure Code: CPT99406
+Diagnosis: Routine Checkup
+Amount Billed: $965.00
+Amount Covered: $580.00

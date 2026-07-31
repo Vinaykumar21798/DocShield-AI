@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Michael Hale
+DOB: 1962-05-17
+SSN: 711-07-2199
+Insurance ID: IoZ-29154728
+Visit Date: 2025-03-04
+Provider: Stokes-Richardson
+Procedure Code: CPT99406
+Diagnosis: Back Pain
+Amount Billed: $464.00
+Amount Covered: $444.00

@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Matthew Ashley
+DOB 1993-10-03
+SSN: 330-72-5718
+Insurance ID: czQ-19683470
+
+Visit Date: 2024-09-15
+Provider: Lee PLC
+Procedure Code: CPT99406
+Diagnosis Migraine
+Amount Billed: $821.00
+AmountCovered: $282.00

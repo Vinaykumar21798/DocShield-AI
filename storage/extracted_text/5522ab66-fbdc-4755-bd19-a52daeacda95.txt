@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Abigail Hunt
+DOB 1987-04-19
+SSN: 228-17-8244
+Insurance ID: bdm-81175541
+
+Visit Date: 2025-03-10
+Provider: Johnson Ltd
+Procedure Code: CPT99406
+Diagnosis Back Pain
+Amount Billed: $501.00
+AmountCovered: $473.00

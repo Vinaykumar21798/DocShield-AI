@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Elizabeth Patterson
+DOB: 1990-11-17
+SSN: 200-63-6289
+Insurance ID: WhJ-43014171
+Visit Date: 2024-01-02
+Provider: Martin, Tyler and Collins
+Procedure Code: CPT99213
+Diagnosis: Migraine
+Amount Billed: $953.00
+Amount Covered: $190.00

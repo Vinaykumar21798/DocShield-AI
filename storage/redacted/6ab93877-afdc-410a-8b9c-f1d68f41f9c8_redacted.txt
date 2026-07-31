@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: [REDACTED_PATIENT]
+DOB [REDACTED_DATE_OF_BIRTH]
+SSN: [REDACTED_SSN]
+Insurance ID: [REDACTED_INSURANCE_ID]
+
+Visit Date: [REDACTED_VISIT_DATE]
+Provider: [REDACTED_PROVIDER], Wellsand Marshall
+Procedure Code: [REDACTED_CPT_CODE]
+Diagnosis Migraine
+Amount Billed: $512.00
+AmountCovered: $305.00

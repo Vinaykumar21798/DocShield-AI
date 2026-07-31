@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Bryan Martin
+DOB 1998-07-15
+SSN: 773-33-5432
+Insurance ID: DJi-56142412
+
+Visit Date: 2024-08-04
+Provider: Peterson, Camposand Hawkins
+Procedure Code: CPT99213
+Diagnosis: Type 2 Diabetes
+Amount Billed: $212.00
+AmountCovered: $599.00

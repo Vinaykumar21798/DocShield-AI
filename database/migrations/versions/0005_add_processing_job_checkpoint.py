@@ -1,6 +1,6 @@
 """add processing job checkpoint
 
-Revision ID: 0005_add_processing_job_checkpoint
+Revision ID: 0005_processing_job_checkpoint
 Revises: 0004_add_dev2_detection_schema
 Create Date: 2026-07-29 00:00:00.000000
 """
@@ -9,7 +9,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "0005_add_processing_job_checkpoint"
+revision: str = "0005_processing_job_checkpoint"
 down_revision: Union[str, None] = "0004_add_dev2_detection_schema"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Ashley Shepard
+DOB: 1962-02-05
+SSN: 595-45-2174
+Insurance ID: nie-47611777
+Visit Date: 2024-07-23
+Provider: Martin PLC
+Procedure Code: CPT99213
+Diagnosis: Routine Checkup
+Amount Billed: $631.00
+Amount Covered: $549.00

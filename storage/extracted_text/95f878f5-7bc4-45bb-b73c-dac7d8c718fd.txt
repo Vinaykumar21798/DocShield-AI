@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Amber Huber
+DOB: 1955-09-10
+SSN: 841-27-9039
+Insurance ID: rrS-84073406
+Visit Date: 2023-08-15
+Provider: Smith and Sons
+Procedure Code: CPT82306
+Diagnosis: Hypertension
+Amount Billed: $621.00
+Amount Covered: $694.00

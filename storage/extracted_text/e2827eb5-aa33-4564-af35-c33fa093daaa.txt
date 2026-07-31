@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Jessica Pacheco
+DOB: 1970-09-18
+SSN: 612-69-1319
+Insurance ID: qVM-32811898
+Visit Date: 2024-04-10
+Provider: Fisher Ltd
+Procedure Code: CPT70450
+Diagnosis: Hypertension
+Amount Billed: $578.00
+Amount Covered: $346.00

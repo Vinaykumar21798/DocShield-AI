@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Kevin Baker
+DOB 1961-03-30
+SSN: 592-99-0834
+Insurance ID: HsF-25346333
+
+Visit Date: 2023-05-31
+Provider: Mack, Smith and Webb
+Procedure Code: CPT99213
+Diagnosis: Type 2 Diabetes
+Amount Billed: $977.00
+AmountCovered: $404.00

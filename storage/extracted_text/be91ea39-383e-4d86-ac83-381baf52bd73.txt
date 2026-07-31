@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Brandi Russell
+DOB: 1979-03-27
+SSN: 197-02-0304
+Insurance ID: Khb-96887689
+Visit Date: 2024-12-31
+Provider: Cannon-Jones
+Procedure Code: CPT99406
+Diagnosis: Back Pain
+Amount Billed: $918.00
+Amount Covered: $761.00

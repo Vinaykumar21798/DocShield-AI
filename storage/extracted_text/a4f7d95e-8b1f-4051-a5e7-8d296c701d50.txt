@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Michael Hale
+DOB: 1962-05-17
+SSN: 711-07-2199
+Insurance ID: IoZ-29154728
+Visit Date: 2024-04-25
+Provider: Gonzalez, Wilson and Moody
+Procedure Code: CPT99406
+Diagnosis: Routine Checkup
+Amount Billed: $618.00
+Amount Covered: $696.00

@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Melanie Camacho
+DOB 1971-04-06
+SSN: 544-90-1324
+Insurance ID: hgG-63037612
+
+Visit Date: 2023-12-10
+Provider: Rivera-Morris
+Procedure Code: CPT82306
+Diagnosis Migraine
+Amount Billed: $350.00
+AmountCovered: $720.00

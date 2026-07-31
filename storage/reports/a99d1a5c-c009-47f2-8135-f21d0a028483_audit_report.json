@@ -1,0 +1,42 @@
+{
+  "document_id": "a99d1a5c-c009-47f2-8135-f21d0a028483",
+  "document_type": "INSURANCE",
+  "ocr_result_id": "4d8be665-1598-4fb4-a248-20208d28f4dd",
+  "total_entities": 3,
+  "total_pii": 2,
+  "total_phi": 1,
+  "pending_reviews": 2,
+  "redacted_file_path": "storage/redacted/a99d1a5c-c009-47f2-8135-f21d0a028483_redacted.txt",
+  "detectors_used": [
+    "Regex"
+  ],
+  "entities": [
+    {
+      "entity_id": "8682db82-262c-432d-b117-bf7118152eaa",
+      "entity_type": "EMAIL",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "is_review_required": true,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "d66ac13e-ee83-4e22-96d6-c50a9947a5ce",
+      "entity_type": "EMAIL",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "is_review_required": true,
+      "is_redacted": true,
+      "detector": "Regex"
+    },
+    {
+      "entity_id": "955a7894-b6a6-4e08-8826-6b89e46e8606",
+      "entity_type": "INSURANCE_ID",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex"
+    }
+  ]
+}

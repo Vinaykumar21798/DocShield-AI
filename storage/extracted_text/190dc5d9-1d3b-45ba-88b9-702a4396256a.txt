@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Jason Brady
+DOB: 1997-05-04
+SSN: 119-59-8698
+Insurance ID: ZOG-33142469
+Visit Date: 2025-03-03
+Provider: Ellison-Clark
+Procedure Code: CPT70450
+Diagnosis: Routine Checkup
+Amount Billed: $521.00
+Amount Covered: $288.00

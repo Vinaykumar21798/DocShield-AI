@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: David Smith
+DOB 1969-11-26
+SSN: 883-26-1069
+Insurance ID: hyD-41997025
+
+Visit Date: 2025-02-16
+Provider: Mcfarland, Massey and Hall
+Procedure Code: CPT82306
+Diagnosis: Type 2 Diabetes
+Amount Billed: $468.00
+AmountCovered: $224.00

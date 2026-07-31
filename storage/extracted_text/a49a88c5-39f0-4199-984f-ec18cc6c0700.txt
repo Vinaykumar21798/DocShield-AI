@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Brian Turner
+DOB: 1965-03-02
+SSN: 303-44-0436
+Insurance ID: RCG-41134800
+Visit Date: 2023-11-09
+Provider: Byrd PLC
+Procedure Code: CPT70450
+Diagnosis: Migraine
+Amount Billed: $633.00
+Amount Covered: $301.00

@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Anthony Ramos
+DOB: 1989-02-07
+SSN: 301-10-6468
+Insurance ID: aGn-07476372
+Visit Date: 2023-10-09
+Provider: Lambert-Strong
+Procedure Code: CPT70450
+Diagnosis: Routine Checkup
+Amount Billed: $778.00
+Amount Covered: $665.00

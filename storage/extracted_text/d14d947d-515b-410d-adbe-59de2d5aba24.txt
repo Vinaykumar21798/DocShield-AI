@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Alicia Gibbs
+DOB: 1962-08-16
+SSN: 185-46-3574
+Insurance ID: yrl-85786693
+Visit Date: 2024-01-02
+Provider: Pittman-Osborne
+Procedure Code: CPT70450
+Diagnosis: Back Pain
+Amount Billed: $442.00
+Amount Covered: $274.00

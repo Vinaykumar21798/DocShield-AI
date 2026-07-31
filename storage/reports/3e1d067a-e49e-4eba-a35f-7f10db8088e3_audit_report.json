@@ -1,0 +1,12 @@
+{
+  "document_id": "3e1d067a-e49e-4eba-a35f-7f10db8088e3",
+  "document_type": "UNKNOWN",
+  "ocr_result_id": "46673dba-6551-4b66-a303-af3c22781943",
+  "total_entities": 0,
+  "total_pii": 0,
+  "total_phi": 0,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/3e1d067a-e49e-4eba-a35f-7f10db8088e3_redacted.txt",
+  "detectors_used": [],
+  "entities": []
+}

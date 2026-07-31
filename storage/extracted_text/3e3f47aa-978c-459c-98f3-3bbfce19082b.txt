@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Jill Forbes
+DOB 1965-05-19
+SSN:717-67-5651
+Insurance ID: NtJ-70468210
+
+Visit Date: 2024-02-12
+Provider: Guzman Inc
+Procedure Code: CPT70450
+Diagnosis Migraine
+Amount Billed: $607.00
+AmountCovered: $735.00
