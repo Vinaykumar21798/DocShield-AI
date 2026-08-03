@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -141,6 +142,13 @@ def test_workflow_completes_native_text_document(
     report_file = tmp_path / report.report_path
     assert redacted_text_file.exists()
     assert report_file.exists()
+    report_payload = json.loads(report_file.read_text(encoding="utf-8"))
+    assert any(
+        entity["entity_type"] == "EMAIL"
+        and entity["entity_value"] == "jane.patient@example.com"
+        for entity in report_payload["entities"]
+    )
+
     assert "[REDACTED_EMAIL]" in redacted_text_file.read_text(
         encoding="utf-8",
     )

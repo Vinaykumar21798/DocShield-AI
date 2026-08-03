@@ -84,6 +84,15 @@ def test_upload_process_and_read_extracted_text_e2e(
                 encoding="utf-8"
             ) == text_response.json()["extracted_text"]
 
+            entities_response = client.get(f"/documents/{document_id}/entities")
+            assert entities_response.status_code == 200
+            entities = entities_response.json()
+            assert any(
+                entity["entity_type"] == "EMAIL"
+                and entity["entity_value"] == "jane.patient@example.com"
+                for entity in entities
+            )
+
             reviews_response = client.get(f"/documents/{document_id}/reviews")
             assert reviews_response.status_code == 200
             reviews = reviews_response.json()
@@ -137,12 +146,22 @@ def test_upload_process_and_read_extracted_text_e2e(
             report = report_response.json()
             assert report["payload"]["document_id"] == document_id
             assert report["payload"]["total_entities"] >= 2
+            assert any(
+                entity["entity_type"] == "EMAIL"
+                and entity["entity_value"] == "jane.patient@example.com"
+                for entity in report["payload"]["entities"]
+            )
 
             report_file_response = client.get(
                 f"/reports/{reports[0]['report_id']}/file"
             )
             assert report_file_response.status_code == 200
             assert report_file_response.json()["document_id"] == document_id
+            assert any(
+                entity["entity_type"] == "EMAIL"
+                and entity["entity_value"] == "jane.patient@example.com"
+                for entity in report_file_response.json()["entities"]
+            )
     finally:
         app.dependency_overrides.clear()
 

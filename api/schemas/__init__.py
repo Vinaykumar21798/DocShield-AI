@@ -4,6 +4,7 @@ from .document import (
     DocumentUpdate,
 )
 from .document_status import DocumentStatusResponse
+from .entity import EntityResponse
 from .extracted_text import ExtractedTextResponse
 from .ocr_result import (
     OCRResultCreate,
@@ -29,6 +30,7 @@ __all__ = [
     "DocumentResponse",
     "DocumentStatusResponse",
     "DocumentUpdate",
+    "EntityResponse",
     "ExtractedTextResponse",
     "OCRResultCreate",
     "OCRResultResponse",

@@ -446,6 +446,25 @@ button:disabled {
 .metric {
   position: relative;
   overflow: hidden;
+  width: 100%;
+  appearance: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.metric:hover,
+.metric:focus-visible,
+.metric.is-active {
+  border-color: rgba(245, 153, 35, 0.55);
+  background: #fff8ed;
+  box-shadow: 0 0 0 3px rgba(245, 153, 35, 0.12);
+  outline: none;
+}
+
+.metric:hover {
+  transform: translateY(-1px);
 }
 
 .metric::before {

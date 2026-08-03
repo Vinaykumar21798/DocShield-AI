@@ -1,0 +1,46 @@
+SUNRISE FAMILY MEDICINE
+
+APPOINTMENT REMINDER
+CONFIDENTIAL PATIENT COMMUNICATION
+Date Generated: May 14, 2025
+PATIENT INFORMATION:
+• Name: Sophia Garcia
+• Date of Birth: [REDACTED_DATE_OF_BIRTH]
+• Medical Record #: [REDACTED_INSURANCE_ID]
+• Insurance: Blue Cross Blue Shield, ID# [REDACTED_INSURANCE_ID]
+UPCOMING APPOINTMENT DETAILS:
+This is a reminder of your upcoming appointment:
+Provider: [REDACTED_PROVIDER], Gastroenterology Date: Monday, May 19, 2025 Time: 2:15 PM Location:
+Sunrise Family Medicine, Suite 302 Address: [REDACTED_ADDRESS], Farmington Hills, MI [REDACTED_ZIP_CODE]
+APPOINTMENT TYPE: Follow-up for Irritable Bowel Syndrome (ICD-10: [REDACTED_ICD10_CODE])
+SPECIAL INSTRUCTIONS:
+• Please arrive 15 minutes early to update your insurance information
+• Bring a list of all current medications, including over-the-counter medications
+• Bring your completed symptom diary (provided at your last visit on 04/12/2025)
+• Fast for 4 hours before your appointment as you may need laboratory tests
+PREPARATIoN NEEDED: Per your previous discussion with [REDACTED_DOCTOR], please follow these
+instructions:
+• Complete the food sensitivity questionnaire sent to your patient portal
+• Stop taking your probiotic supplement (Align) 3 days before the appointment
+• Continue your prescribed medications: Dicyclomine 10mg as needed
+YOUR RECENT HISTORY: Your last visit was on April 12, 2025, where you reported moderate
+abdominal pain (rated 5/10) and increased frequency of loose stools following meals. Dr. Wilson
+recommended dietary modifications and prescribed dicyclomine for symptom management.
+
+
+
+LABORATORY RESULTS REVIEW: We will review your recent lab results from May 2, 2025:
+• Complete Blood Count ([REDACTED_LAB])
+Comprehensive Metabolic Panel (CMP)
+Celiac Disease Antibody Panel
+Calprotectin Test
+NEED TO RESCHEDULE? If you need to reschedule, please contact us at least 24 hours in advance:
+• Phone: [REDACTED_US_PHONE_NUMBER]
+• Patient Portal: [REDACTED_URL]
+• Email: [REDACTED_EMAIL]
+COPAY INFORMATION: Based on your insurance plan, your estimated copay for this specialist visit is
+$40.00. We accept cash, credit cards, and FSA/HSA cards.
+
+PRIVACY NOTICE: This communication contains Protected Health Information (PHI) and is intended
+only for the individual named. If you received this in error, please notify us immediately at (248) 555-
+7890 and destroy this document. Unauthorized use or disclosure is prohibited by HIPAA regulations.

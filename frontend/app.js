@@ -25,7 +25,9 @@
     metricPii: document.getElementById("metricPii"),
     metricPhi: document.getElementById("metricPhi"),
     metricPending: document.getElementById("metricPending"),
+    metricFilters: Array.from(document.querySelectorAll("[data-review-filter]")),
     reviewSummary: document.getElementById("reviewSummary"),
+    reviewsHead: document.getElementById("reviewsHead"),
     reviewsBody: document.getElementById("reviewsBody"),
     toggleValuesBtn: document.getElementById("toggleValuesBtn"),
     textMeta: document.getElementById("textMeta"),
@@ -44,13 +46,29 @@
       status: null,
       text: null,
       reviews: [],
+      entities: [],
       reports: [],
       redactions: [],
     },
     revealValues: false,
+    activeReviewFilter: "all",
     pollTimer: null,
   };
 
+  const REVIEW_FILTERS = {
+    all: "Total entities",
+    pii: "PII",
+    phi: "PHI",
+    pending: "Pending review",
+  };
+
+  const COMPLETED_REVIEW_STATUSES = [
+    "APPROVED",
+    "CONFIRMED",
+    "CORRECTED",
+    "REJECTED",
+    "SKIPPED",
+  ];
   function defaultApiBase() {
     if (window.location.protocol === "file:") {
       return "http://localhost:8001";
@@ -196,8 +214,8 @@
     return `${Math.round(number * 100)}%`;
   }
 
-  function emptyRow(message) {
-    return `<tr><td colspan="6" class="empty-state">${escapeHtml(message)}</td></tr>`;
+  function emptyRow(message, colSpan) {
+    return `<tr><td colspan="${colSpan || 6}" class="empty-state">${escapeHtml(message)}</td></tr>`;
   }
 
   function renderFiles() {
@@ -256,6 +274,7 @@
     state.documents = state.documents.filter((document) => document.id !== documentId);
     if (state.activeDocumentId === documentId) {
       state.activeDocumentId = "";
+      state.activeReviewFilter = "all";
       els.documentIdInput.value = "";
     }
     persistState();
@@ -265,8 +284,8 @@
   function renderEmptyDashboard() {
     renderStatus(null);
     renderText(null);
-    renderReviews([]);
-    renderMetrics([], [], []);
+    renderReviews([], []);
+    renderMetrics([], [], [], []);
     renderArtifacts([], []);
     renderWorkflow(0);
   }
@@ -320,12 +339,109 @@
     updateDocumentStatus(status);
   }
 
-  function renderMetrics(reviews, reports, redactions) {
+  function normalizeCategory(value) {
+    return String(value || "").toUpperCase();
+  }
+
+  function normalizeReviewStatus(review) {
+    return String(review && review.review_status || "").toUpperCase();
+  }
+
+  function getEntityId(entity) {
+    return entity && (entity.entity_id || entity.id);
+  }
+
+  function getReviewEntity(review) {
+    return review && review.entity ? review.entity : {};
+  }
+
+  function getConfidence(entity) {
+    return entity.final_confidence == null ? entity.confidence_score : entity.final_confidence;
+  }
+
+  function getPendingReviews() {
+    return state.dashboard.reviews.filter((review) => normalizeReviewStatus(review) === "PENDING");
+  }
+
+  function getDisplayEntities() {
+    if (state.dashboard.entities.length) {
+      return state.dashboard.entities;
+    }
+    return state.dashboard.reviews
+      .map((review) => review.entity)
+      .filter(Boolean);
+  }
+
+  function getReviewMap() {
+    const reviewsByEntityId = new Map();
+    state.dashboard.reviews.forEach((review) => {
+      const id = getEntityId(getReviewEntity(review));
+      if (id) {
+        reviewsByEntityId.set(id, review);
+      }
+    });
+    return reviewsByEntityId;
+  }
+
+  function getFilteredFindingRows() {
+    const filter = REVIEW_FILTERS[state.activeReviewFilter]
+      ? state.activeReviewFilter
+      : "all";
+
+    if (filter === "pending") {
+      return getPendingReviews().map((review) => ({
+        entity: getReviewEntity(review),
+        review,
+      }));
+    }
+
+    const reviewMap = getReviewMap();
+    let entities = getDisplayEntities();
+    if (filter === "pii" || filter === "phi") {
+      entities = entities.filter((entity) => normalizeCategory(entity.privacy_category) === filter.toUpperCase());
+    }
+
+    return entities.map((entity) => ({
+      entity,
+      review: reviewMap.get(getEntityId(entity)) || null,
+    }));
+  }
+
+  function renderReviewHeader(showReviewColumns) {
+    els.reviewsHead.innerHTML = `
+      <tr>
+        <th>Entity</th>
+        <th>Value</th>
+        <th>Category</th>
+        <th>Confidence</th>
+        ${showReviewColumns ? "<th>Status</th><th>Decision</th>" : ""}
+      </tr>
+    `;
+  }
+
+  function renderMetricFilterState() {
+    els.metricFilters.forEach((button) => {
+      const isActive = button.dataset.reviewFilter === state.activeReviewFilter;
+      button.classList.toggle("is-active", isActive);
+      button.setAttribute("aria-pressed", String(isActive));
+    });
+  }
+
+  function renderMetrics(reviews, reports, redactions, entities) {
+    if (Array.isArray(entities)) {
+      state.dashboard.entities = entities;
+    }
+
     const latestReport = reports[0] || null;
-    const pendingReviews = reviews.filter((review) => String(review.review_status || "").toUpperCase() === "PENDING").length;
-    const piiCount = latestReport ? latestReport.total_pii : reviews.filter((review) => String(review.entity && review.entity.privacy_category || "").toUpperCase() === "PII").length;
-    const phiCount = latestReport ? latestReport.total_phi : reviews.filter((review) => String(review.entity && review.entity.privacy_category || "").toUpperCase() === "PHI").length;
-    const entityCount = latestReport ? latestReport.total_entities : reviews.length;
+    const entityRows = getDisplayEntities();
+    const pendingReviews = reviews.filter((review) => normalizeReviewStatus(review) === "PENDING").length;
+    const piiCount = entityRows.length
+      ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PII").length
+      : (latestReport ? latestReport.total_pii : 0);
+    const phiCount = entityRows.length
+      ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PHI").length
+      : (latestReport ? latestReport.total_phi : 0);
+    const entityCount = entityRows.length || (latestReport ? latestReport.total_entities : 0);
 
     els.metricEntities.textContent = entityCount || 0;
     els.metricPii.textContent = piiCount || 0;
@@ -335,33 +451,53 @@
     if (latestReport) {
       const redactionCount = latestReport.total_redactions || redactions.length || 0;
       els.reportTimestamp.textContent = `${redactionCount} redaction${redactionCount === 1 ? "" : "s"} logged. Report created ${formatDate(latestReport.created_at)}.`;
-    } else if (reviews.length || redactions.length) {
-      els.reportTimestamp.textContent = `${reviews.length} entity review item${reviews.length === 1 ? "" : "s"}; ${redactions.length} redaction artifact${redactions.length === 1 ? "" : "s"}.`;
+    } else if (entityRows.length || reviews.length || redactions.length) {
+      els.reportTimestamp.textContent = `${entityRows.length} detected entit${entityRows.length === 1 ? "y" : "ies"}; ${reviews.length} review item${reviews.length === 1 ? "" : "s"}.`;
     } else {
       els.reportTimestamp.textContent = "Waiting for report data.";
     }
   }
 
-  function renderReviews(reviews) {
-    state.dashboard.reviews = reviews || [];
-    const pending = state.dashboard.reviews.filter((review) => String(review.review_status || "").toUpperCase() === "PENDING").length;
+  function renderReviews(reviews, entities) {
+    if (Array.isArray(reviews)) {
+      state.dashboard.reviews = reviews;
+    }
+    if (Array.isArray(entities)) {
+      state.dashboard.entities = entities;
+    }
 
-    els.reviewSummary.textContent = state.dashboard.reviews.length
-      ? `${state.dashboard.reviews.length} finding${state.dashboard.reviews.length === 1 ? "" : "s"}; ${pending} pending.`
-      : "No review items loaded.";
+    const filterLabel = REVIEW_FILTERS[state.activeReviewFilter] || REVIEW_FILTERS.all;
+    const showReviewColumns = state.activeReviewFilter === "pending";
+    const colSpan = showReviewColumns ? 6 : 4;
+    const rows = getFilteredFindingRows();
+    const pending = getPendingReviews().length;
+
+    renderReviewHeader(showReviewColumns);
+    renderMetricFilterState();
     els.toggleValuesBtn.textContent = state.revealValues ? "Mask values" : "Reveal values";
 
-    if (!state.dashboard.reviews.length) {
-      els.reviewsBody.innerHTML = emptyRow(state.activeDocumentId ? "No review records are available yet." : "No document selected.");
+    if (!state.activeDocumentId) {
+      els.reviewSummary.textContent = "No review items loaded.";
+      els.reviewsBody.innerHTML = emptyRow("No document selected.", colSpan);
       return;
     }
 
-    els.reviewsBody.innerHTML = state.dashboard.reviews.map((review) => {
-      const entity = review.entity || {};
-      const status = review.review_status || "PENDING";
+    els.reviewSummary.textContent = `${filterLabel}: ${rows.length} finding${rows.length === 1 ? "" : "s"}; ${pending} pending.`;
+
+    if (!rows.length) {
+      const message = state.activeReviewFilter === "pending"
+        ? "No pending review records."
+        : `No ${filterLabel.toLowerCase()} entity records are available yet.`;
+      els.reviewsBody.innerHTML = emptyRow(message, colSpan);
+      return;
+    }
+
+    els.reviewsBody.innerHTML = rows.map(({ entity, review }) => {
+      const status = review && review.review_status ? review.review_status : "PENDING";
       const detector = entity.detector ? `Detector: ${entity.detector}` : "Detector unavailable";
-      const confidence = entity.final_confidence == null ? entity.confidence_score : entity.final_confidence;
-      const isComplete = ["APPROVED", "CONFIRMED", "CORRECTED", "REJECTED", "SKIPPED"].includes(String(status).toUpperCase());
+      const confidence = getConfidence(entity);
+      const isComplete = COMPLETED_REVIEW_STATUSES.includes(String(status).toUpperCase());
+      const reviewId = review && review.review_id;
       return `
         <tr>
           <td>
@@ -373,18 +509,19 @@
           <td><span class="entity-value" title="${state.revealValues ? "" : "Masked"}">${escapeHtml(maskValue(entity.entity_value))}</span></td>
           <td>${escapeHtml(entity.privacy_category || "-")}</td>
           <td>${escapeHtml(confidenceLabel(confidence))}</td>
-          <td><span class="status-pill ${statusTone(status)}">${escapeHtml(status)}</span></td>
-          <td>
-            <span class="decision-group">
-              <button class="button secondary compact" type="button" data-review-id="${escapeHtml(review.review_id)}" data-decision="APPROVED" ${isComplete ? "disabled" : ""}>Approve</button>
-              <button class="button danger compact" type="button" data-review-id="${escapeHtml(review.review_id)}" data-decision="REJECTED" ${isComplete ? "disabled" : ""}>Reject</button>
-            </span>
-          </td>
+          ${showReviewColumns ? `
+            <td><span class="status-pill ${statusTone(status)}">${escapeHtml(status)}</span></td>
+            <td>
+              <span class="decision-group">
+                <button class="button secondary compact" type="button" data-review-id="${escapeHtml(reviewId || "")}" data-decision="APPROVED" ${isComplete || !reviewId ? "disabled" : ""}>Approve</button>
+                <button class="button danger compact" type="button" data-review-id="${escapeHtml(reviewId || "")}" data-decision="REJECTED" ${isComplete || !reviewId ? "disabled" : ""}>Reject</button>
+              </span>
+            </td>
+          ` : ""}
         </tr>
       `;
     }).join("");
   }
-
   function renderText(textPayload) {
     state.dashboard.text = textPayload || null;
     if (!textPayload || !textPayload.extracted_text) {
@@ -555,20 +692,21 @@
 
     const requests = await Promise.allSettled([
       status.has_extracted_text ? apiFetch(`/documents/${encodeURIComponent(id)}/text`) : Promise.resolve(null),
+      apiFetch(`/documents/${encodeURIComponent(id)}/entities`),
       apiFetch(`/documents/${encodeURIComponent(id)}/reviews`),
       apiFetch(`/documents/${encodeURIComponent(id)}/reports`),
       apiFetch(`/documents/${encodeURIComponent(id)}/redactions`),
     ]);
 
     const text = requests[0].status === "fulfilled" ? requests[0].value : null;
-    const reviews = requests[1].status === "fulfilled" ? requests[1].value : [];
-    const reports = requests[2].status === "fulfilled" ? requests[2].value : [];
-    const redactions = requests[3].status === "fulfilled" ? requests[3].value : [];
-
+    const entities = requests[1].status === "fulfilled" ? requests[1].value : [];
+    const reviews = requests[2].status === "fulfilled" ? requests[2].value : [];
+    const reports = requests[3].status === "fulfilled" ? requests[3].value : [];
+    const redactions = requests[4].status === "fulfilled" ? requests[4].value : [];
     renderStatus(status);
     renderText(text);
-    renderReviews(reviews);
-    renderMetrics(reviews, reports, redactions);
+    renderReviews(reviews, entities);
+    renderMetrics(reviews, reports, redactions, entities);
     renderArtifacts(reports, redactions);
     updateWorkflow(status, reviews, reports, redactions);
 
@@ -642,23 +780,33 @@
       loadDashboard(button.dataset.documentId);
     });
 
+    els.metricFilters.forEach((button) => {
+      button.addEventListener("click", () => {
+        const filter = button.dataset.reviewFilter;
+        if (!REVIEW_FILTERS[filter]) return;
+        state.activeReviewFilter = filter;
+        renderReviews();
+      });
+    });
+
     els.clearRecentBtn.addEventListener("click", () => {
       state.documents = [];
       state.activeDocumentId = "";
+      state.activeReviewFilter = "all";
       els.documentIdInput.value = "";
       persistState();
       renderDocumentList();
       renderStatus(null);
-      renderReviews([]);
+      renderReviews([], []);
       renderText(null);
-      renderMetrics([], [], []);
+      renderMetrics([], [], [], []);
       renderArtifacts([], []);
       stopPolling();
     });
 
     els.toggleValuesBtn.addEventListener("click", () => {
       state.revealValues = !state.revealValues;
-      renderReviews(state.dashboard.reviews);
+      renderReviews();
     });
 
     els.reviewsBody.addEventListener("click", (event) => {
@@ -690,9 +838,9 @@
     renderDocumentList();
     renderFiles();
     renderStatus(null);
-    renderReviews([]);
+    renderReviews([], []);
     renderText(null);
-    renderMetrics([], [], []);
+    renderMetrics([], [], [], []);
     renderArtifacts([], []);
     bindEvents();
     checkHealth();

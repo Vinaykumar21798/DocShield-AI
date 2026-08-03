@@ -797,11 +797,16 @@ class DocumentProcessingWorkflow:
                 {
                     "entity_id": entity.id,
                     "entity_type": entity.entity_type,
+                    "entity_value": entity.entity_value,
                     "privacy_category": entity.privacy_category,
                     "confidence_score": entity.confidence_score,
+                    "final_confidence": entity.final_confidence,
                     "is_review_required": entity.is_review_required,
                     "is_redacted": entity.is_redacted,
                     "detector": entity.detector,
+                    "page_number": entity.page_number,
+                    "start_char": entity.start_char,
+                    "end_char": entity.end_char,
                 }
                 for entity in entities
             ],

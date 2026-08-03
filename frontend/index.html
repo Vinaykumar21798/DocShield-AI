@@ -102,10 +102,10 @@
           </div>
         </div>
         <div class="metric-grid">
-          <div class="metric"><span>Total entities</span><strong id="metricEntities">0</strong></div>
-          <div class="metric accent"><span>PII</span><strong id="metricPii">0</strong></div>
-          <div class="metric warm"><span>PHI</span><strong id="metricPhi">0</strong></div>
-          <div class="metric dark"><span>Pending review</span><strong id="metricPending">0</strong></div>
+          <button class="metric is-active" type="button" data-review-filter="all" aria-pressed="true"><span>Total entities</span><strong id="metricEntities">0</strong></button>
+          <button class="metric accent" type="button" data-review-filter="pii" aria-pressed="false"><span>PII</span><strong id="metricPii">0</strong></button>
+          <button class="metric warm" type="button" data-review-filter="phi" aria-pressed="false"><span>PHI</span><strong id="metricPhi">0</strong></button>
+          <button class="metric dark" type="button" data-review-filter="pending" aria-pressed="false"><span>Pending review</span><strong id="metricPending">0</strong></button>
         </div>
       </section>
 
@@ -121,7 +121,7 @@
         </div>
         <div class="table-wrap">
           <table class="reviews-table">
-            <thead>
+            <thead id="reviewsHead">
               <tr>
                 <th>Entity</th>
                 <th>Value</th>
