@@ -472,10 +472,12 @@ class DetectionService:
                 previous.start_char == entity.start_char
                 and previous.end_char == entity.end_char
             ):
-                # Duplicate span/type found. Check if new detection is higher confidence.
+                # Duplicate span/type found. Merge detector names regardless of confidence.
+                previous.detector = Deduplicator._merged_detectors(previous.detector, entity.detector)
+
+                # Check if new detection is higher confidence.
                 if entity.confidence_score > previous.confidence_score:
                     previous.confidence_score = entity.confidence_score
-                    previous.detector = entity.detector
                     if entity.metadata:
                         previous.metadata.update(entity.metadata)
 
@@ -609,8 +611,6 @@ class DetectionService:
             document_type=document_type,
         )
         route = self.router.route_for_domain(domain)
-        if config.detection_llm_enabled and "qwen3b" not in route:
-            route = route + ("qwen3b",)
         detector_getters = self._detector_getters()
 
         logger.info(
@@ -934,6 +934,14 @@ class DetectionService:
                     and entity.end_char > accepted.start_char
                 ):
                     overlap = True
+                    # Record conflicting types for overlapping spans
+                    if accepted.entity_type.upper() != entity.entity_type.upper():
+                        conflicting = accepted.metadata.get("conflicting_types") or [accepted.entity_type]
+                        if entity.entity_type not in conflicting:
+                            conflicting.append(entity.entity_type)
+                        accepted.metadata["conflicting_types"] = conflicting
+                    # Merge detector names if they overlap
+                    accepted.detector = Deduplicator._merged_detectors(accepted.detector, entity.detector)
                     break
             if not overlap:
                 non_overlapping.append(entity)

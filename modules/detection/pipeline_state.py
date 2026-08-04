@@ -112,7 +112,7 @@ STRUCTURED_TOKEN_PATTERN = re.compile(
 )
 
 PROPER_NOUN_PATTERN = re.compile(
-    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4}\b"
+    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4}\b"
 )
 
 TITLE_NAME_PATTERN = re.compile(
@@ -292,7 +292,11 @@ class PipelineState:
             r"^\s*([A-Za-z][A-Za-z ]{1,35})\s*[:\-]\s*(.+?)\s*$",
             line,
         )
+        exclude_start = -1
+        exclude_end = -1
         if label_match and self._looks_like_label(label_match.group(1)):
+            exclude_start = label_match.start(1)
+            exclude_end = label_match.end(1)
             self._add_candidate(
                 candidates,
                 line_start + label_match.start(2),
@@ -308,6 +312,12 @@ class PipelineState:
             (PROPER_NOUN_PATTERN, "proper_noun"),
         ):
             for match in pattern.finditer(line):
+                if (
+                    exclude_start != -1
+                    and match.start() >= exclude_start
+                    and match.end() <= exclude_end
+                ):
+                    continue
                 self._add_candidate(
                     candidates,
                     line_start + match.start(),
@@ -319,6 +329,12 @@ class PipelineState:
         for word_match in re.finditer(r"\b[a-zA-Z][a-zA-Z-]{2,}\b", line):
             value = word_match.group().lower()
             if value not in CANDIDATE_SIGNAL_WORDS:
+                continue
+            if (
+                exclude_start != -1
+                and word_match.start() >= exclude_start
+                and word_match.end() <= exclude_end
+            ):
                 continue
             self._add_candidate(
                 candidates,

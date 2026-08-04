@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import logging
@@ -86,7 +86,7 @@ class OllamaValidator:
     âœ“ Validation cache
     """
 
-    MODEL_NAME = "qwen2.5:8b"
+    MODEL_NAME = "qwen3:4b"
 
     TEMPERATURE = 0.10
 
@@ -94,7 +94,7 @@ class OllamaValidator:
 
     MAX_RETRIES = 2
 
-    REQUEST_TIMEOUT = 30
+    REQUEST_TIMEOUT = 120
 
     KEEP_ALIVE = "5m"
 
@@ -156,6 +156,8 @@ class OllamaValidator:
         import os
 
         ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.MODEL_NAME = os.getenv("OLLAMA_VALIDATOR_MODEL", self.MODEL_NAME)
+        self.REQUEST_TIMEOUT = int(os.getenv("OLLAMA_REQUEST_TIMEOUT", self.REQUEST_TIMEOUT))
         self.client = None
         self.ollama_host = ollama_host
 
