@@ -113,6 +113,7 @@ class PresidioDetector(BaseDetector):
         "LOCATION",
         "DATE_TIME",
         "ORGANIZATION",
+        "NPI_NUMBER",
     ]
 
     @property
@@ -141,10 +142,21 @@ class PresidioDetector(BaseDetector):
                         "No local spaCy English model is installed"
                     )
 
-                from presidio_analyzer import AnalyzerEngine, RecognizerRegistry
+                from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, PatternRecognizer, Pattern
 
                 registry = RecognizerRegistry()
                 registry.load_predefined_recognizers()
+
+                # Add custom NpiRecognizer
+                npi_pat = Pattern(name="npi_pattern", regex=r"\b\d{10}\b", score=0.9)
+                class PresidioNpiRecognizer(PatternRecognizer):
+                    def __init__(self):
+                        super().__init__(
+                            supported_entity="NPI_NUMBER",
+                            patterns=[npi_pat],
+                            context=["npi", "provider npi"]
+                        )
+                registry.add_recognizer(PresidioNpiRecognizer())
 
                 remove = [
                     "NhsRecognizer",
@@ -247,6 +259,7 @@ class PresidioDetector(BaseDetector):
         for result in results:
 
             entity_value = text[result.start:result.end].strip()
+            value_lower = entity_value.lower()
 
             # Reclassify PERSON/ORGANIZATION to LOCATION if preceded by address label
             preceding_context = text[max(0, result.start - 15):result.start].lower()
@@ -254,18 +267,30 @@ class PresidioDetector(BaseDetector):
             if "address" in preceding_context and current_entity_type in {"PERSON", "ORGANIZATION"}:
                 current_entity_type = "LOCATION"
 
+            # PO Box mapping
+            if "box" in value_lower and current_entity_type in {"LOCATION", "ORGANIZATION"}:
+                current_entity_type = "ADDRESS"
+
+            # Validate NPI
+            if current_entity_type == "NPI_NUMBER":
+                if not self.is_valid_npi(entity_value):
+                    continue
+
+            # Reclassify Hyperlipidemia and other diseases from PERSON/ORG/LOCATION to DISEASE
+            DISEASE_KEYWORDS = {"hyperlipidemia", "hypercholesterolemia", "diabetes", "hypertension", "celiac", "thyroid", "anemia", "heart disease", "gerd", "reflux", "ibs"}
+            if current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"} and any(disease in value_lower for disease in DISEASE_KEYWORDS):
+                current_entity_type = "DISEASE"
+
             # PERSON entities should never span multiple lines
             if current_entity_type == "PERSON":
                 entity_value = entity_value.splitlines()[0].strip()
-
-            value_lower = entity_value.lower()
 
             # Discard generic words flagged as PERSON, LOCATION, ORGANIZATION or DATE_TIME
             BLACKLIST = {
                 "reschedule", "copay", "appointment", "visit", "date", "phone", "email", "address", "portal", "patient",
                 "provider", "doctor", "hospital", "clinic", "amount", "billed", "covered", "cpt", "dob", "ssn", "insurance",
                 "policy", "claim", "history", "results", "medication", "procedure", "diagnosis", "information", "details",
-                "city", "state", "zip", "complimentary"
+                "city", "state", "zip", "complimentary", "annual", "plan year", "plan years", "plan-year", "service date", "collection date"
             }
             if value_lower in BLACKLIST:
                 continue
@@ -276,6 +301,9 @@ class PresidioDetector(BaseDetector):
 
             # Skip duration/generic date time matches
             if current_entity_type == "DATE_TIME":
+                # Skip 5 digit numeric values (like zip/cpt codes)
+                if value_lower.isdigit() and len(value_lower) == 5:
+                    continue
                 if any(duration_word in value_lower for duration_word in ["month", "year", "day", "hour", "minute", "week"]):
                     continue
                 # Skip invalid 4-digit years (e.g. random numeric tracking code fragments)

@@ -652,9 +652,7 @@ class DocumentProcessingWorkflow:
                 entity_owner=detection.entity_owner or detection.detector,
                 canonical_type=detection.canonical_type or detection.entity_type,
                 processing_stage="DETECTION",
-                is_review_required=(
-                    detection.confidence_score < HUMAN_REVIEW_THRESHOLD
-                ),
+                is_review_required=self._is_review_required(detection),
                 is_redacted=False,
                 final_confidence=detection.confidence_score,
             )
@@ -870,6 +868,40 @@ class DocumentProcessingWorkflow:
             return "MEDIUM"
 
         return "LOW"
+
+    @staticmethod
+    def _is_review_required(detection) -> bool:
+        # 1. Regex detector with confidence >= 0.95: Auto Approved
+        is_regex = "regex" in detection.detector.lower()
+        if is_regex and detection.confidence_score >= 0.95:
+            # But check if there was a detector disagreement conflict
+            if not detection.metadata.get("conflicting_types"):
+                return False
+
+        # 2. Check if multiple detectors disagreed on the entity type
+        if detection.metadata.get("conflicting_types") and len(detection.metadata["conflicting_types"]) > 1:
+            return True
+
+        # 3. Check if unknown or unregistered entity type
+        known_types = {
+            "PERSON", "PATIENT", "DOCTOR", "PHYSICIAN", "PROVIDER", "NURSE", "HEALTHCARE_STAFF",
+            "ORGANIZATION", "HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION",
+            "ADDRESS", "LOCATION", "CITY", "STATE", "COUNTRY", "ZIP_CODE",
+            "EMAIL", "PHONE_NUMBER", "US_PHONE_NUMBER", "URL", "IP_ADDRESS",
+            "AADHAAR_NUMBER", "PAN_NUMBER", "PASSPORT_NUMBER", "DRIVING_LICENSE", "VOTER_ID",
+            "BANK_ACCOUNT_NUMBER", "IFSC_CODE", "CREDIT_CARD_NUMBER", "DEBIT_CARD_NUMBER", "UPI_ID",
+            "DATE", "DATE_TIME", "VISIT_DATE", "TIME", "AGE", "DATE_OF_BIRTH", "START_DATE",
+            "MEDICAL_RECORD_NUMBER", "MRN", "PATIENT_ID", "INSURANCE_ID", "POLICY_NUMBER", "CLAIM_NUMBER",
+            "DISEASE", "PROBLEM", "DIAGNOSIS", "MEDICATION", "DRUG", "DOSAGE", "SYMPTOM", "PROCEDURE",
+            "LAB", "LAB_RESULT", "LAB_TEST", "ALLERGY", "VITAL_SIGN", "CLINICAL_FINDING",
+            "INVOICE_NUMBER", "GSTIN", "DOCUMENT_ID", "NPI_NUMBER", "MEMBER_ID", "GROUP_NUMBER",
+            "TAX_ID", "EOB_NUMBER", "CLINICAL_MEASUREMENT", "PO_BOX"
+        }
+        if detection.entity_type.upper() not in known_types:
+            return True
+
+        # 4. Standard threshold check
+        return detection.confidence_score < HUMAN_REVIEW_THRESHOLD
 
     @staticmethod
     def _apply_redactions(

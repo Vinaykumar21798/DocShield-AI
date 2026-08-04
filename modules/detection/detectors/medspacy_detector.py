@@ -34,6 +34,8 @@ class MedSpaCyDetector(BaseDetector):
         "DISEASE",
         "CLINICAL FINDING",
         "CLINICAL_FINDING",
+        "CLINICAL_MEASUREMENT",
+        "LAB_RESULT",
     }
 
     TARGET_RULES = (
@@ -41,6 +43,8 @@ class MedSpaCyDetector(BaseDetector):
         ("diabetes", "DISEASE"),
         ("hypertension", "DISEASE"),
         ("asthma", "DISEASE"),
+        ("hyperlipidemia", "DISEASE"),
+        ("hypercholesterolemia", "DISEASE"),
         ("persistent fever", "SYMPTOM"),
         ("shortness of breath", "SYMPTOM"),
         ("chest pain", "SYMPTOM"),
@@ -51,7 +55,12 @@ class MedSpaCyDetector(BaseDetector):
         ("ibuprofen", "MEDICATION"),
         ("metformin", "MEDICATION"),
         ("aspirin", "MEDICATION"),
+        ("lisinopril", "MEDICATION"),
         ("atorvastatin", "MEDICATION"),
+        ("lipitor", "MEDICATION"),
+        ("zocor", "MEDICATION"),
+        ("synthroid", "MEDICATION"),
+        ("crestor", "MEDICATION"),
         ("align", "MEDICATION"),
         ("dicyclomine 10mg", "MEDICATION"),
         ("dicyclomine", "MEDICATION"),
@@ -72,6 +81,12 @@ class MedSpaCyDetector(BaseDetector):
         ("a1c results (7.2%)", "LAB"),
         ("comprehensive metabolic panel (cmp)", "LAB"),
         ("comprehensive metabolic panel", "LAB"),
+        ("lipid panel", "LAB"),
+        ("hemoglobin a1c", "LAB"),
+        ("total cholesterol", "LAB"),
+        ("hdl", "LAB"),
+        ("ldl", "LAB"),
+        ("triglycerides", "LAB"),
         ("celiac disease antibody panel", "LAB"),
         ("calprotectin test", "LAB"),
         ("calprotectin", "LAB"),
@@ -82,6 +97,13 @@ class MedSpaCyDetector(BaseDetector):
         ("elevated blood glucose", "CLINICAL_FINDING"),
         ("high blood pressure", "CLINICAL_FINDING"),
         ("irritable bowel syndrome", "DISEASE"),
+        ("clinical measurements", "CLINICAL_MEASUREMENT"),
+        ("138/85 mmhg", "VITAL_SIGN"),
+        ("7.4%", "CLINICAL_MEASUREMENT"),
+        ("193 mg/dl", "CLINICAL_MEASUREMENT"),
+        ("112 mg/dl", "CLINICAL_MEASUREMENT"),
+        ("42 mg/dl", "CLINICAL_MEASUREMENT"),
+        ("195 mg/dl", "CLINICAL_MEASUREMENT"),
     )
 
     @property

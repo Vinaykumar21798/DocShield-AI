@@ -1,0 +1,106 @@
+EXPLANATION OF BENEFITS (EOB)
+HEALTHGUARD INSURANCE COMPANY
+P.O. [REDACTED_INSURANCE_ID], [REDACTED_LOCATION], MI [REDACTED_ZIP_CODE]
+Customer Service: [REDACTED_US_PHONE_NUMBER]
+[REDACTED_URL]
+THIS IS NOT A BILL
+
+MEMBER INFORMATION
+Patient Name: [REDACTED_PATIENT]. [REDACTED_PERSON]
+Member ID: [REDACTED_ORGANIZATION] Number: MTS-48721
+Group Name: [REDACTED_ORGANIZATION]
+Plan Type: PPO
+SSN: [REDACTED_SSN]
+Address: [REDACTED_ADDRESS]
+Date of Birth: [REDACTED_DATE_OF_BIRTH]
+EOB Date: [REDACTED_DATE_TIME]
+EOB Number: EOB24051476238
+CLAIMS SUMMARY
+Provider: [REDACTED_HOSPITAL]
+Provider NPI: [REDACTED_US_PHONE_NUMBER]
+Provider Tax ID: 82-6391574
+Claim Number: [REDACTED_CLAIM_NUMBER]
+Date(s) of Service: [REDACTED_DATE_TIME] - [REDACTED_DATE_TIME]
+Claim Received: [REDACTED_DATE_TIME]
+Claim Processed: [REDACTED_DATE_TIME]
+BENEFIT INFORMATION
+Plan Year: [REDACTED_DATE_TIME]
+[REDACTED_DATE_TIME] Deductible: $1,500 Individual / $3,000 Family
+Deductible Paid to Date: $875.00
+Deductible Remaining: $625.00
+Out-of-Pocket Maximum: $5,000 Individual / $10,000 Family
+
+
+
+Out-of-Pocket Paid to Date: $1,345.00
+Out-of-Pocket Remaining: $3,655.00
+SERVICE DETAILS
+Date of Service	Procedure Diagnosis Provider Allowed Not
+Deductible Coir
+Service Description Code Code Charges Amount Covered
+Office Visit,
+[REDACTED_DATE_TIME] Established 99214 [REDACTED_ICD10_CODE], [REDACTED_ICD10_CODE] $225.00 $175.00 $50.00 $0.00 $35.
+Patient, Level 4
+Comprehensive
+[REDACTED_DATE_TIME] Metabolic [REDACTED_DATE_TIME] [REDACTED_ICD10_CODE] $85.00 $65.00 $20.00 $0.00 $13.
+Panel
+[REDACTED_LAB]
+[REDACTED_DATE_TIME]	[REDACTED_DATE_TIME] [REDACTED_ICD10_CODE] $95.00 $75.00 $20.00 $0.00 $15.
+[REDACTED_LAB]
+[REDACTED_DATE_TIME] Lipid Panel 80061 [REDACTED_ICD10_CODE] $120.00 $90.00 $30.00 $0.00 $18.
+[REDACTED_PROCEDURE], routine,
+[REDACTED_DATE_TIME] with	93000 [REDACTED_ICD10_CODE], [REDACTED_ICD10_CODE] $175.00 $140.00 $35.00 $0.00 $28.
+interpretation
+TOTALS	$700.00 $545.00 $155.00 $0.00 $10
+DIAGNOSIS INFORMATION
+[REDACTED_ICD10_CODE]: [REDACTED_DISEASE] without complications
+• [REDACTED_ICD10_CODE]: Essential (primary) [REDACTED_DISEASE]
+• [REDACTED_ICD10_CODE]: [REDACTED_PERSON], unspecified
+• [REDACTED_ICD10_CODE]: Palpitations
+CLAIM MESSAGES
+The amount charged exceeds the maximum allowable fee for this service.
+• Payment was made according to the preferred provider contract.
+•This claim was processed based on network benefits.
+PATIENT MEDICALINFORMATION
+Current Medications:
+• [REDACTED_MEDICATION] 1000mg twice daily
+
+
+
+• Lisinopril 20mg daily
+• Atorvastatin 40mg daily
+• Aspirin 81mg daily
+Recent Test Results:
+• Blood Pressure: 138/85 mmHg
+• Hemoglobin A1c: 7.4%
+• Total Cholesterol: 193 mg/dL
+• LDL: 112 mg/dL
+• HDL: 42 mg/dL
+• Triglycerides: 195 mg/dL
+EXPLANATIONS OF REMARK CODES
+PR-1: Patient responsibility - amount not covered due to provider contracted rate.
+PR-2: Patient responsibility - deductible amount.
+PR-3: Patient responsibility - coinsurance amount.
+MA-1: Maximum allowable fee adjustment.
+co-1: Contractual obligation adjustment.
+YOUR APPEAL RIGHTS
+If you disagree with any decision we made on your claim, you have the right to appeal. To file an
+appeal, submit a written request within 180 days of the date you received this EOB. Include your name,
+member ID number, claim number, the date of service, and an explanation of why you believe the claim
+should be reconsidered. Send your appeal to:
+[REDACTED_ORGANIZATION]
+Appeals Department
+[REDACTED_LOCATION] [REDACTED_DATE_TIME]
+[REDACTED_LOCATION], [REDACTED_LOCATION] [REDACTED_ZIP_CODE]
+NOTES
+• This is an Explanation of Benefits (EOB) and is not a bill. You may receive a bill from your provider
+for any amount shown as patient responsibility.
+• Always verify that you received the services listed above.
+• Keep this document for your tax records.
+
+
+
+• If this claim is related to an accident or work-related injury, please contact customer service.
+CONFIDENTIAL HEALTH INFORMATION: This document contains protected health information (PHI)
+and is protected by federal and state law. If you are not the intended recipient, please destroy this
+document and notify the sender immediately.

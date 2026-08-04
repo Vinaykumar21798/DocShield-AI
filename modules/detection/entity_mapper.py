@@ -118,6 +118,15 @@ class EntityMapper:
         # ==========================
         "MRN": "MEDICAL_RECORD_NUMBER",
         "MEDICAL RECORD NUMBER": "MEDICAL_RECORD_NUMBER",
+        "NPI": "NPI_NUMBER",
+        "NPI_NUMBER": "NPI_NUMBER",
+        "MEMBER_ID": "MEMBER_ID",
+        "GROUP_NUMBER": "GROUP_NUMBER",
+        "TAX_ID": "TAX_ID",
+        "EIN": "TAX_ID",
+        "EOB_NUMBER": "EOB_NUMBER",
+        "PO_BOX": "ADDRESS",
+        "CLINICAL_MEASUREMENT": "CLINICAL_MEASUREMENT",
 
         "PATIENT_ID": "PATIENT_ID",
 
@@ -296,6 +305,12 @@ class PrivacyMapper:
         "VISIT_DATE": "PHI",
         "CPT_CODE": "PHI",
         "ICD10_CODE": "PHI",
+        "NPI_NUMBER": "PHI",
+        "MEMBER_ID": "PHI",
+        "GROUP_NUMBER": "PHI",
+        "TAX_ID": "PII",
+        "EOB_NUMBER": "PHI",
+        "CLINICAL_MEASUREMENT": "PHI",
     }
 
     @classmethod

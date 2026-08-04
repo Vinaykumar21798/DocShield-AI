@@ -151,6 +151,12 @@ class DetectionService:
         "bank_account_number": "regex",
         "cpt_code": "regex",
         "icd10_code": "regex",
+        "npi_number": "regex",
+        "member_id": "regex",
+        "group_number": "regex",
+        "tax_id": "regex",
+        "eob_number": "regex",
+        "po_box": "regex",
         # Presidio
         "person": "presidio",
         "location": "presidio",
@@ -182,6 +188,9 @@ class DetectionService:
         "clinical_findings": "medspacy",
         "clinical finding": "medspacy",
         "clinical_finding": "medspacy",
+        "clinical_measurement": "medspacy",
+        "lab_result": "medspacy",
+        "dosage": "medspacy",
     }
 
     DETECTOR_PRIORITY = {
@@ -219,6 +228,15 @@ class DetectionService:
         "bank_account_number",
         "doctor",
         "patient",
+        "npi_number",
+        "member_id",
+        "group_number",
+        "tax_id",
+        "eob_number",
+        "po_box",
+        "clinical_measurement",
+        "vital_sign",
+        "dosage",
         "nurse",
         "physician",
         "healthcare_staff",
@@ -791,6 +809,25 @@ class DetectionService:
         results = self._calibrate_confidence(results, config)
         results = Deduplicator.deduplicate(results)
         results = self._resolve_overlapping_spans(results)
+
+        # 1. OCR Line Break Crossing protection
+        filtered_results = []
+        for entity in results:
+            if "\n" in entity.entity_value and entity.entity_type != "ADDRESS":
+                logger.info(
+                    "Discarding entity %s because it crosses line boundaries (contains newline)",
+                    entity.entity_value
+                )
+                continue
+            filtered_results.append(entity)
+        results = filtered_results
+
+        # 2. Contextual Re-classification
+        results = self._contextual_reclassify(state.original_text, results)
+
+        # 3. Medication-Dosage Association
+        self._associate_medication_dosages(results)
+
         results = self._calibrate_confidence(results, config)
 
         for entity in results:
@@ -806,6 +843,51 @@ class DetectionService:
             )
         )
         return results
+
+    def _contextual_reclassify(self, text: str, entities: list[DetectionResult]) -> list[DetectionResult]:
+        for entity in entities:
+            # Get surrounding text window (e.g., 40 characters)
+            start = max(0, entity.start_char - 40)
+            end = min(len(text), entity.end_char + 40)
+            context = text[start:end].lower()
+
+            if entity.entity_type in {"INSURANCE_ID", "POLICY_NUMBER"}:
+                if "member" in context:
+                    entity.entity_type = "MEMBER_ID"
+                elif "group" in context:
+                    entity.entity_type = "GROUP_NUMBER"
+                elif "eob" in context:
+                    entity.entity_type = "EOB_NUMBER"
+
+            if entity.entity_type == "PHONE_NUMBER" and "npi" in context:
+                # If it is valid Luhn NPI, reclassify
+                if BaseDetector.is_valid_npi(entity.entity_value):
+                    entity.entity_type = "NPI_NUMBER"
+        return entities
+
+    def _associate_medication_dosages(self, entities: list[DetectionResult]) -> None:
+        medications = [e for e in entities if e.entity_type == "MEDICATION"]
+        dosages = [e for e in entities if e.entity_type == "DOSAGE"]
+
+        for med in medications:
+            best_dosage = None
+            min_distance = 999999
+            for dos in dosages:
+                if med.page_number == dos.page_number:
+                    # calculate character distance
+                    if dos.start_char >= med.end_char:
+                        dist = dos.start_char - med.end_char
+                    else:
+                        dist = med.start_char - dos.end_char
+
+                    # If close (e.g., within 30 characters)
+                    if dist < min_distance and dist <= 30:
+                        min_distance = dist
+                        best_dosage = dos
+
+            if best_dosage:
+                med.metadata["associated_dosage"] = best_dosage.entity_value
+                best_dosage.metadata["associated_medication"] = med.entity_value
 
     def _resolve_overlapping_spans(
         self,

@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const STORAGE_KEY = "docshield-ui-state-v1";
   const POLL_MS = 4000;
 
@@ -493,7 +493,7 @@
     }
 
     els.reviewsBody.innerHTML = rows.map(({ entity, review }) => {
-      const status = review && review.review_status ? review.review_status : "PENDING";
+      const status = review && review.review_status ? review.review_status : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
       const detector = entity.detector ? `Detector: ${entity.detector}` : "Detector unavailable";
       const confidence = getConfidence(entity);
       const isComplete = COMPLETED_REVIEW_STATUSES.includes(String(status).toUpperCase());
@@ -710,6 +710,12 @@
     renderArtifacts(reports, redactions);
     updateWorkflow(status, reviews, reports, redactions);
 
+    if (status && status.has_extracted_text) {
+      document.getElementById("openReviewBtn").style.display = "block";
+    } else {
+      document.getElementById("openReviewBtn").style.display = "none";
+    }
+
     if (isTerminalStatus(status)) {
       stopPolling();
     }
@@ -815,6 +821,12 @@
       submitReviewDecision(button.dataset.reviewId, button.dataset.decision);
     });
 
+    els.reviewsBody.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-review-id][data-decision]");
+      if (!button) return;
+      submitReviewDecision(button.dataset.reviewId, button.dataset.decision);
+    });
+
     els.copyTextBtn.addEventListener("click", async () => {
       const text = state.dashboard.text && state.dashboard.text.extracted_text;
       if (!text) {
@@ -828,6 +840,502 @@
         showToast("Clipboard permission was not available.", true);
       }
     });
+
+    // --- WORKSPACE REVIEW BINDINGS ---
+    const openReviewBtn = document.getElementById("openReviewBtn");
+    if (openReviewBtn) {
+      openReviewBtn.addEventListener("click", openReviewWorkspace);
+    }
+    const backToWorkspaceBtn = document.getElementById("backToWorkspaceBtn");
+    if (backToWorkspaceBtn) {
+      backToWorkspaceBtn.addEventListener("click", closeReviewWorkspace);
+    }
+
+    const toggleReviewRevealBtn = document.getElementById("toggleReviewRevealBtn");
+    if (toggleReviewRevealBtn) {
+      toggleReviewRevealBtn.addEventListener("click", () => {
+        reviewState.revealValues = !reviewState.revealValues;
+        toggleReviewRevealBtn.textContent = reviewState.revealValues ? "Mask values" : "Reveal values";
+        renderReviewWorkspaceCards();
+        renderReviewWorkspaceDetails();
+      });
+    }
+
+    const piiTabBtn = document.getElementById("piiTabBtn");
+    const phiTabBtn = document.getElementById("phiTabBtn");
+    if (piiTabBtn && phiTabBtn) {
+      piiTabBtn.addEventListener("click", () => {
+        piiTabBtn.classList.add("active");
+        phiTabBtn.classList.remove("active");
+        reviewState.activeTab = "PII";
+        renderReviewWorkspaceCards();
+      });
+      phiTabBtn.addEventListener("click", () => {
+        phiTabBtn.classList.add("active");
+        piiTabBtn.classList.remove("active");
+        reviewState.activeTab = "PHI";
+        renderReviewWorkspaceCards();
+      });
+    }
+
+    const reviewSearchInput = document.getElementById("reviewSearchInput");
+    if (reviewSearchInput) {
+      reviewSearchInput.addEventListener("input", () => {
+        reviewState.searchQuery = reviewSearchInput.value;
+        renderReviewWorkspaceCards();
+      });
+    }
+
+    const toggleFilterPanelBtn = document.getElementById("toggleFilterPanelBtn");
+    const filterPanelOverlay = document.getElementById("filterPanelOverlay");
+    if (toggleFilterPanelBtn && filterPanelOverlay) {
+      toggleFilterPanelBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const display = filterPanelOverlay.style.display;
+        filterPanelOverlay.style.display = display === "none" ? "block" : "none";
+      });
+      document.addEventListener("click", (e) => {
+        if (!filterPanelOverlay.contains(e.target) && e.target !== toggleFilterPanelBtn) {
+          filterPanelOverlay.style.display = "none";
+        }
+      });
+    }
+
+    const applyFiltersBtn = document.getElementById("applyFiltersBtn");
+    if (applyFiltersBtn) {
+      applyFiltersBtn.addEventListener("click", () => {
+        const detectors = Array.from(document.querySelectorAll(".detector-check:checked")).map(el => el.value);
+        const confidence = document.querySelector('input[name="confFilter"]:checked').value;
+        const reviewRequired = document.querySelector('input[name="revFilter"]:checked').value;
+        reviewState.filters = { detectors, confidence, reviewRequired };
+        filterPanelOverlay.style.display = "none";
+        renderReviewWorkspaceCards();
+      });
+    }
+
+    const resetFiltersBtn = document.getElementById("resetFiltersBtn");
+    if (resetFiltersBtn) {
+      resetFiltersBtn.addEventListener("click", () => {
+        Array.from(document.querySelectorAll(".detector-check")).forEach(el => el.checked = false);
+        document.querySelector('input[name="confFilter"][value="all"]').checked = true;
+        document.querySelector('input[name="revFilter"][value="all"]').checked = true;
+        reviewState.filters = { detectors: [], confidence: "all", reviewRequired: "all" };
+        renderReviewWorkspaceCards();
+      });
+    }
+
+    const cardsListContainer = document.getElementById("cardsListContainer");
+    if (cardsListContainer) {
+      cardsListContainer.addEventListener("click", (e) => {
+        const card = e.target.closest(".entity-card");
+        if (!card) return;
+        const entId = card.dataset.entityId;
+        const entity = reviewState.entities.find(ent => ent.id === entId);
+        if (!entity) return;
+        
+        const isGoTo = e.target.classList.contains("go-to-btn");
+        handleSelectReviewEntity(entity, isGoTo);
+      });
+    }
+
+    // Detail Action Row Handlers
+    const detailApproveBtn = document.getElementById("detailApproveBtn");
+    if (detailApproveBtn) {
+      detailApproveBtn.addEventListener("click", () => submitDecisionInWorkspace("APPROVED"));
+    }
+    const detailRejectBtn = document.getElementById("detailRejectBtn");
+    if (detailRejectBtn) {
+      detailRejectBtn.addEventListener("click", () => submitDecisionInWorkspace("REJECTED"));
+    }
+    const detailFlagBtn = document.getElementById("detailFlagBtn");
+    if (detailFlagBtn) {
+      detailFlagBtn.addEventListener("click", () => submitDecisionInWorkspace("PENDING"));
+    }
+    const detailEditBtn = document.getElementById("detailEditBtn");
+    if (detailEditBtn) {
+      detailEditBtn.addEventListener("click", () => {
+        const input = document.getElementById("detailValueInput");
+        input.readOnly = false;
+        input.focus();
+        document.getElementById("detailSaveBtn").style.display = "inline-block";
+        detailApproveBtn.style.display = "none";
+        detailRejectBtn.style.display = "none";
+        detailEditBtn.style.display = "none";
+        detailFlagBtn.style.display = "none";
+      });
+    }
+    const detailSaveBtn = document.getElementById("detailSaveBtn");
+    if (detailSaveBtn) {
+      detailSaveBtn.addEventListener("click", () => {
+        const val = document.getElementById("detailValueInput").value;
+        submitDecisionInWorkspace("CORRECTED", val);
+      });
+    }
+
+    // Page navigation
+    const prevPageBtn = document.getElementById("prevPageBtn");
+    const nextPageBtn = document.getElementById("nextPageBtn");
+    if (prevPageBtn && nextPageBtn) {
+      prevPageBtn.addEventListener("click", () => {
+        if (!reviewState.selectedEntity) return;
+        const current = parseInt(reviewState.selectedEntity.page_number) || 1;
+        if (current > 1) {
+          const nextEntity = reviewState.entities.find(e => e.page_number == current - 1);
+          if (nextEntity) {
+            handleSelectReviewEntity(nextEntity, true);
+          } else {
+            // No entity, just scroll page
+            const el = document.getElementById(`page-container-${current - 1}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }
+      });
+      nextPageBtn.addEventListener("click", () => {
+        if (!reviewState.selectedEntity) return;
+        const current = parseInt(reviewState.selectedEntity.page_number) || 1;
+        if (current < reviewState.pages.length) {
+          const nextEntity = reviewState.entities.find(e => e.page_number == current + 1);
+          if (nextEntity) {
+            handleSelectReviewEntity(nextEntity, true);
+          } else {
+            // No entity, just scroll page
+            const el = document.getElementById(`page-container-${current + 1}`);
+            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        }
+      });
+    }
+  }
+
+  // Review Workspace Logic & State
+  const reviewState = {
+    pages: [],
+    pageOffsets: [],
+    entities: [],
+    selectedEntity: null,
+    activeTab: "PII",
+    searchQuery: "",
+    filters: {
+      detectors: [],
+      confidence: "all",
+      reviewRequired: "all"
+    },
+    reviewMap: new Map(),
+    revealValues: false
+  };
+
+  function computePageOffsets(pages) {
+    let cumulative = 0;
+    const separatorLength = 5; // \n\n\f\n\n
+    return pages.map(page => {
+      const start = cumulative;
+      const end = start + page.text.length;
+      cumulative = end + separatorLength;
+      return { start, end };
+    });
+  }
+
+  function renderReviewWorkspaceText() {
+    const container = document.getElementById("pagesScrollContainer");
+    if (!container) return;
+
+    if (!reviewState.pages.length) {
+      container.innerHTML = `<div class="empty-state">No text pages available.</div>`;
+      return;
+    }
+
+    container.innerHTML = reviewState.pages.map((page, index) => {
+      const pageNum = page.page_number;
+      const isSelectedPage = reviewState.selectedEntity && reviewState.selectedEntity.page_number == pageNum;
+      
+      let pageHtmlText = escapeHtml(page.text);
+      if (isSelectedPage) {
+        const offsetInfo = reviewState.pageOffsets[index];
+        const localStart = reviewState.selectedEntity.start_char - offsetInfo.start;
+        const localEnd = reviewState.selectedEntity.end_char - offsetInfo.start;
+
+        if (localStart >= 0 && localEnd <= page.text.length) {
+          const before = page.text.slice(0, localStart);
+          const matchVal = page.text.slice(localStart, localEnd);
+          const after = page.text.slice(localEnd);
+          pageHtmlText = `${escapeHtml(before)}<span id="active-highlight-span" class="entity-highlight selected-border">${escapeHtml(matchVal)}</span>${escapeHtml(after)}`;
+        }
+      }
+
+      return `
+        <div id="page-container-${pageNum}" class="page-box ${isSelectedPage ? "active-page" : ""}">
+          <h4>Page ${pageNum}</h4>
+          <pre class="document-text">${pageHtmlText}</pre>
+        </div>
+      `;
+    }).join("");
+
+    const currentNumEl = document.getElementById("currentPageNum");
+    const totalNumEl = document.getElementById("totalPageNum");
+    if (currentNumEl && totalNumEl) {
+      currentNumEl.textContent = reviewState.selectedEntity ? reviewState.selectedEntity.page_number : 1;
+      totalNumEl.textContent = reviewState.pages.length;
+    }
+  }
+
+  function renderReviewWorkspaceCards() {
+    const listContainer = document.getElementById("cardsListContainer");
+    if (!listContainer) return;
+
+    const filtered = reviewState.entities.filter(entity => {
+      if (normalizeCategory(entity.privacy_category) !== reviewState.activeTab) return false;
+
+      if (reviewState.searchQuery) {
+        const q = reviewState.searchQuery.toLowerCase();
+        const valueMatch = (entity.entity_value || "").toLowerCase().includes(q);
+        const typeMatch = (entity.entity_type || "").toLowerCase().includes(q);
+        const detectorMatch = (entity.detector || "").toLowerCase().includes(q);
+        if (!valueMatch && !typeMatch && !detectorMatch) return false;
+      }
+
+      if (reviewState.filters.detectors.length > 0) {
+        if (!reviewState.filters.detectors.includes((entity.detector || "").toLowerCase())) {
+          return false;
+        }
+      }
+
+      const score = (entity.final_confidence == null ? entity.confidence_score : entity.final_confidence) * 100;
+      if (reviewState.filters.confidence === "90-100" && score < 90) return false;
+      if (reviewState.filters.confidence === "80-90" && (score < 80 || score >= 90)) return false;
+      if (reviewState.filters.confidence === "below-80" && score >= 80) return false;
+
+      if (reviewState.filters.reviewRequired === "yes" && !entity.is_review_required) return false;
+      if (reviewState.filters.reviewRequired === "no" && entity.is_review_required) return false;
+
+      return true;
+    });
+
+    const piiCount = reviewState.entities.filter(e => normalizeCategory(e.privacy_category) === "PII").length;
+    const phiCount = reviewState.entities.filter(e => normalizeCategory(e.privacy_category) === "PHI").length;
+    document.getElementById("piiTabCount").textContent = piiCount;
+    document.getElementById("phiTabCount").textContent = phiCount;
+
+    if (!filtered.length) {
+      listContainer.innerHTML = `<div class="empty-state">No entities match criteria.</div>`;
+      return;
+    }
+
+    listContainer.innerHTML = filtered.map(entity => {
+      const activeClass = reviewState.selectedEntity && reviewState.selectedEntity.id === entity.id ? "active" : "";
+      const catClass = normalizeCategory(entity.privacy_category).toLowerCase();
+      const confidence = confidenceLabel(entity.final_confidence == null ? entity.confidence_score : entity.final_confidence);
+      
+      const rStatus = reviewState.reviewMap.has(entity.id) ? reviewState.reviewMap.get(entity.id).review_status : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
+      const displayVal = reviewState.revealValues ? entity.entity_value : maskValue(entity.entity_value);
+
+      return `
+        <div class="entity-card ${activeClass}" data-entity-id="${entity.id}">
+          <div class="card-header-row">
+            <span class="card-label">${escapeHtml(entity.entity_type)}</span>
+            <span class="card-badge ${catClass}">${escapeHtml(entity.privacy_category)}</span>
+          </div>
+          <div class="card-details">
+            <div><strong>Value:</strong> ${escapeHtml(displayVal)}</div>
+            <div><strong>Detector:</strong> ${escapeHtml(entity.detector)}</div>
+            <div><strong>Confidence:</strong> ${escapeHtml(confidence)} &middot; <span class="status-pill ${statusTone(rStatus)}">${rStatus}</span></div>
+            <div><strong>Page:</strong> ${escapeHtml(entity.page_number)}</div>
+          </div>
+          <div class="card-actions">
+            <button class="button secondary compact go-to-btn" data-entity-id="${entity.id}" type="button">Go To</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderReviewWorkspaceDetails() {
+    const emptyDetails = document.getElementById("emptyDetails");
+    const detailsContent = document.getElementById("detailsContent");
+    if (!emptyDetails || !detailsContent) return;
+
+    const entity = reviewState.selectedEntity;
+    if (!entity) {
+      emptyDetails.style.display = "flex";
+      detailsContent.style.display = "none";
+      return;
+    }
+
+    emptyDetails.style.display = "none";
+    detailsContent.style.display = "block";
+
+    document.getElementById("detailType").textContent = entity.entity_type;
+    document.getElementById("detailCategory").textContent = entity.privacy_category;
+    document.getElementById("detailDetector").textContent = entity.detector;
+    document.getElementById("detailConfidence").textContent = confidenceLabel(entity.final_confidence == null ? entity.confidence_score : entity.final_confidence);
+    document.getElementById("detailPage").textContent = entity.page_number;
+    document.getElementById("detailRange").textContent = `${entity.start_char}-${entity.end_char}`;
+    
+    const input = document.getElementById("detailValueInput");
+    input.value = entity.entity_value;
+    input.readOnly = true;
+
+    const rObj = reviewState.reviewMap.get(entity.id);
+    const rStatus = rObj ? rObj.review_status : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
+    const needsReview = entity.is_review_required === true;
+    const actionRow = document.querySelector(".detail-actions-row");
+
+    let statusInfo = document.getElementById("detailStatusInfo");
+    if (!needsReview) {
+      document.getElementById("detailSaveBtn").style.display = "none";
+      document.getElementById("detailApproveBtn").style.display = "none";
+      document.getElementById("detailRejectBtn").style.display = "none";
+      document.getElementById("detailEditBtn").style.display = "none";
+      document.getElementById("detailFlagBtn").style.display = "none";
+      
+      if (!statusInfo) {
+        statusInfo = document.createElement("div");
+        statusInfo.id = "detailStatusInfo";
+        statusInfo.style.margin = "10px 0";
+        statusInfo.style.fontSize = "0.85rem";
+        statusInfo.style.fontWeight = "bold";
+        actionRow.parentNode.insertBefore(statusInfo, actionRow);
+      }
+      
+      let badgeText = "No Review Required";
+      if (rStatus === "APPROVED" || rStatus === "REJECTED" || rStatus === "CORRECTED") {
+        badgeText = `Reviewed: ${rStatus}`;
+      } else {
+        badgeText = "Auto Approved (No Review Required)";
+      }
+      
+      statusInfo.innerHTML = `<span class="status-pill success">${badgeText}</span>`;
+      statusInfo.style.display = "block";
+    } else {
+      document.getElementById("detailSaveBtn").style.display = "none";
+      document.getElementById("detailApproveBtn").style.display = "inline-block";
+      document.getElementById("detailRejectBtn").style.display = "inline-block";
+      document.getElementById("detailEditBtn").style.display = "inline-block";
+      document.getElementById("detailFlagBtn").style.display = "inline-block";
+      
+      if (statusInfo) {
+        statusInfo.style.display = "none";
+      }
+    }
+  }
+
+  function handleSelectReviewEntity(entity, shouldScroll) {
+    reviewState.selectedEntity = entity;
+    
+    renderReviewWorkspaceText();
+    renderReviewWorkspaceCards();
+    renderReviewWorkspaceDetails();
+
+    if (shouldScroll) {
+      setTimeout(() => {
+        const pageEl = document.getElementById(`page-container-${entity.page_number}`);
+        if (pageEl) {
+          pageEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        
+        const highlightEl = document.getElementById("active-highlight-span");
+        if (highlightEl) {
+          highlightEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+    }
+  }
+
+  async function openReviewWorkspace() {
+    if (!state.activeDocumentId) return;
+
+    try {
+      showToast("Loading review workspace...");
+      
+      const textPayload = await apiFetch(`/documents/${encodeURIComponent(state.activeDocumentId)}/text`);
+      const entities = await apiFetch(`/documents/${encodeURIComponent(state.activeDocumentId)}/entities`);
+      const status = await apiFetch(`/documents/${encodeURIComponent(state.activeDocumentId)}/status`);
+      const reviews = await apiFetch(`/documents/${encodeURIComponent(state.activeDocumentId)}/reviews`);
+
+      document.getElementById("reviewFilename").textContent = status.filename || state.activeDocumentId;
+
+      const rawText = textPayload.extracted_text || "";
+      const pageTexts = rawText.split("\n\n\f\n\n");
+      reviewState.pages = pageTexts.map((text, idx) => ({
+        page_number: idx + 1,
+        text: text
+      }));
+      reviewState.pageOffsets = computePageOffsets(reviewState.pages);
+
+      reviewState.entities = entities.map((ent, idx) => ({
+        ...ent,
+        id: ent.entity_id || ent.id || `ent-${idx}`
+      }));
+      reviewState.selectedEntity = null;
+
+      // Build review map
+      reviewState.reviewMap.clear();
+      reviews.forEach(r => {
+        const entId = r.entity_id || (r.entity && (r.entity.id || r.entity.entity_id));
+        if (entId) reviewState.reviewMap.set(entId, r);
+      });
+
+      // Switch screens
+      document.querySelector(".app-header").style.display = "none";
+      document.querySelector(".app-main").style.display = "none";
+      document.getElementById("reviewWorkspace").style.display = "flex";
+
+      renderReviewWorkspaceText();
+      renderReviewWorkspaceCards();
+      renderReviewWorkspaceDetails();
+
+    } catch (error) {
+      showToast(`Failed to load review workspace: ${error.message}`, true);
+    }
+  }
+
+  function closeReviewWorkspace() {
+    document.querySelector(".app-header").style.display = "flex";
+    document.querySelector(".app-main").style.display = "block";
+    document.getElementById("reviewWorkspace").style.display = "none";
+    loadDashboard(state.activeDocumentId, { quiet: true });
+  }
+
+  async function submitDecisionInWorkspace(decision, editedVal = null) {
+    const entity = reviewState.selectedEntity;
+    if (!entity) return;
+
+    const rObj = reviewState.reviewMap.get(entity.id);
+    if (!rObj) {
+      showToast("No associated review found for this entity.", true);
+      return;
+    }
+
+    try {
+      const payload = {
+        reviewer: "UI Auditor",
+        review_status: decision,
+        review_comment: `Reviewed in workspace. Decision: ${decision}`
+      };
+      if (editedVal !== null) {
+        payload.entity_value = editedVal;
+      }
+      
+      const updatedReview = await apiFetch(`/reviews/${encodeURIComponent(rObj.review_id)}`, {
+        method: "PATCH",
+        body: payload
+      });
+
+      showToast(`Entity marked as ${decision.toLowerCase()}.`);
+      
+      // Update local state
+      rObj.review_status = decision;
+      entity.is_review_required = false;
+      if (editedVal !== null) {
+        entity.entity_value = editedVal;
+      }
+      
+      renderReviewWorkspaceCards();
+      renderReviewWorkspaceDetails();
+      renderReviewWorkspaceText();
+
+    } catch (error) {
+      showToast(`Failed to submit decision: ${error.message}`, true);
+    }
   }
 
   function init() {

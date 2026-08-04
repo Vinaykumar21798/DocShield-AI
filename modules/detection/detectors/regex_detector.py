@@ -81,7 +81,7 @@ class RegexDetector(BaseDetector):
             rf"\bPatient(?:[ \t]+Name)?[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b",
 
         "US_PHONE_NUMBER":
-            r"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{3}\)|\d{3})[-. \t]?\d{3}[-. \t]?\d{4}\b",
+            r"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{3}\)[-. \t]?\d{3}[-. \t]?\d{4}|\d{3}[-. \t]\d{3}[-. \t]\d{4})\b",
 
         "DATE_OF_BIRTH":
             rf"\b(?:DOB|Date of Birth)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
@@ -107,7 +107,7 @@ class RegexDetector(BaseDetector):
             rf"\bProvider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
 
         "ADDRESS":
-            r"(?ims)\b(?:Address|Home Address|Mailing Address|Office Address|Location)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*(?:[A-Z][A-Za-z0-9&.'-]+(?:\s+[A-Z][A-Za-z0-9&.'-]+){0,2}[ \t]*[:\-#]|\r?\n)|\Z)",
+            r"(?ims)\b(?:Address|Home Address|Mailing Address|Office Address|Location)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*(?:[A-Z][A-Za-z0-9&.', -]{2,30}[ \t]*[:\-#]|\r?\n)|\Z)",
 
         "ZIP_CODE":
             r"\b\d{5}(?:-\d{4})?\b",
@@ -126,11 +126,11 @@ class RegexDetector(BaseDetector):
             r"(?im)\b(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)[ \t]*$",
 
         "CLAIM_NUMBER":
-            r"\bCLM[-: \t]?[A-Z0-9-]+\b",
+            r"\bCLM[-: \t]?[A-Z0-9-]+\b|(?im)\b(?:Claim|Clm)[ \t]*(?:Number|No|#)?[ \t]*[:\-]?[ \t]*([A-Z0-9-]{8,20})\b",
 
         "INSURANCE_ID":
-            r"\b(?:INS|POL|POLICY|(?!CPT|DOB|SSN)[a-zA-Z]{3})[-: \t]?(?=[a-zA-Z0-9-]*\d)[a-zA-Z0-9-]{5,15}\b"
-            r"|(?im)(?:Medicare|Insurance|Policy|Id)[ \t]*#?[ \t]*((?=[A-Z0-9]*\d)[A-Z0-9]{8,15})\b",
+            r"\b(?:INS|POL|POLICY|(?!(?:CPT|DOB|SSN|BOX|ZIP|TEL|FAX|NPI|POB))[a-zA-Z]{3})[-: \t]?(?=[a-zA-Z0-9-]*\d)(?!(?:box|p\.?\s*o\.?\s*box)\b)[a-zA-Z0-9-]{5,15}\b"
+            r"|(?im)(?:Medicare|Insurance|Policy|Id)[ \t]*#?[ \t]*((?=[A-Z0-9]*\d)(?!(?:box|p\.?\s*o\.?\s*box)\b)[A-Z0-9]{8,15})\b",
 
         "SALARY":
             r"(?im)\bSalary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
@@ -145,11 +145,38 @@ class RegexDetector(BaseDetector):
             r"(?im)\bProcedure[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
 
         "CPT_CODE":
-            r"\b(?:CPT[-: \t]?)?\d{5}\b",
+            r"\b(?:CPT[-: \t]?)?(?:\d{5}|\d{4}[A-Z]|[A-Z]\d{4})\b",
 
         "ICD10_CODE":
             r"\b[A-TV-Z][0-9]{2}(?:\.[A-Z0-9]{1,4})?\b",
-        }
+
+        "NPI_NUMBER":
+            r"\b\d{10}\b",
+
+        "MEMBER_ID":
+            r"(?im)\b(?:Member|Mbr|Policy|Subscriber)[ \t]*(?:ID|Id|No|#)[ \t]*[:\-]?[ \t]*([A-Za-z0-9-]{6,20})\b",
+
+        "GROUP_NUMBER":
+            r"(?im)\b(?:Group)[ \t]*(?:Number|No|#|ID|Id)?[ \t]*[:\-]?[ \t]*([A-Za-z0-9-]{4,15})\b",
+
+        "TAX_ID":
+            r"\b\d{2}-\d{7}\b|(?im)\b(?:Tax ID|TIN|EIN)[ \t]*[:\-]?[ \t]*(\d{2}-\d{7}|\d{9})\b",
+
+        "EOB_NUMBER":
+            r"(?im)\b(?:EOB|Explanation of Benefits)[ \t]*(?:Number|No|#)?[ \t]*[:\-]?[ \t]*([A-Z0-9-]{8,20})\b",
+
+        "PO_BOX":
+            r"\b[Pp]\.?[Oo]\.?\s+Box\s+\d+\b|\bBox\s+\d+\b",
+
+        "CLINICAL_MEASUREMENT":
+            r"\b\d+(?:\.\d+)?\s*(?:mg/dL|%)\b",
+
+        "VITAL_SIGN":
+            r"\b\d{2,3}/\d{2,3}\s*(?:mmHg)?\b",
+
+        "DOSAGE":
+            r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|ml|g)\b",
+    }
     ENTITY_PRIORITY = {
         "BANK_ACCOUNT": 101,
         "CREDIT_CARD": 100,
@@ -172,10 +199,16 @@ class RegexDetector(BaseDetector):
         "START_DATE": 84,
         "PROVIDER": 88,
         "ADDRESS": 82,
+        "PO_BOX": 82,
         "DIAGNOSIS": 82,
         "MEDICATION": 82,
         "PROCEDURE": 82,
         "PAN_NUMBER": 80,
+        "TAX_ID": 90,
+        "NPI_NUMBER": 90,
+        "MEMBER_ID": 90,
+        "GROUP_NUMBER": 90,
+        "EOB_NUMBER": 90,
         "SALARY": 75,
         "ORGANIZATION": 74,
         "AADHAAR_NUMBER": 70,
@@ -188,6 +221,9 @@ class RegexDetector(BaseDetector):
         "INVOICE_NUMBER": 30,
         "CPT_CODE": 25,
         "ICD10_CODE": 24,
+        "CLINICAL_MEASUREMENT": 25,
+        "VITAL_SIGN": 25,
+        "DOSAGE": 20,
         "URL": 20,
         "IP_ADDRESS": 10,
         "ZIP_CODE": 6,
@@ -234,6 +270,15 @@ class RegexDetector(BaseDetector):
         "PROCEDURE": ["procedure"],
         "CPT_CODE": ["cpt"],
         "ICD10_CODE": ["diagnosis", "icd"],
+        "NPI_NUMBER": ["npi", "provider", "tax", "billing", "national provider"],
+        "MEMBER_ID": ["member", "mbr", "id", "policy", "subscriber"],
+        "GROUP_NUMBER": ["group", "grp", "number", "id"],
+        "TAX_ID": ["tax", "tin", "ein", "employer"],
+        "EOB_NUMBER": ["eob", "explanation", "benefits", "number"],
+        "PO_BOX": ["box", "po box", "p.o. box", "address"],
+        "CLINICAL_MEASUREMENT": ["a1c", "cholesterol", "hdl", "ldl", "triglycerides", "mg/dl", "%"],
+        "VITAL_SIGN": ["blood pressure", "bp", "mmhg", "vital"],
+        "DOSAGE": ["mg", "mcg", "dosage", "dose", "tablet", "capsule"],
     }
     GROUP_VALUE_ENTITIES = {
         "ADDRESS",
@@ -259,6 +304,11 @@ class RegexDetector(BaseDetector):
         "SALARY",
         "START_DATE",
         "VISIT_DATE",
+        "CLAIM_NUMBER",
+        "EOB_NUMBER",
+        "MEMBER_ID",
+        "GROUP_NUMBER",
+        "TAX_ID",
     }
     LABELED_NAME_PLACEHOLDERS = {
         "anonymous",
@@ -594,16 +644,35 @@ class RegexDetector(BaseDetector):
             return len(value) > 6
 
         if entity == "INSURANCE_ID":
-            return len(value) > 8
+            # Disallow matches containing PO Box to avoid collisions
+            if re.search(r"(?i)\b(?:box|p\.?\s*o\.?\s*box)\b", value):
+                return False
+            return len(value) > 4
 
         if entity == "CPT_CODE":
             normalized = re.sub(r"[^A-Za-z0-9]", "", value).upper()
             if normalized.startswith("CPT"):
                 normalized = normalized[3:]
-            return bool(re.fullmatch(r"\d{5}", normalized))
+            return bool(re.fullmatch(r"\d{5}|\d{4}[A-Z]|[A-Z]\d{4}", normalized))
 
         if entity == "ICD10_CODE":
             return bool(re.fullmatch(r"[A-TV-Z][0-9]{2}(\.[A-Z0-9]{1,4})?", value))
+
+        if entity == "NPI_NUMBER":
+            return self.is_valid_npi(value)
+
+        if entity == "TAX_ID":
+            clean = value.replace("-", "").strip()
+            return len(clean) == 9 and clean.isdigit()
+
+        if entity in {"MEMBER_ID", "GROUP_NUMBER", "EOB_NUMBER"}:
+            return len(value.strip()) >= 4
+
+        if entity == "PO_BOX":
+            return bool(re.search(r"(?i)\bbox\s+\d+\b", value))
+
+        if entity in {"CLINICAL_MEASUREMENT", "VITAL_SIGN", "DOSAGE"}:
+            return len(value.strip()) > 0
 
         return True
 
