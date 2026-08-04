@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import os
 import re
@@ -56,9 +56,9 @@ class Qwen3BDetector(BaseDetector):
 
     def should_run(self, text: str, state: "PipelineState") -> bool:
         """
-        Qwen 3B runs only when semantic reasoning is required:
-        - Traditional detectors have run and unresolved text remains.
-        - And there is either an entity type conflict (ambiguity) or low confidence detections.
+        Qwen 3B runs whenever:
+        - BYPASS_LLM is false and Ollama client is active.
+        - Bounded unresolved text remains to be processed.
         """
         if os.getenv("BYPASS_LLM") == "true":
             return False
@@ -73,29 +73,7 @@ class Qwen3BDetector(BaseDetector):
         if not cleaned:
             return False
 
-        # Verify traditional detectors have executed (Task 10)
-        traditional_run = any(name in state.executed_detectors for name in {"presidio", "gliner", "medspacy"})
-        if not traditional_run:
-            return False
-
-        # Criteria 1: Overlapping boundary conflicts (semantic ambiguity)
-        has_conflict = False
-        resolved = state.resolved_entities
-        for i in range(len(resolved)):
-            for j in range(i + 1, len(resolved)):
-                e1, e2 = resolved[i], resolved[j]
-                if e1.start_char < e2.end_char and e1.end_char > e2.start_char:
-                    if e1.entity_type != e2.entity_type:
-                        has_conflict = True
-                        break
-            if has_conflict:
-                break
-
-        # Criteria 2: Unresolved entities have low confidence scores (< 0.80)
-        has_low_confidence = any(e.confidence_score < 0.80 for e in resolved)
-
-        # Only run if there is active ambiguity (conflict) or low confidence traditional output
-        return has_conflict or has_low_confidence
+        return True
 
 
     def detect(

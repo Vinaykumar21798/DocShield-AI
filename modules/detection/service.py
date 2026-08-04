@@ -34,13 +34,14 @@ class DynamicDetectionConfig:
 
     high_confidence_threshold: float = 0.85
     medium_confidence_threshold: float = 0.60
-    llm_validation_threshold: float = 0.60
+    llm_validation_threshold: float = 0.80
     semantic_reasoning_threshold: float = 0.80
     stopping_candidate_threshold: int = 0
     min_candidate_chars: int = 3
     llm_context_window: int = 160
     max_unresolved_llm_contexts: int = 8
     unresolved_llm_enabled: bool = True
+    detection_llm_enabled: bool = True
 
     @classmethod
     def from_env(cls) -> "DynamicDetectionConfig":
@@ -80,6 +81,10 @@ class DynamicDetectionConfig:
             unresolved_llm_enabled=cls._bool_env(
                 "DETECTION_UNRESOLVED_LLM_ENABLED",
                 cls.unresolved_llm_enabled,
+            ),
+            detection_llm_enabled=cls._bool_env(
+                "DETECTION_LLM_ENABLED",
+                cls.detection_llm_enabled,
             ),
         )
 
@@ -305,6 +310,7 @@ class DetectionService:
             "presidio": lambda: self.presidio,
             "gliner": lambda: self.gliner,
             "medspacy": lambda: self.medspacy,
+            "qwen3b": lambda: self.qwen3b,
         }
 
     def _run_detector(
@@ -346,10 +352,16 @@ class DetectionService:
             if context_offset:
                 raw_entities = self._offset_entities(raw_entities, context_offset)
 
-            entities = self._filter_new_entities(raw_entities, state, detector.name)
+            entities = self._filter_new_entities(
+                raw_entities,
+                state,
+                detector.name,
+                mask_confidence_threshold=self.config.high_confidence_threshold,
+            )
             state.add_entities(
                 entities,
                 detector.name,
+                mask_confidence_threshold=self.config.high_confidence_threshold,
             )
 
             if len(entities) != len(raw_entities):
@@ -381,12 +393,14 @@ class DetectionService:
         entities: list[DetectionResult],
         state: PipelineState,
         detector_name: str,
+        mask_confidence_threshold: float | None = None,
     ) -> list[DetectionResult]:
         accepted = []
         for entity in entities:
             if DetectionService._matches_previous_entity(
                 entity,
-                state.resolved_entities,
+                state,
+                mask_confidence_threshold,
             ):
                 logger.info(
                     "Skipping %s entity from %s because it duplicates a previous entity",
@@ -445,21 +459,33 @@ class DetectionService:
     @staticmethod
     def _matches_previous_entity(
         entity: DetectionResult,
-        previous_entities: list[DetectionResult],
+        state: PipelineState,
+        mask_confidence_threshold: float | None = None,
     ) -> bool:
-        value = entity.entity_value.strip().lower()
         entity_type = entity.entity_type.upper()
-        for previous in previous_entities:
-            if previous.entity_value.strip().lower() != value:
+        for previous in state.resolved_entities:
+            if previous.page_number != entity.page_number:
                 continue
             if previous.entity_type.upper() != entity_type:
-                continue
-            if previous.page_number != entity.page_number:
                 continue
             if (
                 previous.start_char == entity.start_char
                 and previous.end_char == entity.end_char
             ):
+                # Duplicate span/type found. Check if new detection is higher confidence.
+                if entity.confidence_score > previous.confidence_score:
+                    previous.confidence_score = entity.confidence_score
+                    previous.detector = entity.detector
+                    if entity.metadata:
+                        previous.metadata.update(entity.metadata)
+
+                    # Trigger masking if the updated confidence now exceeds the threshold
+                    if (
+                        mask_confidence_threshold is not None
+                        and previous.confidence_score >= mask_confidence_threshold
+                    ):
+                        state.mask_manager.add_entities([previous])
+
                 return True
         return False
 
@@ -583,6 +609,8 @@ class DetectionService:
             document_type=document_type,
         )
         route = self.router.route_for_domain(domain)
+        if config.detection_llm_enabled and "qwen3b" not in route:
+            route = route + ("qwen3b",)
         detector_getters = self._detector_getters()
 
         logger.info(

@@ -153,6 +153,7 @@ class PipelineState:
         self,
         entities: list[DetectionResult],
         detector_name: str = "Unknown",
+        mask_confidence_threshold: float | None = None,
     ) -> None:
         """
         Add newly detected entities to the pipeline.
@@ -166,7 +167,15 @@ class PipelineState:
             return
 
         self.resolved_entities.extend(entities)
-        self.mask_manager.add_entities(entities)
+
+        if mask_confidence_threshold is not None:
+            maskable = [
+                e for e in entities
+                if e.confidence_score >= mask_confidence_threshold
+            ]
+            self.mask_manager.add_entities(maskable)
+        else:
+            self.mask_manager.add_entities(entities)
 
         if detector_name not in self.executed_detectors:
             self.executed_detectors.append(detector_name)

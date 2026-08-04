@@ -237,6 +237,7 @@ def test_llm_validation_receives_only_low_confidence_entities_with_bounded_conte
     monkeypatch,
 ):
     monkeypatch.setenv("BYPASS_LLM", "false")
+    monkeypatch.setenv("DETECTION_HIGH_CONFIDENCE_THRESHOLD", "0.45")
     monkeypatch.setenv("DETECTION_LLM_CONTEXT_WINDOW", "10")
     text = "." * 500 + "SSN: 123-45-6789" + "." * 500
     ssn_start = text.index("123-45-6789")
@@ -344,6 +345,7 @@ class FakeQwenDetector(BaseDetector):
 
 def test_qwen_runs_only_on_bounded_unresolved_candidate_context(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "false")
+    monkeypatch.setenv("DETECTION_LLM_ENABLED", "false")
     monkeypatch.setenv("DETECTION_LLM_CONTEXT_WINDOW", "10")
     monkeypatch.setenv("DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS", "1")
     text = "x" * 300 + "\nName: Alice\n" + "y" * 300

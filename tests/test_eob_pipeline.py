@@ -5,6 +5,7 @@ from modules.detection.service import DetectionService
 from modules.detection.deduplicator import Deduplicator
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.detectors.base_detector import BaseDetector
+from modules.detection.pipeline_state import PipelineState
 
 def test_npi_luhn_validator():
     # Valid NPI (10-digit, Luhn compliant)
@@ -104,3 +105,79 @@ def test_medication_dosage_association():
     
     metformin_entity = medications[0]
     assert metformin_entity.metadata.get("associated_dosage") == "1000mg"
+
+
+def test_pipeline_cascading_and_masking():
+    # Setup text: "John Doe"
+    text = "John Doe"
+    state = PipelineState(text)
+    
+    # 1. First detector returns a low confidence detection
+    entity1 = DetectionResult(
+        entity_type="PERSON",
+        entity_value="John Doe",
+        confidence_score=0.42,
+        start_char=0,
+        end_char=8,
+        page_number=1,
+        detector="regex"
+    )
+    
+    # Add it with mask threshold 0.85
+    state.add_entities([entity1], detector_name="regex", mask_confidence_threshold=0.85)
+    
+    # Verify low-confidence detection is not masked
+    assert state.is_span_unmasked(0, 8) is True
+    assert len(state.resolved_entities) == 1
+    assert state.resolved_entities[0].confidence_score == 0.42
+    
+    # 2. Duplicate detection with lower confidence
+    entity_lower = DetectionResult(
+        entity_type="PERSON",
+        entity_value="John Doe",
+        confidence_score=0.30,
+        start_char=0,
+        end_char=8,
+        page_number=1,
+        detector="presidio"
+    )
+    # Check duplicate matching using helper
+    from modules.detection.service import DetectionService
+    is_dup1 = DetectionService._matches_previous_entity(entity_lower, state, mask_confidence_threshold=0.85)
+    assert is_dup1 is True
+    # Ensure confidence score is still 0.42 (lower duplicate didn't overwrite)
+    assert state.resolved_entities[0].confidence_score == 0.42
+    assert state.resolved_entities[0].detector == "regex"
+    assert len(state.resolved_entities) == 1
+    
+    # 3. Duplicate detection with higher confidence (above threshold)
+    entity_higher = DetectionResult(
+        entity_type="PERSON",
+        entity_value="John Doe",
+        confidence_score=0.97,
+        start_char=0,
+        end_char=8,
+        page_number=1,
+        detector="presidio"
+    )
+    is_dup2 = DetectionService._matches_previous_entity(entity_higher, state, mask_confidence_threshold=0.85)
+    assert is_dup2 is True
+    # Ensure it updated the confidence and detector, and triggered masking
+    assert state.resolved_entities[0].confidence_score == 0.97
+    assert state.resolved_entities[0].detector == "presidio"
+    assert state.is_span_unmasked(0, 8) is False
+    assert len(state.resolved_entities) == 1
+    
+    # 4. Adding a high confidence entity directly masks it
+    state2 = PipelineState("Alice")
+    entity_high = DetectionResult(
+        entity_type="PERSON",
+        entity_value="Alice",
+        confidence_score=0.90,
+        start_char=0,
+        end_char=5,
+        page_number=1,
+        detector="regex"
+    )
+    state2.add_entities([entity_high], detector_name="regex", mask_confidence_threshold=0.85)
+    assert state2.is_span_unmasked(0, 5) is False
