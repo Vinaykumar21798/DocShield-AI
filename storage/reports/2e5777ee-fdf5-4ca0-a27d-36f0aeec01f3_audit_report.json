@@ -1,0 +1,113 @@
+{
+  "document_id": "2e5777ee-fdf5-4ca0-a27d-36f0aeec01f3",
+  "document_type": "MEDICAL_RECORD",
+  "ocr_result_id": "07d5fe9a-db1a-4f99-a005-8e1be0a8f4f5",
+  "total_entities": 7,
+  "total_pii": 2,
+  "total_phi": 5,
+  "pending_reviews": 0,
+  "redacted_file_path": "storage/redacted/2e5777ee-fdf5-4ca0-a27d-36f0aeec01f3_redacted.txt",
+  "detectors_used": [
+    "Regex"
+  ],
+  "entities": [
+    {
+      "entity_id": "bb896679-ac01-4006-94ea-53df0c18d4c5",
+      "entity_type": "CPT_CODE",
+      "entity_value": "CPT82306",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 179,
+      "end_char": 187
+    },
+    {
+      "entity_id": "abbbd15a-dead-488b-9859-f26141bafa37",
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "1996-01-18",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 61,
+      "end_char": 71
+    },
+    {
+      "entity_id": "90738834-6331-4078-9656-0667114ed669",
+      "entity_type": "INSURANCE_ID",
+      "entity_value": "LCT-84540895",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 103,
+      "end_char": 115
+    },
+    {
+      "entity_id": "c9a6560f-56fd-425b-83a4-0e4d8e9c97c6",
+      "entity_type": "PATIENT",
+      "entity_value": "Alan Potter",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 45,
+      "end_char": 56
+    },
+    {
+      "entity_id": "a9326f48-038a-4e28-87a3-844ad250ebe6",
+      "entity_type": "PROVIDER",
+      "entity_value": "Parks-Morgan",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 150,
+      "end_char": 162
+    },
+    {
+      "entity_id": "5bc4bea9-e9f2-4675-9adb-a923dbf0d68d",
+      "entity_type": "SSN",
+      "entity_value": "035-04-5733",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 77,
+      "end_char": 88
+    },
+    {
+      "entity_id": "098c1cf3-752b-420a-ac89-5fcefb3d9eb7",
+      "entity_type": "VISIT_DATE",
+      "entity_value": "2023-07-09",
+      "privacy_category": "PHI",
+      "confidence_score": 1.0,
+      "final_confidence": 1.0,
+      "is_review_required": false,
+      "is_redacted": true,
+      "detector": "Regex",
+      "page_number": "1",
+      "start_char": 129,
+      "end_char": 139
+    }
+  ]
+}

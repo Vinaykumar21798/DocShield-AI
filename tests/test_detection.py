@@ -596,3 +596,69 @@ def test_deduplicator_preserves_repeated_same_value_at_different_spans():
         (10, 26),
         (100, 116),
     }
+
+
+def test_multipage_detection_assigns_correct_page_numbers_and_offsets(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    monkeypatch.setenv("GLINER_ENABLED", "false")
+
+    text = "Patient Name: Sophia Garcia\n\n\f\n\nPatient Name: Michael Robinson"
+
+    results = DetectionService().detect(text)
+    results.sort(key=lambda x: x.start_char)
+
+    assert len(results) == 2
+
+    # Page 1
+    assert results[0].entity_value == "Sophia Garcia"
+    assert results[0].page_number == 1
+    assert results[0].start_char == 14
+    assert results[0].end_char == 27
+
+    # Page 2
+    assert results[1].entity_value == "Michael Robinson"
+    assert results[1].page_number == 2
+    assert results[1].start_char == 46
+    assert results[1].end_char == 62
+
+
+def test_breach_notification_letter_detection_extracts_correct_entities(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    monkeypatch.setenv("GLINER_ENABLED", "false")
+
+    text = """EVERGREEN HEALTHCARE SYSTEM
+CONFIDENTIAL BREACH NOTIFICATION LETTER
+DATE: May 14, 2025
+SENT VIA: Certified Mail #7389 5421 0089 6542
+PATIENT NAME: Michael J. Roberts
+ADDRESS: 542 Willow Lane
+CITY, STATE ZIP: Farmington Hills, MI 48334
+RE: NOTICE OF DATA BREACH INVOLVING YOUR HEALTH INFORMATION
+• Full name and date of birth (08/23/1962)
+• Medical Record Number: EHS-78245912
+• Health insurance information: Medicare #8752A69JK21
+Clinical information related to your diabetes care, including recent A1C results (7.2% from your 03/22/2025 visit)
+• Medication information including your current prescription for Metformin 1000mg
+"""
+
+    results = DetectionService().detect(text)
+    detected = {(entity.entity_type, entity.entity_value) for entity in results}
+
+    # Verify correct mappings
+    assert ("DATE", "May 14, 2025") in detected
+    assert ("PERSON", "Michael J. Roberts") in detected
+    assert ("ADDRESS", "542 Willow Lane") in detected
+    assert ("ZIP_CODE", "48334") in detected
+    assert ("MEDICAL_RECORD_NUMBER", "EHS-78245912") in detected
+    assert ("INSURANCE_ID", "8752A69JK21") in detected
+    assert ("INSURANCE_ID", "information") not in detected
+    assert ("DISEASE", "diabetes") in detected
+    assert ("MEDICATION", "Metformin") in detected
+
+    # Verify no false positives
+    # 7389 5421 0089 should NOT be matched as Aadhaar
+    assert not any(entity.entity_type == "AADHAAR_NUMBER" for entity in results)
+    # The word "CITY" or "STATE" or "ZIP" should NOT be matched as LOCATION/PERSON
+    assert not any(entity.entity_value == "CITY" for entity in results)
+    # Generic healthcare phrase should not be matched as HOSPITAL
+    assert not any("types of information" in entity.entity_value for entity in results)

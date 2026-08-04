@@ -452,7 +452,42 @@ class DetectionService:
         document_type: str | None = None,
     ) -> list[DetectionResult]:
         """
-        Main detection pipeline.
+        Main detection pipeline supporting page splitting.
+        """
+        if not text:
+            return []
+
+        page_separator = "\n\n\f\n\n"
+        if page_separator in text:
+            pages = text.split(page_separator)
+            all_detections = []
+            cumulative_offset = 0
+
+            for i, page_text in enumerate(pages):
+                current_page_num = page_number + i
+                page_detections = self._detect_single_page(
+                    page_text,
+                    page_number=current_page_num,
+                    document_type=document_type,
+                )
+                for detection in page_detections:
+                    detection.start_char += cumulative_offset
+                    detection.end_char += cumulative_offset
+                    all_detections.append(detection)
+
+                cumulative_offset += len(page_text) + len(page_separator)
+            return all_detections
+        else:
+            return self._detect_single_page(text, page_number, document_type)
+
+    def _detect_single_page(
+        self,
+        text: str,
+        page_number: int = 1,
+        document_type: str | None = None,
+    ) -> list[DetectionResult]:
+        """
+        Runs the detection pipeline for a single page of text.
         """
         if not text:
             return []

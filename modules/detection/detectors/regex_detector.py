@@ -11,7 +11,10 @@ class RegexDetector(BaseDetector):
         rf"{NAME_TOKEN_PATTERN}(?:[ \t]+{NAME_TOKEN_PATTERN}){{0,3}}"
     )
     DATE_VALUE_PATTERN = (
-        r"(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}-[A-Za-z]{3}-\d{4})"
+        r"(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}-[A-Za-z]{3}-\d{4}"
+        r"|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?[-: \t,]*"
+        r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
+        r"[-: \t,]*\d{1,2}\b[-: \t,]*\d{4}\b)"
     )
 
     @property
@@ -84,58 +87,62 @@ class RegexDetector(BaseDetector):
             rf"\b(?:DOB|Date of Birth)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
 
         "START_DATE":
-            rf"(?im)^\s*(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
+            rf"(?im)\b(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
 
         "VISIT_DATE":
             rf"\b(?:Visit Date|Service Date|Date of Service|Collection Date|Admission Date|Discharge Date)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
 
         "DOCTOR":
-            rf"(?im)^\s*(?:Doctor|Physician|Consultant)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$",
+            rf"(?im)\b(?:Doctor|Physician|Consultant)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$"
+            rf"|\bDr\.?[ \t]+{LABELED_NAME_PATTERN}\b",
 
         "HOSPITAL":
-            r"(?im)^\s*(?:Hospital|Clinic|Medical Facility)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,6})[ \t]*$",
+            r"(?im:\b(?:Hospital|Clinic|Medical Facility)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,6})[ \t]*$)"
+            r"|\b[A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z][A-Za-z0-9&.'-]*){0,5}\s+(?:Family Medicine|Hospital|Hospitals|Clinic|Clinics|Medical Center|Healthcare|Institute|Sanatorium|Infirmary)\b",
 
         "ORGANIZATION":
-            rf"(?im:^\s*(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}})[ \t]*$)"
+            rf"(?im:\b(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}})[ \t]*$)"
             rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}}\s+(?:Pvt[ \t]+Ltd|Ltd|Inc|Corp|Corporation|LLC|Company|Group|Association))\b)",
         "PROVIDER":
             rf"\bProvider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
 
         "ADDRESS":
-            r"(?ims)^\s*(?:[-*][ \t]*)?(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*\r?\n|\Z)",
+            r"(?ims)\b(?:Address|Home Address|Mailing Address|Office Address|Location)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*(?:[A-Z][A-Za-z0-9&.'-]+(?:\s+[A-Z][A-Za-z0-9&.'-]+){0,2}[ \t]*[:\-#]|\r?\n)|\Z)",
 
         "ZIP_CODE":
             r"\b\d{5}(?:-\d{4})?\b",
 
         "BANK_ACCOUNT":
-            r"(?im)^\s*(?:[-*][ \t]*)?Bank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
+            r"(?im)\bBank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
 
         "MRN":
-            r"\bMRN[-: \t]?\d+\b",
+            r"(?im)\b(?:Medical Record #|MRN|Medical Record Number)[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)\b"
+            r"|\bMRN[-: \t]?\d+\b",
 
         "INVOICE_NUMBER":
-            r"(?im)^\s*(?:Invoice Number|Invoice No|Invoice ID)[ \t]*[:\-][ \t]*([A-Z]{2,}-[A-Z0-9-]+)[ \t]*$",
+            r"(?im)\b(?:Invoice Number|Invoice No|Invoice ID)[ \t]*[:\-][ \t]*([A-Z]{2,}-[A-Z0-9-]+)[ \t]*$",
 
         "POLICY_NUMBER":
-            r"(?im)^\s*(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)[ \t]*$",
+            r"(?im)\b(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)[ \t]*$",
 
         "CLAIM_NUMBER":
             r"\bCLM[-: \t]?[A-Z0-9-]+\b",
 
         "INSURANCE_ID":
-            r"\b(?:INS|POL|POLICY|(?!CPT|DOB|SSN)[a-zA-Z]{3})[-: \t]?(?=[a-zA-Z0-9-]*\d)[a-zA-Z0-9-]{5,15}\b",
+            r"\b(?:INS|POL|POLICY|(?!CPT|DOB|SSN)[a-zA-Z]{3})[-: \t]?(?=[a-zA-Z0-9-]*\d)[a-zA-Z0-9-]{5,15}\b"
+            r"|(?im)(?:Medicare|Insurance|Policy|Id)[ \t]*#?[ \t]*((?=[A-Z0-9]*\d)[A-Z0-9]{8,15})\b",
 
         "SALARY":
-            r"(?im)^\s*(?:[-*][ \t]*)?Salary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
+            r"(?im)\bSalary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
 
         "DIAGNOSIS":
-            r"(?im)^\s*Diagnosis[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
+            r"(?im)\bDiagnosis[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
 
         "MEDICATION":
-            r"(?im)^\s*Medication[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
+            r"(?im)\bMedication[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
 
         "PROCEDURE":
-            r"(?im)^\s*Procedure[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
+            r"(?im)\bProcedure[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
 
         "CPT_CODE":
             r"\b(?:CPT[-: \t]?)?\d{5}\b",
@@ -163,7 +170,7 @@ class RegexDetector(BaseDetector):
         "DATE_OF_BIRTH": 85,
         "VISIT_DATE": 84,
         "START_DATE": 84,
-        "PROVIDER": 83,
+        "PROVIDER": 88,
         "ADDRESS": 82,
         "DIAGNOSIS": 82,
         "MEDICATION": 82,
@@ -239,8 +246,10 @@ class RegexDetector(BaseDetector):
         "DRIVING_LICENSE",
         "EMPLOYEE_ID",
         "HOSPITAL",
+        "INSURANCE_ID",
         "INVOICE_NUMBER",
         "MEDICATION",
+        "MRN",
         "ORGANIZATION",
         "PATIENT",
         "PERSON",
@@ -363,6 +372,11 @@ class RegexDetector(BaseDetector):
                 # Avoid treating invoice/reference IDs as insurance IDs without insurance context.
                 if entity == "INSURANCE_ID":
                     if not self.validate_insurance_id(value, text, start_char):
+                        continue
+
+                # Enforce contextual verification for AADHAAR_NUMBER to avoid random 12-digit numbers
+                if entity == "AADHAAR_NUMBER":
+                    if not self.has_context(entity, text, start_char):
                         continue
 
                 # Label-based names are accepted only when the value itself
@@ -740,7 +754,7 @@ class RegexDetector(BaseDetector):
         """
         # Check if preceded by currency or salary markers
         preceding = text[max(0, start - 15):start].strip()
-        if any(curr in preceding.lower() for curr in ["$", "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
+        if any(curr in preceding.lower() for curr in ["$", "₹", "rs", "rs.", "usd", "eur", "gbp", "salary"]):
             return False
 
         INDIAN_STATES = {

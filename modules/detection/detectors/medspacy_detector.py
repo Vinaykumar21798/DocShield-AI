@@ -52,6 +52,10 @@ class MedSpaCyDetector(BaseDetector):
         ("metformin", "MEDICATION"),
         ("aspirin", "MEDICATION"),
         ("atorvastatin", "MEDICATION"),
+        ("align", "MEDICATION"),
+        ("dicyclomine 10mg", "MEDICATION"),
+        ("dicyclomine", "MEDICATION"),
+        ("probiotic", "MEDICATION"),
         ("chest x-ray", "PROCEDURE"),
         ("x-ray", "PROCEDURE"),
         ("mri", "PROCEDURE"),
@@ -62,12 +66,22 @@ class MedSpaCyDetector(BaseDetector):
         ("blood glucose", "LAB"),
         ("cbc", "LAB"),
         ("hemoglobin", "LAB"),
+        ("a1c", "LAB"),
+        ("a1c results", "LAB"),
+        ("7.2%", "LAB"),
+        ("a1c results (7.2%)", "LAB"),
+        ("comprehensive metabolic panel (cmp)", "LAB"),
+        ("comprehensive metabolic panel", "LAB"),
+        ("celiac disease antibody panel", "LAB"),
+        ("calprotectin test", "LAB"),
+        ("calprotectin", "LAB"),
         ("penicillin allergy", "ALLERGY"),
         ("blood pressure", "VITAL_SIGN"),
         ("heart rate", "VITAL_SIGN"),
         ("abnormal ecg findings", "CLINICAL_FINDING"),
         ("elevated blood glucose", "CLINICAL_FINDING"),
         ("high blood pressure", "CLINICAL_FINDING"),
+        ("irritable bowel syndrome", "DISEASE"),
     )
 
     @property
@@ -186,7 +200,7 @@ class MedSpaCyDetector(BaseDetector):
             reverse=True,
         )
         for phrase, label in rules:
-            pattern = r"(?<!\w)" + re.escape(phrase).replace(r"\ ", r"\s+") + r"(?!\w)"
+            pattern = r"(?<!\w)" + re.sub(r'\\?\s+', r'\s+', re.escape(phrase)) + r"(?!\w)"
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
                 if self._overlaps(match.start(), match.end(), detections):
                     continue

@@ -258,11 +258,31 @@ class PresidioDetector(BaseDetector):
             if current_entity_type == "PERSON":
                 entity_value = entity_value.splitlines()[0].strip()
 
-            # Skip empty values
-            if not entity_value:
+            value_lower = entity_value.lower()
+
+            # Discard generic words flagged as PERSON, LOCATION, ORGANIZATION or DATE_TIME
+            BLACKLIST = {
+                "reschedule", "copay", "appointment", "visit", "date", "phone", "email", "address", "portal", "patient",
+                "provider", "doctor", "hospital", "clinic", "amount", "billed", "covered", "cpt", "dob", "ssn", "insurance",
+                "policy", "claim", "history", "results", "medication", "procedure", "diagnosis", "information", "details",
+                "city", "state", "zip", "complimentary"
+            }
+            if value_lower in BLACKLIST:
                 continue
 
-            value_lower = entity_value.lower()
+            # Filter out loose/unlikely DATE_TIME matches (e.g. fractions like 5/10) with very low confidence
+            if current_entity_type == "DATE_TIME" and result.score < 0.35:
+                continue
+
+            # Skip duration/generic date time matches
+            if current_entity_type == "DATE_TIME":
+                if any(duration_word in value_lower for duration_word in ["month", "year", "day", "hour", "minute", "week"]):
+                    continue
+                # Skip invalid 4-digit years (e.g. random numeric tracking code fragments)
+                if value_lower.isdigit() and len(value_lower) == 4:
+                    year_val = int(value_lower)
+                    if year_val < 1900 or year_val > 2100:
+                        continue
 
             # Prevent false positives (Task 7)
             if (
@@ -326,7 +346,7 @@ class PresidioDetector(BaseDetector):
                                 "recognizer_name",
                                 "Unknown",
                             )
-                            if hasattr(result, "recognition_metadata")
+                            if hasattr(result, "recognition_metadata") and result.recognition_metadata is not None
                             else "Unknown"
                         ),
                     },

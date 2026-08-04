@@ -1,0 +1,11 @@
+Explanation of Benefits (EOB)
+Patient Name: Julie Harris
+DOB: 1952-09-23
+SSN: 239-31-9174
+Insurance ID: zgR-17414005
+Visit Date: 2023-11-19
+Provider: Lynch Ltd
+Procedure Code: CPT99213
+Diagnosis: Type 2 Diabetes
+Amount Billed: $970.00
+Amount Covered: $479.00

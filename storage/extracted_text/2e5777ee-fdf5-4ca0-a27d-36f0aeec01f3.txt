@@ -1,0 +1,13 @@
+Explanation of Benefits (EOB)
+
+Patient Name: Alan Potter
+DOB 1996-01-18
+SSN: 035-04-5733
+Insurance ID: LCT-84540895
+
+Visit Date: 2023-07-09
+Provider: Parks-Morgan
+Procedure Code: CPT82306
+Diagnosis Migraine
+Amount Billed: $356.00
+AmountCovered: $412.00

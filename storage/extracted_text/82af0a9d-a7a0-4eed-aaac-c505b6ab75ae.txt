@@ -1,0 +1,51 @@
+EVERGREEN HEALTHCARE SYSTEM
+
+CONFIDENTIAL BREACH NOTIFICATION LETTER
+DATE: May 14, 2025
+SENT VIA: Certified Mail #7389 5421 0089 6542
+PATIENT NAME: Michael J. Roberts
+ADDRESS: 542 Willow Lane
+CITY, STATE ZIP: Farmington Hills, MI 48334
+RE: NOTICE OF DATA BREACH INVOLVING YOUR HEALTH INFORMATION
+Dear Mr. Roberts:
+Evergreen Healthcare System is committed to protecting the confidentiality and security of our
+patients' information. We are writing to inform you about a recent data security incident that may have
+involved some of your protected health information.
+WHAT HAPPENED
+On April 18, 2025, we discovered that an unauthorized third party gained access to an employee email
+account between April 10-15, 2025. Upon discovery, we immediately secured the account, launched a
+thorough investigation with cybersecurity experts, and notified law enforcement.
+WHAT INFORMATION WAS INVOLVED
+The affected email account contained the following types of information related to your healthcare:
+• Full name and date of birth (08/23/1962)
+• Medical Record Number: EHS-78245912
+• Health insurance information: Medicare #8752A69JK21
+Clinical information related to your diabetes care, including recent A1C results (7.2% from your
+03/22/2025 visit)
+• Medication information including your current prescription for Metformin 1000mg
+WHAT WE ARE DOING
+We have taken the following steps to address this incident:
+• Secured all affected systems and reset account credentials
+• Engaged forensic experts to thoroughly investigate the breach
+• Implemented additional security measures including enhanced email filtering
+
+
+
+• Provided additional security awareness training to our staff
+Offering you 12 months of free credit monitoring and identity protection services
+WHAT YOU CAN DO
+We recommend that you:
+1. Enroll in the complimentary credit monitoring service using code: EHS-2025-04-BR
+2. Review your Explanation of Benefits statements for suspicious activity
+3. Consider placing a fraud alert or security freeze on your credit file
+4. Monitor your financial accounts and credit reports for suspicious activity
+FOR MORE INFORMATION
+If you have questions, please contact our dedicated response team at (800) 555-9876 Monday
+through Friday from 8:00 AM to 5:00 PM EST or email breach_response@evergreenhealthcare.org.
+Sincerely,
+Sarah Johnson, CISO
+Evergreen Healthcare System
+
+LEGAL NOTICE: This notification is being provided in compliance with the Health Information
+Technology for Economic and Clinical Health (HITECH) Act, the Health Insurance Portability and
+Accountability Act (HIPAA), and applicable state laws.
