@@ -1,0 +1,50 @@
+Ambiguous Healthcare EOB Test Document
+Purpose
+This synthetic document is designed to test a cascading PII/PHI detection pipeline
+(Regex → Presidio → MedSpaCy → GLiNER → Ollama/Qwen). It intentionally contains
+ambiguous entities that require contextual understanding.
+Document
+Explanation of Benefits (EOB)
+Patient Name: Michael Jordan
+DOB: 1967-04-15
+SSN: 881-32-3610
+Member ID: MCA-78291-XX
+Visit Date: 2026-07-28
+Primary Physician: Dr. Brown
+Consulting Specialist: Dr. Green
+Provider: Apollo
+Laboratory: ABC Diagnostics
+Diagnosis: Stage II
+Procedure: Revision
+Medication: NovoRapid
+Insurance Provider: United
+Policy Number: UH-8827-191A
+Billing Contact: Sarah
+Emergency Contact: Jordan
+Phone: +1 (555) 742-8821
+Email: sarah.billing@example.com
+Address: 418 Lake View Drive, Austin, TX 78701
+Clinical Notes
+The patient was transferred from Apollo after evaluation by Dr. Green. Brown
+recommended continuing NovoRapid while reviewing Revision results. Stage II remains
+stable. ABC Diagnostics will forward reports next week. United approved the procedure
+yesterday. Sarah confirmed insurance authorization. Jordan confirmed the patient's
+previous prescription.
+Amount Billed: $2,845.00
+Amount Covered: $1,935.00
+Patient Responsibility: $910.00
+Expected Detector Behavior
+Regex: DOB, SSN, Policy Number, Phone, Email.
+Presidio: Michael Jordan, Sarah, Address.
+MedSpaCy: NovoRapid, Stage II (if supported).
+GLiNER: Apollo, ABC Diagnostics, United (if recognized).
+LLM/Ollama: Brown, Green, Jordan, Revision, Apollo/United if unresolved after previous
+detectors.
+What to Verify
+1. High-confidence entities are masked.
+2. Low-confidence entities continue to the next detector.
+
+3. Only unresolved entities reach the LLM.
+4. Context windows help the LLM resolve ambiguous entities.
+5. Field labels such as 'Amount Billed' should not become unresolved semantic entities
+unless intentionally designed.

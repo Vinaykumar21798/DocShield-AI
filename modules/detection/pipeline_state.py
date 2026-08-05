@@ -112,7 +112,7 @@ STRUCTURED_TOKEN_PATTERN = re.compile(
 )
 
 PROPER_NOUN_PATTERN = re.compile(
-    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,4}\b"
+    r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,4}\b"
 )
 
 TITLE_NAME_PATTERN = re.compile(
@@ -288,11 +288,30 @@ class PipelineState:
         line_start: int,
         min_chars: int,
     ) -> None:
+        # 1. Check if the line matches a structured Key-Value / Label-Value pattern
         label_match = re.match(
-            r"^\s*([A-Za-z][A-Za-z ]{1,35})\s*[:\-]\s*(.+?)\s*$",
+            r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,35})\s*[:]\s*(.+?)\s*$",
             line,
         )
-        if label_match and self._looks_like_label(label_match.group(1)):
+        if not label_match and line.count(" - ") == 1:
+            temp_match = re.match(
+                r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,35})\s+[-]\s+(.+?)\s*$",
+                line,
+            )
+            if temp_match and (
+                self._looks_like_label(temp_match.group(1))
+                or all(w[0].isupper() or w.isupper() for w in re.findall(r"\b[A-Za-z]+\b", temp_match.group(1)))
+            ):
+                label_match = temp_match
+
+        exclude_start = -1
+        exclude_end = -1
+        is_structured = False
+
+        if label_match:
+            is_structured = True
+            exclude_start = label_match.start(1)
+            exclude_end = label_match.end(1)
             self._add_candidate(
                 candidates,
                 line_start + label_match.start(2),
@@ -301,6 +320,11 @@ class PipelineState:
                 min_chars,
             )
 
+        # 2. Check if the entire line is a standalone title or header (only if not structured)
+        if not is_structured and self._is_title_or_header_line(line):
+            return
+
+        # 3. Scan line with generic matchers, skipping excluded label spans
         for pattern, kind in (
             (STRUCTURED_TOKEN_PATTERN, "structured_token"),
             (TITLE_NAME_PATTERN, "titled_name"),
@@ -308,6 +332,12 @@ class PipelineState:
             (PROPER_NOUN_PATTERN, "proper_noun"),
         ):
             for match in pattern.finditer(line):
+                if (
+                    exclude_start != -1
+                    and match.start() >= exclude_start
+                    and match.end() <= exclude_end
+                ):
+                    continue
                 self._add_candidate(
                     candidates,
                     line_start + match.start(),
@@ -320,6 +350,12 @@ class PipelineState:
             value = word_match.group().lower()
             if value not in CANDIDATE_SIGNAL_WORDS:
                 continue
+            if (
+                exclude_start != -1
+                and word_match.start() >= exclude_start
+                and word_match.end() <= exclude_end
+            ):
+                continue
             self._add_candidate(
                 candidates,
                 line_start + word_match.start(),
@@ -327,6 +363,34 @@ class PipelineState:
                 "domain_signal",
                 min_chars,
             )
+
+    @staticmethod
+    def _is_title_or_header_line(line: str) -> bool:
+        stripped = line.strip()
+        if not stripped:
+            return False
+
+        # Sentence punctuation check
+        if stripped[-1] in (".", "?", "!"):
+            return False
+
+        words = re.findall(r"\b[A-Za-z]+\b", stripped)
+        if not words:
+            return False
+
+        # Standard lowercase title particles
+        title_words = {
+            "of", "and", "the", "in", "on", "at", "for", "with",
+            "a", "an", "to", "by", "or", "about", "from", "as", "into"
+        }
+
+        for word in words:
+            if word.lower() in title_words:
+                continue
+            if not (word[0].isupper() or word.isupper()):
+                return False
+
+        return len(words) <= 8
 
     def _add_candidate(
         self,

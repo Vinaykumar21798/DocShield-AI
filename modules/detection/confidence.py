@@ -46,8 +46,14 @@ class ConfidenceCalculator:
 
             elif detector == "presidio":
 
-                # Presidio returns statistical confidence
-                final_score = score
+                # Presidio returns statistical confidence.
+                # Boost DATE_TIME confidence if it meets the medium threshold (0.60)
+                # to 0.85 (high confidence) so that it is masked early, preventing
+                # redundant LLM candidate contexts and validation calls on dates.
+                if detection.entity_type == "DATE_TIME" and score >= 0.60:
+                    final_score = 0.85
+                else:
+                    final_score = score
 
             elif detector == "gliner":
 

@@ -60,7 +60,8 @@ class Qwen3BDetector(BaseDetector):
         - BYPASS_LLM is false and Ollama client is active.
         - Bounded unresolved text remains to be processed.
         """
-        if os.getenv("BYPASS_LLM") == "true":
+        bypass_llm = os.getenv("BYPASS_LLM", "false").strip().lower()
+        if bypass_llm in {"1", "true", "yes", "on"}:
             return False
 
         if self.client is None:
@@ -110,7 +111,7 @@ Return EXACTLY this JSON schema:
     ]
 }}
 
-Strictly ensure start_char and end_char indices represent the exact 0-indexed boundaries in the input text.
+Strict ensure start_char and end_char indices represent the exact 0-indexed boundaries in the input text.
 Return ONLY valid JSON. No reasoning, no markdown wrappers, no explanation.
 
 Input Text:
@@ -131,14 +132,24 @@ Input Text:
                 options={
                     "temperature": self.TEMPERATURE,
                     "top_p": self.TOP_P,
-                    "num_predict": 256,
+                    "num_predict": 1024,
                 },
                 keep_alive=self.KEEP_ALIVE,
             )
             elapsed = time.perf_counter() - start
             logger.info("Qwen 3B extraction completed in %.3f sec", elapsed)
 
-            raw = response["message"]["content"].strip()
+            raw = ""
+            if hasattr(response, "message") and hasattr(response.message, "content"):
+                raw = response.message.content
+            elif isinstance(response, dict) and "message" in response:
+                raw = response["message"].get("content", "")
+            raw = raw.strip()
+
+            if not raw:
+                logger.warning("Qwen 3B returned an empty response. It may have hit the token budget limit.")
+                return []
+
             if raw.startswith("```"):
                 raw = (
                     raw.replace("```json", "")
@@ -146,7 +157,16 @@ Input Text:
                     .strip()
                 )
 
-            parsed = Qwen3BResponse.model_validate_json(raw)
+            try:
+                parsed = Qwen3BResponse.model_validate_json(raw)
+            except Exception as parse_exc:
+                logger.warning(
+                    "Failed to parse Qwen 3B response as JSON: %s (Raw response: %r)",
+                    parse_exc,
+                    raw,
+                )
+                return []
+
             results = []
             for item in parsed.results:
                 # Double-check offsets match the expected text segment

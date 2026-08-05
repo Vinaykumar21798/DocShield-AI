@@ -12,9 +12,16 @@ class RegexDetector(BaseDetector):
     )
     DATE_VALUE_PATTERN = (
         r"(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}-[A-Za-z]{3}-\d{4}"
+        r"|\d{1,2}[- \t,]+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)[- \t,]+\d{2,4}\b"
         r"|(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?[-: \t,]*"
         r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)"
-        r"[-: \t,]*\d{1,2}\b[-: \t,]*\d{4}\b)"
+        r"[-: \t,]*\d{1,2}\b[-: \t,]*\d{2,4}\b)"
+    )
+    DATE_TIME_VALUE_PATTERN = (
+        rf"(?:{DATE_VALUE_PATTERN}(?:[T\s]+(?:at\s+)?\d{{1,2}}:\d{{2}}(?::\d{{2}})?(?:\.\d+)?(?:Z|[+-]\d{{2}}:?\d{{2}})?(?:\s*[APap][Mm])?)?"
+        r"|\b\d{{1,2}}:\d{{2}}(?::\d{{2}})?(?:\s*[APap][Mm])\b"
+        r"|\b\d{{2}}:\d{{2}}:\d{{2}}\b"
+        r")"
     )
 
     @property
@@ -28,6 +35,11 @@ class RegexDetector(BaseDetector):
 
         "DATE":
             rf"(?im)^\s*Date[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
+
+        "DATE_TIME":
+            rf"\b{DATE_VALUE_PATTERN}(?:[T\s]+(?:at\s+)?\d{{1,2}}:\d{{2}}(?::\d{{2}})?(?:\.\d+)?(?:Z|[+-]\d{{2}}:?\d{{2}})?(?:\s*[APap][Mm])?)?\b"
+            r"|\b\d{1,2}:\d{2}(?::\d{2})?(?:\s*[APap][Mm])\b"
+            r"|\b\d{2}:\d{2}:\d{2}\b",
 
         "EMAIL":
             r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
@@ -215,6 +227,7 @@ class RegexDetector(BaseDetector):
         "IFSC_CODE": 60,
         "UPI_ID": 50,
         "DATE": 50,
+        "DATE_TIME": 48,
         "US_PHONE_NUMBER": 45,
         "PHONE_NUMBER": 40,
         "EMAIL": 30,
@@ -232,6 +245,7 @@ class RegexDetector(BaseDetector):
     CONTEXT = {
         "DOCUMENT_ID": ["agreement id", "document id", "reference number"],
         "DATE": ["date"],
+        "DATE_TIME": ["date", "time", "at", "visited", "on", "dob", "birth", "service", "admission", "discharge", "collection"],
         "EMAIL": ["email", "mail"],
         "PHONE_NUMBER": ["phone", "mobile", "contact"],
         "US_PHONE_NUMBER": ["phone", "mobile", "contact"],
@@ -544,6 +558,8 @@ class RegexDetector(BaseDetector):
     ) -> float:
 
         score = 0.40
+        if entity == "DATE_TIME":
+            score = 0.55
 
         if self.has_context(entity, text, start):
             score += 0.30
@@ -625,6 +641,9 @@ class RegexDetector(BaseDetector):
         if entity in {"DATE", "DATE_OF_BIRTH", "START_DATE", "VISIT_DATE"}:
             return self.validate_date_value(value)
 
+        if entity == "DATE_TIME":
+            return self.validate_date_time_value(value)
+
         if entity in {"DOCUMENT_ID", "EMPLOYEE_ID", "INVOICE_NUMBER", "POLICY_NUMBER"}:
             return bool(re.fullmatch(r"[A-Z0-9][A-Z0-9-]{4,}", value.strip().upper()))
 
@@ -686,6 +705,9 @@ class RegexDetector(BaseDetector):
 
     def validate_date_value(self, value: str) -> bool:
         return bool(re.fullmatch(self.DATE_VALUE_PATTERN, value.strip(), re.IGNORECASE))
+
+    def validate_date_time_value(self, value: str) -> bool:
+        return bool(re.fullmatch(self.DATE_TIME_VALUE_PATTERN, value.strip(), re.IGNORECASE))
 
     def validate_labeled_text_value(self, value: str) -> bool:
         normalized = " ".join(value.strip().split())

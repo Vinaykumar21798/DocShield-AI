@@ -609,8 +609,6 @@ class DetectionService:
             document_type=document_type,
         )
         route = self.router.route_for_domain(domain)
-        if config.detection_llm_enabled and "qwen3b" not in route:
-            route = route + ("qwen3b",)
         detector_getters = self._detector_getters()
 
         logger.info(

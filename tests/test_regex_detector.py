@@ -98,3 +98,18 @@ NW1 6XE
         if entity.entity_type == "PERSON"
         and entity.entity_value == "Michael Robinson"
     ]) == 2
+
+
+def test_regex_date_time_identification():
+    text = (
+        "He visited on 12 January 2024 at 02:30 PM.\n"
+        "Another visit was on 2024-05-18T14:30:00Z.\n"
+        "Please check the clock at 15:45:00 or 2:30 PM.\n"
+    )
+    results = RegexDetector().detect(text)
+    detected = {(entity.entity_type, entity.entity_value) for entity in results}
+
+    assert ("DATE_TIME", "12 January 2024 at 02:30 PM") in detected
+    assert ("DATE_TIME", "2024-05-18T14:30:00Z") in detected
+    assert ("DATE_TIME", "15:45:00") in detected
+    assert ("DATE_TIME", "2:30 PM") in detected
