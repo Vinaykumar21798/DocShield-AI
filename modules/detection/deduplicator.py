@@ -53,10 +53,42 @@ class Deduplicator:
             else:
                 existing.detector = merged_detector
 
-        # Return unique spans sorted by page number and position.
-        results = list(unique_entities.values())
-        results.sort(key=lambda d: (d.page_number, d.start_char))
-        return results
+        # Now, perform Longest Span Overlap Resolution on unique spans.
+        sorted_detections = sorted(
+            unique_entities.values(),
+            key=lambda d: (
+                -(d.end_char - d.start_char),  # Length descending
+                -d.confidence_score,           # Confidence descending
+                d.start_char                   # Position ascending
+            )
+        )
+
+        accepted: list[DetectionResult] = []
+
+        for detection in sorted_detections:
+            overlaps = False
+            for acc in accepted:
+                if (
+                    detection.page_number == acc.page_number
+                    and detection.start_char < acc.end_char
+                    and acc.start_char < detection.end_char
+                ):
+                    overlaps = True
+                    # Record conflicting types for overlapping spans
+                    if acc.entity_type.upper() != detection.entity_type.upper():
+                        conflicting = acc.metadata.get("conflicting_types") or [acc.entity_type]
+                        if detection.entity_type not in conflicting:
+                            conflicting.append(detection.entity_type)
+                        acc.metadata["conflicting_types"] = conflicting
+                    # Merge detector names if they overlap
+                    acc.detector = Deduplicator._merged_detectors(acc.detector, detection.detector)
+                    break
+            if not overlaps:
+                accepted.append(detection)
+
+        # Sort the accepted list by page number and position
+        accepted.sort(key=lambda d: (d.page_number, d.start_char))
+        return accepted
 
     @staticmethod
     def _merged_detectors(*detector_values: str) -> str:
