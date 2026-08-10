@@ -109,12 +109,12 @@ class DetectorSelector:
     }
 
     DOMAIN_ROUTES = {
-        "financial": ("regex", "presidio", "gliner"),
-        "healthcare": ("regex", "presidio", "medspacy", "gliner"),
-        "corporate": ("regex", "presidio", "gliner"),
-        "legal": ("regex", "presidio", "gliner"),
-        "generic": ("regex", "presidio", "gliner"),
-        "mixed": ("regex", "presidio", "medspacy", "gliner"),
+        "financial": ("regex", "presidio", "gliner", "qwen3b"),
+        "healthcare": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
+        "corporate": ("regex", "presidio", "gliner", "qwen3b"),
+        "legal": ("regex", "presidio", "gliner", "qwen3b"),
+        "generic": ("regex", "presidio", "gliner", "qwen3b"),
+        "mixed": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
     }
 
     DOCUMENT_TYPE_DOMAINS = {
@@ -147,7 +147,7 @@ class DetectorSelector:
             use_presidio=True,
             use_gliner=True,
             use_medspacy=domain in {"healthcare", "mixed"},
-            use_ollama=True,
+            use_qwen=True,
         )
         strategy.selected_detectors = list(self.route_for_domain(domain))
         return strategy
@@ -232,14 +232,26 @@ class DetectorSelector:
         route: tuple[str, ...],
         stopping_candidate_threshold: int = 0,
         min_candidate_chars: int = 3,
+        continuation_confidence_threshold: float = 0.80,
+        exhaust_route: bool = False,
     ) -> DetectorSelection:
         remaining = state.remaining_candidate_summary(
             min_chars=min_candidate_chars,
         )
 
+        low_confidence_count = sum(
+            1
+            for entity in state.resolved_entities
+            if entity.confidence_score < continuation_confidence_threshold
+        )
+        has_low_confidence_unresolved = low_confidence_count > 0
+
         if (
+            not exhaust_route
+            and
             state.executed_detectors
             and remaining["count"] <= stopping_candidate_threshold
+            and not has_low_confidence_unresolved
         ):
             return DetectorSelection(
                 detector=None,
@@ -250,7 +262,8 @@ class DetectorSelector:
                 remaining_candidates=remaining,
             )
 
-        if not state.current_text.strip():
+        routing_text = state.original_text if exhaust_route else state.current_text
+        if not routing_text.strip():
             return DetectorSelection(
                 detector=None,
                 reason="Stopping: masked text is empty.",
@@ -273,7 +286,7 @@ class DetectorSelector:
             detector = getter()
             self._attach_context(detector, state, remaining)
             try:
-                should_run = detector.should_run(state.current_text, state)
+                should_run = detector.should_run(routing_text, state)
             except Exception as exc:
                 should_run = True
                 skipped_reasons.append(
@@ -281,9 +294,19 @@ class DetectorSelector:
                 )
 
             if should_run:
+                if remaining["count"] > stopping_candidate_threshold:
+                    route_reason = f"{remaining['count']} candidate span(s) remain"
+                elif low_confidence_count:
+                    route_reason = (
+                        f"{low_confidence_count} low-confidence entity span(s) remain "
+                        f"below {continuation_confidence_threshold:.0%}"
+                    )
+                else:
+                    route_reason = "detector should_run returned True"
+
                 reason = (
                     f"Selected {detector.name}: route position {detector_key} "
-                    f"matched and {remaining['count']} candidate span(s) remain."
+                    f"matched because {route_reason}."
                 )
                 return DetectorSelection(
                     detector=detector,

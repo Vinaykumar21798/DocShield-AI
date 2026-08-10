@@ -78,7 +78,6 @@ alembic/versions/__pycache__/
 # ==========================================
 # Uploaded Files
 # ==========================================
-uploads/
 storage/uploads/*
 !storage/uploads/.gitkeep
 
@@ -112,3 +111,16 @@ docker-compose.override.yml
 *.tmp
 *.bak
 *.orig
+
+storage/extracted_text/*
+!storage/extracted_text/.gitkeep
+storage/redacted/*
+!storage/redacted/.gitkeep
+storage/reports/*
+!storage/reports/.gitkeep
+
+# ==========================================
+# Node / Scratch
+# ==========================================
+node_modules/
+brain/

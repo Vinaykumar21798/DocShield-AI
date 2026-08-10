@@ -58,7 +58,7 @@ class EntityMappingError(DetectionError):
 
 class ValidationError(DetectionError):
     """
-    Raised when LLM validation fails.
+    Raised when entity validation fails.
     """
 
     def __init__(self, message: str = "Entity validation failed"):

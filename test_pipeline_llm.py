@@ -5,10 +5,8 @@ from modules.detection.service import DetectionService
 def main():
     print("Initializing DocShield-AI Detection Service...")
     
-    # Force LLM configuration for this test run
+    # Enable Qwen detector for this manual test run
     os.environ["BYPASS_LLM"] = "False"
-    os.environ["DETECTION_LLM_ENABLED"] = "True"
-    os.environ["DETECTION_UNRESOLVED_LLM_ENABLED"] = "True"
     
     try:
         service = DetectionService()
@@ -37,9 +35,8 @@ def main():
                 print(f"    Metadata: {entity.metadata}")
     except Exception as e:
         print(f"Error running pipeline: {e}")
-        print("Please verify that Ollama is running and has the models pulled:")
+        print("Please verify that Ollama is running and has the model pulled:")
         print("  - qwen3:4b")
-        print("  - qwen2.5:8b")
 
 if __name__ == "__main__":
     main()

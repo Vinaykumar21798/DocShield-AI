@@ -1,241 +1,217 @@
-# DocShield-AI Documentation
+# DocShield-AI Developer Runbook
+
+This document is the detailed developer guide for DocShield-AI. For the shortest setup path, start with `README.md`.
 
 ## 1. Purpose
 
-DocShield-AI is a document intelligence PoC with a FastAPI backend and a lightweight static frontend served by the same API process. It accepts uploaded documents, stores metadata, queues work in Redis, processes documents through a worker, extracts text/OCR layout, detects sensitive entities, creates review records, writes redaction artifacts, and generates audit reports.
+DocShield-AI processes uploaded documents through extraction, detection, human review, redaction, and reporting.
 
-The API is the primary product surface. The bundled frontend is a static PoC workspace mounted at `/ui` for local upload, status tracking, review, extracted-text preview, and artifact download.
+The backend is FastAPI. The proof-of-concept frontend is static HTML/CSS/JavaScript served by FastAPI at `/ui/`. Background processing is done by a Redis-backed Python worker. PostgreSQL stores workflow state and review/redaction/report metadata.
 
-## 2. Current Status
+## 2. Runtime Separation
 
-Completed:
+Docker and local Python are separate profiles. This prevents port conflicts and avoids leaking local credentials into containers.
 
-- FastAPI application and Swagger/OpenAPI docs.
-- Static PoC frontend mounted at `/ui`.
-- Custom Swagger UI patch for multi-file upload.
-- PostgreSQL schema, SQLAlchemy models, repositories, and Alembic migrations.
-- Redis queue producer, consumer, and worker.
-- Single and bulk document upload APIs.
-- Document status and extracted text APIs.
-- Human review APIs.
-- Redaction metadata and artifact download APIs.
-- Report metadata and artifact download APIs.
-- Native text extraction for TXT and DOCX.
-- Native PDF extraction with PyMuPDF.
-- PaddleOCR extraction for scanned PDFs and images.
-- Mixed PDF extraction that uses PyMuPDF on searchable pages and PaddleOCR only on scanned pages.
-- Optional layout-preserving OCR metadata.
-- Dynamic PII/PHI entity detection orchestrator with candidate-based stopping, detector routing, masking, confidence calibration, deduplication, and bounded Qwen/Ollama escalation.
-- Worker retry behavior.
-- Docker Compose setup for API, worker, migration, Postgres, and Redis.
-- Local pytest coverage for workflow, API, PaddleOCR layout parsing, and worker retry logic.
+| Profile | API | PostgreSQL | Redis | Environment source |
+| --- | --- | --- | --- | --- |
+| Docker | `http://localhost:8001` | `127.0.0.1:5433` | `127.0.0.1:6380` | `docker-compose.yml` |
+| Local Python | `http://localhost:8000` | `127.0.0.1:5432` | `127.0.0.1:6379` | `.env.local` |
 
-Pending / future work:
+Rules:
 
-- Production authentication and authorization.
-- Production object storage such as S3 or MinIO.
-- Production monitoring and audit dashboards.
-- Full Dev2 handoff hardening.
-- Optional OCR/model provider benchmarking, including Ollama-backed paths.
+- Use Docker port `5433`, not `5432`, for Docker Postgres.
+- Use Docker port `6380`, not `6379`, for Docker Redis.
+- Use `.env.local` only for local Python.
+- Do not add fixed `container_name` values to Compose.
+- Keep `qwen3:4b` as the only configured Ollama model.
 
-## 3. Runtime Components
+## 3. Components
 
 | Component | Responsibility |
 | --- | --- |
-| `app.py` | FastAPI app, routers, Swagger UI customization, startup validation |
-| `api/routes` | REST endpoints for upload, documents, reviews, redactions, reports, health |
-| `api/schemas` | Pydantic request/response contracts |
-| `frontend` | Static PoC UI served from `/ui` when the folder exists |
-| `database/models` | SQLAlchemy tables |
-| `database/repositories` | Database access helpers |
-| `database/migrations` | Alembic migration scripts |
-| `modules/upload` | File validation, storage, DB record creation, Redis publish |
-| `modules/extraction` | Native text/PDF extraction, mixed PDF extraction, and PaddleOCR extraction |
-| `modules/detection` | Dynamic PII/PHI detection orchestration, candidate routing, confidence, deduplication, masking support |
-| `orchestration` | End-to-end document processing workflow |
-| `redis_queue` | Redis producer, consumer, worker, job schema |
-| `storage` | Uploaded files and generated text/report artifacts |
+| `app.py` | FastAPI app, routers, Swagger customization, startup validation |
+| `api/routes` | Upload, document, review, redaction, report, and health endpoints |
+| `api/schemas` | Pydantic API contracts |
+| `frontend` | Static PoC UI |
+| `database/models` | SQLAlchemy ORM models |
+| `database/repositories` | Database access layer |
+| `database/migrations` | Alembic migrations |
+| `modules/upload` | File validation, file storage, DB document row creation, Redis enqueue |
+| `modules/extraction` | TXT/DOCX/PDF/image extraction and OCR handling |
+| `modules/classification` | Document type/domain classification |
+| `modules/detection` | Detector orchestration, masking, confidence, deduplication |
+| `orchestration` | End-to-end processing workflow |
+| `redis_queue` | Redis producer, consumer, job schema, worker entrypoint |
+| `storage` | Runtime files for uploads, extracted text, redactions, reports |
 
-## 4. Processing Flow
+## 4. End-to-End Workflow
 
 ```text
 Client uploads document
-  -> API validates file
-  -> API stores original file
-  -> API creates documents and processing_jobs rows
-  -> API pushes document_processing job to Redis
+  -> FastAPI validates file
+  -> API stores original file under storage/uploads
+  -> API creates documents row
+  -> API creates processing_jobs row
+  -> API pushes job to Redis key document_processing
   -> Worker consumes Redis job
   -> Worker runs DocumentProcessingWorkflow
-  -> Workflow classifies document
-  -> Workflow selects extraction engine
-  -> Workflow extracts text/OCR metadata
-  -> Workflow stores ocr_results and extracted text file
-  -> Workflow detects PII/PHI entities
-  -> Workflow stores entities and confidence scores
-  -> Workflow creates review records when needed
-  -> Workflow creates redacted text artifact
-  -> Workflow creates audit report JSON artifact
+  -> Workflow classifies document/domain
+  -> Workflow extracts text and OCR metadata
+  -> Workflow stores ocr_results row
+  -> Workflow writes extracted text artifact
+  -> Workflow runs detection pipeline
+  -> Workflow stores entities and confidence_scores rows
+  -> Workflow creates reviews rows where human decision is needed
+  -> Workflow creates redacted artifact
+  -> Workflow creates audit report JSON
   -> Workflow marks document/job completed
 ```
 
-Detection sub-flow:
-
-```text
-Extracted text
-  -> Build PipelineState and mask manager
-  -> Classify detection domain from document classification and text signals
-  -> Select route:
-       financial       Regex -> Presidio -> GLiNER when candidates remain
-       corporate/legal Regex -> Presidio -> GLiNER when candidates remain
-       generic         Regex -> Presidio -> GLiNER when candidates remain
-       mixed           Regex -> Presidio -> MedSpaCy -> GLiNER when candidates remain
-       healthcare      Regex -> Presidio -> MedSpaCy -> GLiNER when candidates remain
-  -> Execute one detector on remaining unmasked text
-  -> Pass orchestration_context with previous entities and remaining candidates
-  -> Mask accepted spans
-  -> Recalculate unresolved entity candidate spans
-  -> Continue to next detector if candidates remain, even if current detector found none
-  -> Stop when no unresolved entity candidates remain or route is exhausted
-  -> Run Qwen/Ollama only on bounded unresolved/low-confidence snippets when enabled
-  -> Normalize, recalibrate confidence, deduplicate, and resolve overlaps
-```
-
-Current detection coverage highlights:
-
-- Regex handles structured/labeled fields for document IDs, names/roles, addresses, organizations, employment IDs, government IDs, bank/IFSC/GSTIN/invoice values, insurance values, dates, salary, and clinical values.
-- Regex extracts only the field value span where labels are present, rejects placeholders/generic labels, avoids ZIP/address collisions, and avoids treating bank accounts as credit cards.
-- Presidio adds supplemental person detection for employment-verification prose.
-- MedSpaCy includes additional pain-related clinical cues such as back pain.
-- Deduplication merges duplicate detector hits only for the same entity type/value/page/span and preserves repeated values at different spans.
-
-Failure path:
+Failure state:
 
 ```text
 PROCESSING -> FAILED
 ```
 
-Worker retry path:
+Retry state:
 
 ```text
-FAILED -> RETRY_QUEUED/PENDING -> PROCESSING
+FAILED -> RETRY_QUEUED or PENDING -> PROCESSING
 ```
 
-`workflow_stage` records the active or failed stage. `last_completed_stage`
-is the durable checkpoint used by retries to resume after persisted outputs
-such as OCR results, detection rows, or redaction files.
+`workflow_stage` stores the current or failed stage. `last_completed_stage` stores the latest durable checkpoint so retries can avoid repeating completed work where supported.
 
-## 5. Docker Setup
+## 5. Detection Workflow
 
-Recommended command for local validation with Docker Desktop, pgAdmin4, RedisInsight, and local storage files:
+Detection is routed by document domain and remaining unresolved candidate spans.
 
-```powershell
-cd E:\Office\DocShield-AI
-
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml up -d --build
-```
-
-Check containers:
-
-```powershell
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml ps
-```
-
-Expected services:
-
-| Service | Expected state | Host access |
-| --- | --- | --- |
-| `api` | running | `http://localhost:8001` |
-| `ui` | served by `api` | `http://localhost:8001/ui/` |
-| `worker` | running | no host port |
-| `migrate` | exited 0 | no host port |
-| `postgres` | healthy | `127.0.0.1:5433` |
-| `redis` | healthy | `127.0.0.1:6380` |
-
-Health check:
-
-```powershell
-Invoke-RestMethod http://localhost:8001/health/
-```
-
-Swagger UI:
+Generic, financial, corporate, and legal flow:
 
 ```text
-http://localhost:8001/docs
+Extracted text
+  -> Regex
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> Presidio if needed
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> GLiNER if needed
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> Qwen3:4b only for unresolved/low-confidence spans
+  -> Human Review for unresolved or final low-confidence results
 ```
 
-PoC UI:
+Healthcare and mixed flow:
 
 ```text
-http://localhost:8001/ui/
+Extracted text
+  -> Regex
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> Presidio if needed
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> MedSpaCy if needed
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> GLiNER if needed
+  -> mask accepted high-confidence spans
+  -> check remaining candidates
+  -> Qwen3:4b only for unresolved/low-confidence spans
+  -> Human Review for unresolved or final low-confidence results
 ```
 
-## 6. Local GUI Override
-
-`docker-compose.local-gui.yml` is used to avoid conflicts with other projects and expose convenient local ports.
-
-Current expected file:
-
-```yaml
-services:
-  migrate:
-    container_name: docshield-ai-live-migrate
-
-  api:
-    container_name: docshield-ai-live-api
-    ports: !override
-      - "8001:8000"
-    volumes: !override
-      - ./storage:/app/storage
-      - paddle_models:/root/.paddlex
-
-  worker:
-    container_name: docshield-ai-live-worker
-    volumes: !override
-      - ./storage:/app/storage
-      - paddle_models:/root/.paddlex
-
-  postgres:
-    container_name: docshield-ai-live-postgres
-    ports: !override
-      - "5433:5432"
-
-  redis:
-    container_name: docshield-ai-live-redis
-    ports: !override
-      - "6380:6379"
-```
-
-Why these ports are used:
-
-- `8001` keeps this API separate from any service already using `8000`.
-- `5433` avoids conflicts with another local PostgreSQL on `5432`.
-- `6380` avoids conflicts with another local Redis on `6379`.
-
-## 7. pgAdmin4
-
-Register a server with:
+Confidence rule:
 
 ```text
-Name: DocShield Live
-Host name/address: 127.0.0.1
-Port: 5433
-Maintenance database: pii_phi_document_intelligence_poc
-Username: postgres
-Password: postgres
+Regex >= 80%     -> store/finalize that span
+Regex < 80%      -> next detector
+Presidio >= 80%  -> store/finalize that span
+Presidio < 80%   -> next detector
+MedSpaCy >= 80%  -> store/finalize that span
+MedSpaCy < 80%   -> next detector
+GLiNER >= 80%    -> store/finalize that span
+GLiNER < 80%     -> Qwen3:4b
+Qwen3:4b >= 80%  -> store/finalize that span
+Qwen3:4b < 80%   -> Human Review
 ```
 
-Useful tables:
+Important behavior:
+
+- The pipeline does not stop just because Regex found something.
+- A high-confidence span is masked so later detectors do not duplicate it.
+- Remaining unresolved spans continue to the next detector.
+- Qwen3:4b is a final detector, not a validation layer.
+- Human review is the validation step.
+- If a detector crashes, the error is logged, that detector is skipped, and the next detector runs when candidates remain.
+- A detector crash should not fail the whole document unless the workflow cannot continue safely.
+
+## 6. Detection UI Result Rule
+
+The UI should display the final stored detector for each persisted entity row.
+
+Example stored Regex result:
 
 ```text
-documents
-processing_jobs
-ocr_results
-entities
+Entity: ICD10_CODE
+Value: E11.9
+Category: PHI
+Confidence: 85%
+Detector: Regex
+Status: Auto Ready or Review state from DB
+Decision: Approve / Reject only when review is required
+```
+
+Example stored Qwen result:
+
+```text
+Entity: HOSPITAL_OR_FACILITY
+Value: Farmington Medical Center
+Category: PHI
+Confidence: 96%
+Detector: Qwen3:4b
+Status: Auto Ready or Review state from DB
+Decision: Approve / Reject only when review is required
+```
+
+Do not show detector chains like `Regex,ollama` unless the database intentionally stores a combined detector provenance field. The review UI should stay aligned with the persisted entity/review records.
+
+## 7. Database Schema
+
+Current Alembic head:
+
+```text
+0005_processing_job_checkpoint
+```
+
+Expected public tables:
+
+```text
+alembic_version
 confidence_scores
-reviews
+documents
+entities
+ocr_results
+processing_jobs
 redactions
 reports
+reviews
 ```
+
+Table responsibilities:
+
+| Table | Purpose |
+| --- | --- |
+| `documents` | Uploaded document metadata and status |
+| `processing_jobs` | Queue/workflow status, retry count, workflow checkpoints |
+| `ocr_results` | Extracted text, OCR method, confidence, structured OCR metadata |
+| `entities` | Persisted detected entity values and confidence |
+| `confidence_scores` | Detailed confidence metadata per detection |
+| `reviews` | Human review decisions and corrections |
+| `redactions` | Redaction metadata and output file path |
+| `reports` | Audit report metadata and output file path |
+| `alembic_version` | Current migration version |
 
 Useful SQL:
 
@@ -250,13 +226,13 @@ from processing_jobs
 order by created_at desc
 limit 20;
 
-select document_id, extraction_method, confidence_score, left(extracted_text, 200) as preview
-from ocr_results
-order by created_at desc
-limit 10;
-
-select document_id, entity_type, entity_value, confidence_score, is_review_required, is_redacted
+select document_id, entity_type, entity_value, detector, confidence_score, is_review_required, is_redacted
 from entities
+order by created_at desc
+limit 20;
+
+select document_id, review_status, reviewer_decision, created_at
+from reviews
 order by created_at desc
 limit 20;
 
@@ -266,29 +242,235 @@ order by created_at desc
 limit 10;
 ```
 
-## 8. RedisInsight
+## 8. Docker Runbook
 
-Add Redis with:
+Start Docker:
 
-```text
-Name: DocShield Live Redis
-Host: 127.0.0.1
-Port: 6380
-Username: leave empty
-Password: leave empty
+```powershell
+cd E:\Office\DocShield-AI
+.\scripts\docker-up.ps1
 ```
 
-Queue key:
+Equivalent raw command:
+
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml up -d --build --remove-orphans
+```
+
+Check services:
+
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml ps
+```
+
+Expected services:
+
+| Service | Expected state | Host access |
+| --- | --- | --- |
+| `api` | running | `http://localhost:8001` |
+| `worker` | running | no direct host port |
+| `migrate` | exited 0 | no direct host port |
+| `postgres` | healthy | `127.0.0.1:5433` |
+| `redis` | healthy | `127.0.0.1:6380` |
+
+Docker service notes:
+
+- API uses `BYPASS_LLM=True` because it does not run document detection directly.
+- Worker uses `BYPASS_LLM=False`, `OLLAMA_REQUIRED=True`, and `OLLAMA_REQUIRED_MODELS=qwen3:4b`.
+- Containers reach Ollama through `http://host.docker.internal:11434`.
+- The local GUI override bind mounts `./storage:/app/storage`.
+
+Watch logs:
+
+```powershell
+.\scripts\docker-logs.ps1
+```
+
+Stop Docker:
+
+```powershell
+.\scripts\docker-down.ps1
+```
+
+## 9. Local Python Runbook
+
+Initialize local environment:
+
+```powershell
+cd E:\Office\DocShield-AI
+.\scripts\local-init.ps1
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m spacy download en_core_web_sm
+```
+
+Edit `.env.local`:
+
+```text
+POSTGRES_HOST=127.0.0.1
+POSTGRES_PORT=5432
+POSTGRES_DB=pii_phi_document_intelligence_poc
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<your-local-password>
+DATABASE_URL=postgresql+psycopg2://postgres:<your-local-password>@127.0.0.1:5432/pii_phi_document_intelligence_poc
+REDIS_URL=redis://localhost:6379/0
+OLLAMA_REQUIRED_MODELS=qwen3:4b
+GLINER_ALLOW_MODEL_DOWNLOAD=True
+HF_HOME=.cache/huggingface
+DETECTION_HIGH_CONFIDENCE_THRESHOLD=0.80
+```
+
+Check local services:
+
+```powershell
+.\scripts\local-check.ps1
+```
+
+Run migrations:
+
+```powershell
+.\scripts\local-migrate.ps1
+```
+
+Run API:
+
+```powershell
+.\scripts\local-api.ps1
+```
+
+Run worker in a second terminal:
+
+```powershell
+cd E:\Office\DocShield-AI
+.\.venv\Scripts\Activate.ps1
+.\scripts\local-worker.ps1
+```
+
+Local UI:
+
+```text
+http://localhost:8000/ui/
+```
+
+## 10. UI Test
+
+Use Docker UI unless you are specifically testing local Python:
+
+```text
+http://localhost:8001/ui/
+```
+
+Upload a `.txt` file:
+
+```text
+Patient Name: Jane Patient
+Email: jane.patient@example.com
+Phone: 9876543210
+Hospital: Farmington Medical Center
+Diagnosis: E11.9
+Medication: Metformin
+```
+
+Expected flow:
+
+```text
+Upload succeeds
+  -> document status changes from pending/processing to completed
+  -> extracted text is visible
+  -> review rows are visible when review is required
+  -> redacted file is available
+  -> audit report is available
+```
+
+If the UI stays pending, check worker logs:
+
+```powershell
+.\scripts\docker-logs.ps1
+```
+
+## 11. pgAdmin Test
+
+Docker connection:
+
+```text
+Name: DocShield Docker
+Host name/address: 127.0.0.1
+Port: 5433
+Maintenance database: pii_phi_document_intelligence_poc
+Username: postgres
+Password: postgres
+```
+
+Local connection:
+
+```text
+Name: DocShield Local
+Host name/address: 127.0.0.1
+Port: 5432
+Maintenance database: pii_phi_document_intelligence_poc
+Username: postgres
+Password: value from .env.local
+```
+
+Refresh this path:
+
+```text
+Servers
+  <server name>
+    Databases
+      pii_phi_document_intelligence_poc
+        Schemas
+          public
+            Tables
+```
+
+You should see the 9 expected tables listed in the database schema section.
+
+## 12. RedisInsight Test
+
+Docker Redis connection:
+
+```text
+Name: DocShield Docker Redis
+Host: 127.0.0.1
+Port: 6380
+Username: empty
+Password: empty
+```
+
+Local Redis connection:
+
+```text
+Name: DocShield Local Redis
+Host: 127.0.0.1
+Port: 6379
+Username: empty
+Password: empty
+```
+
+Terminal check for Docker Redis:
+
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml exec redis redis-cli ping
+```
+
+Expected output:
+
+```text
+PONG
+```
+
+Redis key:
 
 ```text
 document_processing
 ```
 
-The queue can be empty even when the system is working because the worker uses blocking pop and consumes jobs quickly.
+The key may disappear or stay empty because the worker consumes jobs quickly.
 
-## 9. Storage
+## 13. Storage
 
-With `docker-compose.local-gui.yml`, generated files are bind mounted to the repo:
+Docker with `docker-compose.local-gui.yml` writes runtime artifacts to the repo:
 
 ```text
 storage/uploads/
@@ -297,314 +479,139 @@ storage/redacted/
 storage/reports/
 ```
 
-If only `docker-compose.yml` is used, API and worker use Docker named volume `app_storage`, so files will not appear in the local `storage` folder.
-
-Check files inside the API container:
+Check files through the API container:
 
 ```powershell
-docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f | sort"
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml exec api sh -lc "find /app/storage -maxdepth 3 -type f | sort"
 ```
 
-## 10. API Endpoints
+Runtime files are ignored by git. Keep only `.gitkeep` placeholders if a directory needs to exist in a clean clone.
 
-Base URL for the live Docker setup:
-
-```text
-http://localhost:8001
-```
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/` | Root status payload |
-| GET | `/health/` | Service health |
-| POST | `/upload/` | Upload one document |
-| POST | `/upload/bulk` | Upload multiple documents |
-| GET | `/documents/{document_id}/status` | Document status, job status, workflow stage, OCR availability |
-| GET | `/documents/{document_id}/text` | Latest extracted text and OCR metadata |
-| GET | `/documents/{document_id}/reviews` | Review records for a document |
-| PATCH | `/reviews/{review_id}` | Reviewer decision and optional entity corrections |
-| GET | `/documents/{document_id}/redactions` | Redaction records for a document |
-| GET | `/redactions/{redaction_id}/file` | Redacted text artifact download |
-| GET | `/documents/{document_id}/reports` | Report records for a document |
-| GET | `/reports/{report_id}` | Report metadata and JSON payload |
-| GET | `/reports/{report_id}/file` | Report artifact download |
-
-## 11. Smoke Test
-
-Create and upload a local sample file:
-
-```powershell
-@"
-Patient Name: Jane Patient
-Email: jane.patient@example.com
-Phone: 9876543210
-Diagnosis: Hypertension
-Medication: Metformin
-"@ | Set-Content -Path .\docshield-smoke.txt
-
-$response = Invoke-RestMethod `
-  -Uri http://localhost:8001/upload/ `
-  -Method Post `
-  -Form @{ file = Get-Item .\docshield-smoke.txt }
-
-$documentId = $response.document.document_id
-$documentId
-```
-
-Check processing:
-
-```powershell
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/status"
-```
-
-Check outputs:
-
-```powershell
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/text"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/reviews"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/redactions"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/reports"
-```
-
-Expected database changes:
-
-- `documents` has one new row.
-- `processing_jobs` moves to `COMPLETED` or records an error.
-- `ocr_results` has extracted text.
-- `entities` has detected sensitive values when present.
-- `reviews`, `redactions`, and `reports` are populated by the workflow.
-
-Expected local files:
-
-- Original upload in `storage/uploads/`.
-- Extracted text in `storage/extracted_text/`.
-- Redacted text in `storage/redacted/`.
-- Audit report JSON in `storage/reports/`.
-
-The same workflow can be exercised from the static UI:
-
-```text
-http://localhost:8001/ui/
-```
-
-### Docker Detection Orchestrator Check
-
-Run the focused detection/orchestrator tests inside the API container:
-
-```powershell
-docker exec docshield-ai-live-api pytest tests/test_detection.py -q
-docker exec docshield-ai-live-api pytest tests/test_regex_detector.py -q
-```
-
-Run the full test suite inside Docker:
-
-```powershell
-docker exec docshield-ai-live-api pytest -q
-```
-
-Run a live upload through API, Redis, worker, database, redaction, and report generation:
-
-```powershell
-@"
-Patient Name: Jane Patient
-Email: jane.patient@example.com
-Phone: 9876543210
-Diagnosis: Hypertension
-Medication: Metformin
-"@ | Set-Content -Path .\docker-detection-smoke.txt
-
-$response = Invoke-RestMethod `
-  -Uri http://localhost:8001/upload/ `
-  -Method Post `
-  -Form @{ file = Get-Item .\docker-detection-smoke.txt }
-
-$documentId = $response.document.document_id
-for ($i = 0; $i -lt 30; $i++) {
-  $status = Invoke-RestMethod "http://localhost:8001/documents/$documentId/status"
-  if ($status.document_status -in @("COMPLETED", "FAILED")) { $status; break }
-  Start-Sleep -Seconds 2
-}
-```
-
-Verify API outputs:
-
-```powershell
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/text"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/reviews"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/redactions"
-Invoke-RestMethod "http://localhost:8001/documents/$documentId/reports"
-```
-
-Verify detector routing and candidate decisions in worker logs:
-
-```powershell
-docker logs docshield-ai-live-worker --tail 200 | Select-String -Pattern "Dynamic detection|Executing detector|remaining_candidates|Qwen"
-```
-
-Verify persisted entities:
-
-```powershell
-docker exec docshield-ai-live-postgres psql -U postgres -d pii_phi_document_intelligence_poc -c "select document_id, entity_type, entity_value, detector, confidence_score from entities order by created_at desc limit 20;"
-```
-
-Verify generated storage artifacts:
-
-```powershell
-docker exec docshield-ai-live-api sh -lc "find /app/storage -maxdepth 3 -type f | sort"
-```
-
-## 12. Supported Upload Types
-
-Supported extensions:
-
-```text
-.pdf
-.png
-.jpg
-.jpeg
-.tiff
-.bmp
-.docx
-.txt
-```
-
-Bulk upload accepts up to 100 files per request. The current upload validator enforces a 20 MB per-file limit in code:
-
-```text
-modules/upload/validator.py
-```
-
-The Docker compose environment also sets `MAX_FILE_SIZE_MB=100`, but the validator's hard-coded 20 MB limit is authoritative until that setting is wired into upload validation.
-
-## 13. OCR Behavior
+## 14. OCR Behavior
 
 Extraction routing:
 
 | Input | Engine |
 | --- | --- |
-| Searchable PDF | Native PDF extraction with PyMuPDF |
-| Scanned PDF | PaddleOCR |
-| Mixed PDF | PyMuPDF for searchable pages, PaddleOCR only for scanned pages |
-| Image | PaddleOCR |
 | TXT/DOCX | Native text extraction |
+| Searchable PDF | PyMuPDF native PDF text extraction |
+| Scanned PDF | PaddleOCR |
+| Mixed PDF | PyMuPDF for searchable pages, PaddleOCR for scanned pages |
+| Image | PaddleOCR |
 
-Mixed PDF outputs include page-level `is_searchable`, `extraction_source`, `searchable_pages`, and `ocr_pages` metadata in `structured_output`.
+Mixed PDF output includes page-level metadata such as searchable pages, OCR pages, extraction method, and structured OCR output when available.
 
-PaddleOCR can return both:
+## 15. API Reference
 
-- `extracted_text`: plain text used by downstream detection.
-- `structured_output`: optional page/block/line/table metadata.
+Base URLs:
 
-When PP-Structure is unavailable, the code falls back to bounding-box reconstruction.
-
-## 14. Local Python Development
-
-Use a virtual environment only for non-Docker development:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-pytest -q
+```text
+Docker: http://localhost:8001
+Local:  http://localhost:8000
 ```
 
-Run locally:
+Main endpoints:
 
-```powershell
-python -m alembic upgrade head
-python -m uvicorn app:app --host 0.0.0.0 --port 8000 --reload
-python redis_queue/worker.py
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| GET | `/` | Root status |
+| GET | `/health/` | Health check |
+| POST | `/upload/` | Upload one document |
+| POST | `/upload/bulk` | Upload multiple documents |
+| GET | `/documents/{document_id}/status` | Document and job status |
+| GET | `/documents/{document_id}/text` | Extracted text and OCR metadata |
+| GET | `/documents/{document_id}/reviews` | Review records |
+| PATCH | `/reviews/{review_id}` | Approve/reject review item |
+| GET | `/documents/{document_id}/redactions` | Redaction records |
+| GET | `/redactions/{redaction_id}/file` | Download redacted file |
+| GET | `/documents/{document_id}/reports` | Report list |
+| GET | `/reports/{report_id}` | Report metadata and JSON |
+| GET | `/reports/{report_id}/file` | Download report file |
+
+Swagger UI:
+
+```text
+Docker: http://localhost:8001/docs
+Local:  http://localhost:8000/docs
 ```
 
-For local Python runs, `.env.example` shows the expected variables. Copy it to `.env` if needed.
+## 16. Tests
 
-## 15. Testing
-
-Run the automated test suite:
+Run local tests:
 
 ```powershell
-pytest -q
+python -m pytest -q
 ```
 
-Important current test areas:
+Run tests inside Docker:
 
-- Upload to extracted text API flow.
-- Review decision API.
-- Redaction and report artifact APIs.
-- Native text workflow completion.
-- Failure handling for missing files.
-- Structured PaddleOCR output persistence.
-- PaddleOCR layout reconstruction.
-- Worker retry behavior.
-- Dynamic detection orchestrator routing, masking, candidate-based stopping, detector context handoff, bounded Qwen/Ollama context, and low-confidence validation context.
-- Regex detector coverage for labeled healthcare, employment, enterprise/legal/financial fields, military-style addresses, placeholder rejection, and bank-account/credit-card separation.
+```powershell
+docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml exec api pytest -q
+```
 
-## 16. Troubleshooting
+Focused detection tests:
 
-### pgAdmin connection timeout
+```powershell
+python -m pytest tests/test_detection.py tests/test_detector_selector.py tests/test_regex_detector.py -q
+```
 
-Use `127.0.0.1` and port `5433` for the live setup.
+## 17. Troubleshooting
+
+Docker project is missing or split in Docker Desktop:
+
+```powershell
+.\scripts\docker-up.ps1
+```
+
+Docker Postgres is not reachable:
 
 ```powershell
 Test-NetConnection 127.0.0.1 -Port 5433
 ```
 
-### RedisInsight cannot connect
-
-Use `127.0.0.1` and port `6380`.
+Docker Redis is not reachable:
 
 ```powershell
 Test-NetConnection 127.0.0.1 -Port 6380
 ```
 
-### Storage folder is empty
-
-Make sure the local GUI override is included. It bind mounts `./storage:/app/storage`.
+Local DB exists but tables are missing:
 
 ```powershell
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml up -d
+.\scripts\local-migrate.ps1
 ```
 
-### Worker is restarting
-
-Check logs:
+Local Redis is not running on `6379`:
 
 ```powershell
-docker logs docshield-ai-live-worker --tail 100
+docker run --name docshield-local-redis -p 6379:6379 -d redis:7
 ```
 
-If logs mention NumPy/spaCy binary incompatibility, keep this pin in `requirements.txt`:
+If that container already exists:
 
-```text
-numpy==1.26.4
+```powershell
+docker start docshield-local-redis
 ```
 
-Then rebuild:
+Worker is failing or document remains pending:
+
+```powershell
+.\scripts\docker-logs.ps1
+```
+
+Dependency binary error after package changes:
 
 ```powershell
 docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml build --no-cache
 ```
 
-### API works but document stays pending
+Keep `numpy==1.26.4` unless the spaCy/thinc/MedSpaCy stack is retested.
 
-Check worker logs and Redis queue state:
+## 18. Maintenance Rules
 
-```powershell
-docker logs docshield-ai-live-worker --tail 100
-```
-
-In RedisInsight, inspect key:
-
-```text
-document_processing
-```
-
-## 17. Operational Notes
-
-- `BYPASS_LLM=True` in Docker compose keeps Ollama validation optional.
-- `OLLAMA_REQUIRED=False` means startup will not fail when Ollama is unavailable.
-- `STARTUP_VALIDATION_ENABLED=True` runs database startup validation during FastAPI lifespan startup.
-- Detection defaults are configurable with `DETECTION_HIGH_CONFIDENCE_THRESHOLD`, `DETECTION_MEDIUM_CONFIDENCE_THRESHOLD`, `DETECTION_LLM_VALIDATION_THRESHOLD`, `DETECTION_SEMANTIC_REASONING_THRESHOLD`, `DETECTION_STOPPING_CANDIDATE_THRESHOLD`, `DETECTION_MIN_CANDIDATE_CHARS`, `DETECTION_LLM_CONTEXT_WINDOW`, `DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS`, and `DETECTION_UNRESOLVED_LLM_ENABLED`.
-- Qwen/Ollama receives only bounded unresolved candidate snippets or bounded low-confidence entity snippets; full document text is not sent to the LLM path.
-- `PADDLEOCR_LAYOUT_ANALYSIS_ENABLED=True` enables layout attempts when supported by the installed PaddleOCR package.
-- Do not upgrade NumPy to 2.x with the current spaCy/thinc/medspacy stack unless the Docker worker is retested.
+- Keep README focused on first-run setup.
+- Keep detailed operating notes in this file.
+- Keep Docker and local Python profiles separate.
+- Do not commit `.env.local`, runtime uploads, extracted text, redacted files, or generated reports.
+- Do not reintroduce `container_name` in Compose.
+- Keep Ollama configuration on `qwen3:4b` unless the team explicitly changes the model decision.

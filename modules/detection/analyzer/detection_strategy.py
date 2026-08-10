@@ -17,7 +17,7 @@ class DetectionStrategy:
     use_presidio: bool = True
     use_gliner: bool = True
     use_medspacy: bool = True
-    use_ollama: bool = False
+    use_qwen: bool = False
 
     selected_detectors: list[str] = field(default_factory=list)
 
@@ -35,4 +35,4 @@ class ExecutionPlan:
         """
         Returns True if no detectors (excluding Regex) need to run.
         """
-        return len(self.selected_detectors) == 0
+        return len(self.selected_detectors) == 0

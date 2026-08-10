@@ -1,27 +1,22 @@
 services:
-  migrate:
-    container_name: docshield-ai-live-migrate
-
   api:
-    container_name: docshield-ai-live-api
     ports: !override
       - "8001:8000"
     volumes: !override
       - ./storage:/app/storage
       - paddle_models:/root/.paddlex
+      - hf_models:/root/.cache/huggingface
 
   worker:
-    container_name: docshield-ai-live-worker
     volumes: !override
       - ./storage:/app/storage
       - paddle_models:/root/.paddlex
+      - hf_models:/root/.cache/huggingface
 
   postgres:
-    container_name: docshield-ai-live-postgres
     ports: !override
       - "5433:5432"
 
   redis:
-    container_name: docshield-ai-live-redis
     ports: !override
       - "6380:6379"

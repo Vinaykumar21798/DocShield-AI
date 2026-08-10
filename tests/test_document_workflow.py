@@ -148,6 +148,15 @@ def test_workflow_completes_native_text_document(
         and entity["entity_value"] == "jane.patient@example.com"
         for entity in report_payload["entities"]
     )
+    report_order = [
+        (
+            int(entity["page_number"]),
+            entity["start_char"],
+            entity["end_char"],
+        )
+        for entity in report_payload["entities"]
+    ]
+    assert report_order == sorted(report_order)
 
     assert "[REDACTED_EMAIL]" in redacted_text_file.read_text(
         encoding="utf-8",

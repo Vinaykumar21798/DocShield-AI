@@ -16,7 +16,7 @@ class Deduplicator:
     ) -> list[DetectionResult]:
 
         # First, group exact duplicates (same page, start_char, end_char)
-        # to combine their detector lists and keep the highest confidence.
+        # to keep the highest-confidence final owner for that span.
         unique_entities: dict[
             tuple[int, int, int],
             DetectionResult,
@@ -43,15 +43,10 @@ class Deduplicator:
                 existing.metadata["conflicting_types"] = conflicting
                 detection.metadata["conflicting_types"] = conflicting
 
-            # Merge detector names
-            merged_detector = Deduplicator._merged_detectors(existing.detector, detection.detector)
 
             # Compare confidence
             if detection.confidence_score > existing.confidence_score:
-                detection.detector = merged_detector
                 unique_entities[key] = detection
-            else:
-                existing.detector = merged_detector
 
         # Now, perform Longest Span Overlap Resolution on unique spans.
         sorted_detections = sorted(
@@ -80,8 +75,6 @@ class Deduplicator:
                         if detection.entity_type not in conflicting:
                             conflicting.append(detection.entity_type)
                         acc.metadata["conflicting_types"] = conflicting
-                    # Merge detector names if they overlap
-                    acc.detector = Deduplicator._merged_detectors(acc.detector, detection.detector)
                     break
             if not overlaps:
                 accepted.append(detection)
@@ -89,13 +82,3 @@ class Deduplicator:
         # Sort the accepted list by page number and position
         accepted.sort(key=lambda d: (d.page_number, d.start_char))
         return accepted
-
-    @staticmethod
-    def _merged_detectors(*detector_values: str) -> str:
-        detectors = {
-            detector.strip()
-            for value in detector_values
-            for detector in value.split(",")
-            if detector.strip()
-        }
-        return ",".join(sorted(detectors))

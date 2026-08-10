@@ -70,9 +70,27 @@ TITLE_ONLY = {
     "ms.",
 }
 
-PERSON_NAME_TOKEN = r"[A-Z][a-z]+(?:['-][A-Z][a-z]+)*"
+PERSON_NAME_TOKEN = r"(?:[A-Z][a-z]+(?:['-][A-Z][a-z]+)*|[A-Z]\.)"
 PERSON_NAME_PATTERN = rf"{PERSON_NAME_TOKEN}(?:\s+{PERSON_NAME_TOKEN}){{1,3}}"
 CREDENTIAL_SUFFIX_PATTERN = r"(?:DVM|MD|DO|DDS|PhD|CPA|Esq\.?|RN|NP|PA-C)"
+CREDENTIAL_SUFFIX_RE = re.compile(
+    rf"\s+{CREDENTIAL_SUFFIX_PATTERN}\.?$",
+    re.IGNORECASE,
+)
+MEDICATION_TERMS = {
+    "metformin",
+    "paracetamol",
+    "ibuprofen",
+    "aspirin",
+    "lisinopril",
+    "atorvastatin",
+    "lipitor",
+    "zocor",
+    "synthroid",
+    "crestor",
+    "dicyclomine",
+    "probiotic",
+}
 
 PERSON_CONTEXT_PATTERNS = (
     re.compile(
@@ -82,7 +100,7 @@ PERSON_CONTEXT_PATTERNS = (
         r"(?=is|was|has|currently|will|,)",
     ),
     re.compile(
-        rf"(?im)^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact|Employee Name|Candidate Name|Staff Member)"
+        rf"(?im)^\s*(?:Customer Name|Patient Name|Witness|Authorized Signatory|Emergency Contact|Employee Name|Candidate Name|Staff Member)"
         rf"[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?"
         rf"(?P<person>{PERSON_NAME_PATTERN})"
         rf"(?:\s+{CREDENTIAL_SUFFIX_PATTERN})?[ \t]*$",
@@ -133,16 +151,21 @@ class PresidioDetector(BaseDetector):
             try:
                 import spacy
 
-                has_local_model = any(
-                    spacy.util.is_package(model_name)
-                    for model_name in ("en_core_web_lg", "en_core_web_sm")
+                model_name = next(
+                    (
+                        candidate
+                        for candidate in ("en_core_web_sm", "en_core_web_lg")
+                        if spacy.util.is_package(candidate)
+                    ),
+                    None,
                 )
-                if not has_local_model:
+                if model_name is None:
                     raise RuntimeError(
                         "No local spaCy English model is installed"
                     )
 
                 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, PatternRecognizer, Pattern
+                from presidio_analyzer.nlp_engine import NlpEngineProvider
 
                 registry = RecognizerRegistry()
                 registry.load_predefined_recognizers()
@@ -168,9 +191,24 @@ class PresidioDetector(BaseDetector):
                     if recognizer.name in remove:
                         registry.remove_recognizer(recognizer.name)
 
+                nlp_engine = NlpEngineProvider(
+                    nlp_configuration={
+                        "nlp_engine_name": "spacy",
+                        "models": [
+                            {
+                                "lang_code": "en",
+                                "model_name": model_name,
+                            }
+                        ],
+                    }
+                ).create_engine()
+
                 self._analyzer = AnalyzerEngine(
                     registry=registry,
+                    nlp_engine=nlp_engine,
+                    supported_languages=["en"],
                 )
+                logger.info("Presidio analyzer using spaCy model %s", model_name)
             except Exception:
                 self._analyzer_unavailable = True
                 raise
@@ -259,10 +297,12 @@ class PresidioDetector(BaseDetector):
         for result in results:
 
             entity_value = text[result.start:result.end].strip()
+            start_char = result.start
+            end_char = result.end
             value_lower = entity_value.lower()
 
             # Reclassify PERSON/ORGANIZATION to LOCATION if preceded by address label
-            preceding_context = text[max(0, result.start - 15):result.start].lower()
+            preceding_context = text[max(0, result.start - 40):result.start].lower()
             current_entity_type = result.entity_type
             if "address" in preceding_context and current_entity_type in {"PERSON", "ORGANIZATION"}:
                 current_entity_type = "LOCATION"
@@ -281,16 +321,31 @@ class PresidioDetector(BaseDetector):
             if current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"} and any(disease in value_lower for disease in DISEASE_KEYWORDS):
                 current_entity_type = "DISEASE"
 
-            # PERSON entities should never span multiple lines
+            if (
+                current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}
+                and value_lower in MEDICATION_TERMS
+            ):
+                current_entity_type = "MEDICATION"
+
+            # PERSON entities should never span multiple lines or include credentials.
             if current_entity_type == "PERSON":
                 entity_value = entity_value.splitlines()[0].strip()
+                credential_match = CREDENTIAL_SUFFIX_RE.search(entity_value)
+                if credential_match:
+                    entity_value = entity_value[:credential_match.start()].rstrip()
+                end_char = start_char + len(entity_value)
+                value_lower = entity_value.lower()
 
             # Discard generic words flagged as PERSON, LOCATION, ORGANIZATION or DATE_TIME
             BLACKLIST = {
                 "reschedule", "copay", "appointment", "visit", "date", "phone", "email", "address", "portal", "patient",
                 "provider", "doctor", "hospital", "clinic", "amount", "billed", "covered", "cpt", "dob", "ssn", "insurance",
                 "policy", "claim", "history", "results", "medication", "procedure", "diagnosis", "information", "details",
-                "city", "state", "zip", "complimentary", "annual", "plan year", "plan years", "plan-year", "service date", "collection date"
+                "city", "state", "zip", "complimentary", "annual", "plan year", "plan years", "plan-year", "service date", "collection date",
+                "certified mail", "ciso", "complete", "fsa", "health", "hipaa",
+                "implemented", "medical", "medical record", "medication", "needed",
+                "protected health information", "secured",
+                "the health insurance portability"
             }
             if value_lower in BLACKLIST:
                 continue
@@ -350,8 +405,8 @@ class PresidioDetector(BaseDetector):
             key = (
                 current_entity_type,
                 value_lower,
-                result.start,
-                result.end,
+                start_char,
+                end_char,
             )
 
             if key in seen:
@@ -364,8 +419,8 @@ class PresidioDetector(BaseDetector):
                     entity_type=current_entity_type,
                     entity_value=entity_value,
                     confidence_score=float(result.score),
-                    start_char=result.start,
-                    end_char=result.end,
+                    start_char=start_char,
+                    end_char=end_char,
                     page_number=page_number,
                     detector=self.name,
                     metadata={

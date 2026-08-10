@@ -1,7 +1,6 @@
 services:
   migrate:
     build: .
-    container_name: docshield-migrate
     command: ["python", "-m", "alembic", "upgrade", "head"]
     environment:
       APP_NAME: DocShield-AI
@@ -13,15 +12,23 @@ services:
       PADDLEOCR_LAYOUT_ANALYSIS_ENABLED: "True"
       BYPASS_LLM: "True"
       OLLAMA_REQUIRED: "False"
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      GLINER_ALLOW_MODEL_DOWNLOAD: "True"
+      HF_HOME: /root/.cache/huggingface
+      DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"
+      DETECTION_MEDIUM_CONFIDENCE_THRESHOLD: "0.60"
+      DETECTION_STOPPING_CANDIDATE_THRESHOLD: "0"
+      DETECTION_MIN_CANDIDATE_CHARS: "3"
       UPLOAD_DIR: storage/uploads
       MAX_FILE_SIZE_MB: 100
+      STARTUP_VALIDATION_ENABLED: "True"
     depends_on:
       postgres:
         condition: service_healthy
 
   api:
     build: .
-    container_name: docshield-api
     restart: unless-stopped
     environment:
       APP_NAME: DocShield-AI
@@ -35,13 +42,23 @@ services:
       PADDLEOCR_LAYOUT_ANALYSIS_ENABLED: "True"
       BYPASS_LLM: "True"
       OLLAMA_REQUIRED: "False"
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      GLINER_ALLOW_MODEL_DOWNLOAD: "True"
+      HF_HOME: /root/.cache/huggingface
+      DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"
+      DETECTION_MEDIUM_CONFIDENCE_THRESHOLD: "0.60"
+      DETECTION_STOPPING_CANDIDATE_THRESHOLD: "0"
+      DETECTION_MIN_CANDIDATE_CHARS: "3"
       UPLOAD_DIR: storage/uploads
       MAX_FILE_SIZE_MB: 100
+      STARTUP_VALIDATION_ENABLED: "True"
     ports:
-      - "8000:8000"
+      - "8001:8000"
     volumes:
       - app_storage:/app/storage
       - paddle_models:/root/.paddlex
+      - hf_models:/root/.cache/huggingface
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -50,7 +67,6 @@ services:
 
   worker:
     build: .
-    container_name: docshield-worker
     restart: unless-stopped
     command: ["python", "redis_queue/worker.py"]
     environment:
@@ -61,13 +77,23 @@ services:
       REDIS_URL: redis://redis:6379/0
       PROCESSING_JOB_MAX_RETRIES: 3
       PADDLEOCR_LAYOUT_ANALYSIS_ENABLED: "True"
-      BYPASS_LLM: "True"
-      OLLAMA_REQUIRED: "False"
+      BYPASS_LLM: "False"
+      OLLAMA_REQUIRED: "True"
+      OLLAMA_HOST: http://host.docker.internal:11434
+      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      GLINER_ALLOW_MODEL_DOWNLOAD: "True"
+      HF_HOME: /root/.cache/huggingface
+      DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"
+      DETECTION_MEDIUM_CONFIDENCE_THRESHOLD: "0.60"
+      DETECTION_STOPPING_CANDIDATE_THRESHOLD: "0"
+      DETECTION_MIN_CANDIDATE_CHARS: "3"
       UPLOAD_DIR: storage/uploads
       MAX_FILE_SIZE_MB: 100
+      STARTUP_VALIDATION_ENABLED: "True"
     volumes:
       - app_storage:/app/storage
       - paddle_models:/root/.paddlex
+      - hf_models:/root/.cache/huggingface
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -76,14 +102,13 @@ services:
 
   postgres:
     image: postgres:16
-    container_name: datafactz-postgres
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: pii_phi_document_intelligence_poc
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -94,10 +119,9 @@ services:
 
   redis:
     image: redis:7
-    container_name: datafactz-redis
     restart: always
     ports:
-      - "6379:6379"
+      - "6380:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -108,3 +132,4 @@ volumes:
   postgres_data:
   app_storage:
   paddle_models:
+  hf_models:

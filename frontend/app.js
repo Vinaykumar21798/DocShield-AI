@@ -1082,6 +1082,23 @@
     const listContainer = document.getElementById("cardsListContainer");
     if (!listContainer) return;
 
+    const occurrenceTotals = new Map();
+    reviewState.entities.forEach(entity => {
+      const key = `${entity.entity_type || ""}\u0000${entity.entity_value || ""}`;
+      occurrenceTotals.set(key, (occurrenceTotals.get(key) || 0) + 1);
+    });
+    const occurrenceSeen = new Map();
+    const occurrenceById = new Map();
+    reviewState.entities.forEach(entity => {
+      const key = `${entity.entity_type || ""}\u0000${entity.entity_value || ""}`;
+      const index = (occurrenceSeen.get(key) || 0) + 1;
+      occurrenceSeen.set(key, index);
+      occurrenceById.set(entity.id, {
+        index,
+        total: occurrenceTotals.get(key) || 1
+      });
+    });
+
     const filtered = reviewState.entities.filter(entity => {
       if (normalizeCategory(entity.privacy_category) !== reviewState.activeTab) return false;
 
@@ -1127,6 +1144,10 @@
       
       const rStatus = reviewState.reviewMap.has(entity.id) ? reviewState.reviewMap.get(entity.id).review_status : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
       const displayVal = reviewState.revealValues ? entity.entity_value : maskValue(entity.entity_value);
+      const occurrence = occurrenceById.get(entity.id) || { index: 1, total: 1 };
+      const occurrenceLabel = occurrence.total > 1
+        ? `Occurrence ${occurrence.index} of ${occurrence.total}`
+        : "Single occurrence";
 
       return `
         <div class="entity-card ${activeClass}" data-entity-id="${entity.id}">
@@ -1138,7 +1159,7 @@
             <div><strong>Value:</strong> ${escapeHtml(displayVal)}</div>
             <div><strong>Detector:</strong> ${escapeHtml(entity.detector)}</div>
             <div><strong>Confidence:</strong> ${escapeHtml(confidence)} &middot; <span class="status-pill ${statusTone(rStatus)}">${rStatus}</span></div>
-            <div><strong>Page:</strong> ${escapeHtml(entity.page_number)}</div>
+            <div><strong>Position:</strong> ${escapeHtml(occurrenceLabel)} &middot; Page ${escapeHtml(entity.page_number)} &middot; chars ${escapeHtml(entity.start_char)}-${escapeHtml(entity.end_char)}</div>
           </div>
           <div class="card-actions">
             <button class="button secondary compact go-to-btn" data-entity-id="${entity.id}" type="button">Go To</button>
@@ -1264,7 +1285,13 @@
       reviewState.entities = entities.map((ent, idx) => ({
         ...ent,
         id: ent.entity_id || ent.id || `ent-${idx}`
-      }));
+      })).sort((left, right) => {
+        const pageDifference = (parseInt(left.page_number) || 0) - (parseInt(right.page_number) || 0);
+        if (pageDifference !== 0) return pageDifference;
+        const startDifference = (left.start_char ?? Number.MAX_SAFE_INTEGER) - (right.start_char ?? Number.MAX_SAFE_INTEGER);
+        if (startDifference !== 0) return startDifference;
+        return (left.end_char ?? Number.MAX_SAFE_INTEGER) - (right.end_char ?? Number.MAX_SAFE_INTEGER);
+      });
       reviewState.selectedEntity = null;
 
       // Build review map

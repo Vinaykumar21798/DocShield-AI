@@ -1,11 +1,16 @@
+import os
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-load_dotenv()
+DEFAULT_ENV_FILE = ".env"
+ENV_FILE = os.getenv("DOCSHIELD_ENV_FILE", DEFAULT_ENV_FILE)
+
+load_dotenv(dotenv_path=ENV_FILE)
 
 
 class Settings(BaseSettings):
@@ -69,6 +74,9 @@ def get_settings() -> Settings:
     """
     Returns cached application settings.
     """
+    env_file = os.getenv("DOCSHIELD_ENV_FILE", ENV_FILE)
+    if env_file and Path(env_file).exists():
+        return Settings(_env_file=env_file)
     return Settings()
 
 

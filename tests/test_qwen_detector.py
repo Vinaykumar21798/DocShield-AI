@@ -59,3 +59,20 @@ def test_qwen_detector_invalid_json_handling():
     # Verify detect() handles parsing failure gracefully and returns []
     results = detector.detect("Sample text")
     assert results == []
+
+def test_qwen_detector_skips_blank_entity_values():
+    detector = Qwen3BDetector()
+    detector.client = MagicMock()
+
+    mock_message = MagicMock()
+    mock_message.content = (
+        '{"results":[{"entity_type":"PERSON","entity_value":"",'
+        '"confidence_score":0.9,"start_char":0,"end_char":0}]}'
+    )
+    mock_response = MagicMock()
+    mock_response.message = mock_message
+    detector.client.chat.return_value = mock_response
+
+    results = detector.detect("Name:")
+    assert results == []
+

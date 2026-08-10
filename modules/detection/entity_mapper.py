@@ -24,6 +24,8 @@ class EntityMapper:
         "START_DATE": "START_DATE",
         "SALARY": "SALARY",
         "POLICY_NUMBER": "POLICY_NUMBER",
+        "ACCESS_CODE": "ACCESS_CODE",
+        "TRACKING_NUMBER": "TRACKING_NUMBER",
 
         # ==========================
         # ORGANIZATION
@@ -38,6 +40,7 @@ class EntityMapper:
         "MEDICAL_FACILITY": "MEDICAL_FACILITY",
         "HEALTHCARE ORGANIZATION": "HEALTHCARE_ORGANIZATION",
         "HEALTHCARE_ORGANIZATION": "HEALTHCARE_ORGANIZATION",
+        "INSURANCE_PROVIDER": "INSURANCE_PROVIDER",
 
         # ==========================
         # ADDRESS
@@ -109,6 +112,7 @@ class EntityMapper:
         # ==========================
         "DATE": "DATE",
         "DATE_TIME": "DATE_TIME",
+        "DATE_RANGE": "DATE_RANGE",
         "VISIT_DATE": "VISIT_DATE",
         "TIME": "TIME",
         "AGE": "AGE",
@@ -143,6 +147,8 @@ class EntityMapper:
         "DRUG": "MEDICATION",
 
         "DOSAGE": "DOSAGE",
+        "SPECIMEN": "SPECIMEN",
+        "CLINICAL_SECTION": "CLINICAL_SECTION",
 
         "SYMPTOM": "SYMPTOM",
 
@@ -170,6 +176,10 @@ class EntityMapper:
         "GSTIN": "GSTIN",
 
         "DOCUMENT ID": "DOCUMENT_ID",
+        "REPORT ID": "REPORT_ID",
+        "REPORT_ID": "REPORT_ID",
+        "ACCESS CODE": "ACCESS_CODE",
+        "TRACKING NUMBER": "TRACKING_NUMBER",
 
         "REFERENCE NUMBER": "REFERENCE_NUMBER",
 
@@ -236,6 +246,7 @@ class PrivacyMapper:
         "COUNTRY": "PII",
         "DATE": "PII",
         "DATE_TIME": "PII",
+        "DATE_RANGE": "PII",
         "DATE_OF_BIRTH": "PII",
         "TIME": "PII",
         "AGE": "PII",
@@ -266,6 +277,10 @@ class PrivacyMapper:
         "DEVICE_ID": "PII",
         "EMPLOYEE_ID": "PII",
         "DOCUMENT_ID": "PII",
+        "REPORT_ID": "PII",
+        "ACCESS_CODE": "PII",
+        "TRACKING_NUMBER": "PII",
+        "REFERENCE_NUMBER": "PII",
         "GSTIN": "PII",
         "INVOICE_NUMBER": "PII",
         "START_DATE": "PII",
@@ -282,6 +297,7 @@ class PrivacyMapper:
         "HOSPITAL": "PHI",
         "MEDICAL_FACILITY": "PHI",
         "HEALTHCARE_ORGANIZATION": "PHI",
+        "INSURANCE_PROVIDER": "PHI",
         "DISEASE": "PHI",
         "PROBLEM": "PHI",
         "MEDICAL_CONDITION": "PHI",
@@ -289,6 +305,9 @@ class PrivacyMapper:
         "SYMPTOM": "PHI",
         "MEDICATION": "PHI",
         "DRUG": "PHI",
+        "DOSAGE": "PHI",
+        "SPECIMEN": "PHI",
+        "CLINICAL_SECTION": "PHI",
         "PROCEDURE": "PHI",
         "LAB": "PHI",
         "LAB_RESULT": "PHI",
@@ -311,6 +330,7 @@ class PrivacyMapper:
         "TAX_ID": "PII",
         "EOB_NUMBER": "PHI",
         "CLINICAL_MEASUREMENT": "PHI",
+        "OTHER_PHI": "PHI",
     }
 
     @classmethod

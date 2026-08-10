@@ -11,7 +11,7 @@ class ConfidenceCalculator:
     than agreement across multiple detectors.
     """
 
-    HIGH_CONFIDENCE_THRESHOLD = 0.85
+    HIGH_CONFIDENCE_THRESHOLD = 0.80
     MEDIUM_CONFIDENCE_THRESHOLD = 0.60
 
     @classmethod
@@ -48,10 +48,10 @@ class ConfidenceCalculator:
 
                 # Presidio returns statistical confidence.
                 # Boost DATE_TIME confidence if it meets the medium threshold (0.60)
-                # to 0.85 (high confidence) so that it is masked early, preventing
-                # redundant LLM candidate contexts and validation calls on dates.
+                # to 0.80 (high confidence) so that it is masked early, preventing
+                # redundant downstream candidate processing on dates.
                 if detection.entity_type == "DATE_TIME" and score >= 0.60:
-                    final_score = 0.85
+                    final_score = 0.80
                 else:
                     final_score = score
 

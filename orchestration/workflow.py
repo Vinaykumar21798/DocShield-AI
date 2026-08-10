@@ -637,12 +637,33 @@ class DocumentProcessingWorkflow:
         state.persisted_entity_ids = []
 
         for detection in state.detected_entities:
+            entity_value = getattr(detection, "entity_value", None)
+            start_char = getattr(detection, "start_char", None)
+            end_char = getattr(detection, "end_char", None)
+            if (
+                not isinstance(entity_value, str)
+                or not entity_value.strip()
+                or not isinstance(start_char, int)
+                or not isinstance(end_char, int)
+                or start_char >= end_char
+            ):
+                self.logger.warning(
+                    "Skipping invalid detection before persistence. document_id=%s entity_type=%s value=%r span=%s-%s detector=%s",
+                    document.id,
+                    getattr(detection, "entity_type", "UNKNOWN"),
+                    entity_value,
+                    start_char,
+                    end_char,
+                    getattr(detection, "detector", "UNKNOWN"),
+                )
+                continue
+
             entity = Entity(
                 id=str(uuid4()),
                 document_id=document.id,
                 ocr_result_id=ocr_result.id,
                 entity_type=detection.entity_type,
-                entity_value=detection.entity_value,
+                entity_value=entity_value.strip(),
                 page_number=str(detection.page_number),
                 confidence_score=detection.confidence_score,
                 detector=detection.detector,
@@ -777,8 +798,16 @@ class DocumentProcessingWorkflow:
             review for review in reviews if review.review_status == "PENDING"
         ]
         qwen_invoked = any(
-            (entity.detector or "").lower().startswith("qwen")
+            "qwen" in (entity.detector or "").lower()
             for entity in entities
+        )
+        ordered_entities = sorted(
+            entities,
+            key=lambda entity: (
+                int(entity.page_number or 0),
+                entity.start_char if entity.start_char is not None else -1,
+                entity.end_char if entity.end_char is not None else -1,
+            ),
         )
 
         report_payload = {
@@ -806,7 +835,7 @@ class DocumentProcessingWorkflow:
                     "start_char": entity.start_char,
                     "end_char": entity.end_char,
                 }
-                for entity in entities
+                for entity in ordered_entities
             ],
         }
         report_path = self._save_report_file(document.id, report_payload)
@@ -861,7 +890,7 @@ class DocumentProcessingWorkflow:
         if confidence_level:
             return confidence_level
 
-        if detection.confidence_score >= 0.85:
+        if detection.confidence_score >= HUMAN_REVIEW_THRESHOLD:
             return "HIGH"
 
         if detection.confidence_score >= 0.60:
@@ -871,36 +900,9 @@ class DocumentProcessingWorkflow:
 
     @staticmethod
     def _is_review_required(detection) -> bool:
-        # 1. Regex detector with confidence >= 0.95: Auto Approved
-        is_regex = "regex" in detection.detector.lower()
-        if is_regex and detection.confidence_score >= 0.95:
-            # But check if there was a detector disagreement conflict
-            if not detection.metadata.get("conflicting_types"):
-                return False
-
-        # 2. Check if multiple detectors disagreed on the entity type
-        if detection.metadata.get("conflicting_types") and len(detection.metadata["conflicting_types"]) > 1:
-            return True
-
-        # 3. Check if unknown or unregistered entity type
-        known_types = {
-            "PERSON", "PATIENT", "DOCTOR", "PHYSICIAN", "PROVIDER", "NURSE", "HEALTHCARE_STAFF",
-            "ORGANIZATION", "HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION",
-            "ADDRESS", "LOCATION", "CITY", "STATE", "COUNTRY", "ZIP_CODE",
-            "EMAIL", "PHONE_NUMBER", "US_PHONE_NUMBER", "URL", "IP_ADDRESS",
-            "AADHAAR_NUMBER", "PAN_NUMBER", "PASSPORT_NUMBER", "DRIVING_LICENSE", "VOTER_ID",
-            "BANK_ACCOUNT_NUMBER", "IFSC_CODE", "CREDIT_CARD_NUMBER", "DEBIT_CARD_NUMBER", "UPI_ID",
-            "DATE", "DATE_TIME", "VISIT_DATE", "TIME", "AGE", "DATE_OF_BIRTH", "START_DATE",
-            "MEDICAL_RECORD_NUMBER", "MRN", "PATIENT_ID", "INSURANCE_ID", "POLICY_NUMBER", "CLAIM_NUMBER",
-            "DISEASE", "PROBLEM", "DIAGNOSIS", "MEDICATION", "DRUG", "DOSAGE", "SYMPTOM", "PROCEDURE",
-            "LAB", "LAB_RESULT", "LAB_TEST", "ALLERGY", "VITAL_SIGN", "CLINICAL_FINDING",
-            "INVOICE_NUMBER", "GSTIN", "DOCUMENT_ID", "NPI_NUMBER", "MEMBER_ID", "GROUP_NUMBER",
-            "TAX_ID", "EOB_NUMBER", "CLINICAL_MEASUREMENT", "PO_BOX"
-        }
-        if detection.entity_type.upper() not in known_types:
-            return True
-
-        # 4. Standard threshold check
+        # Review readiness is derived from one canonical final-confidence rule.
+        # Type disagreements must be reflected in confidence calibration before
+        # this point rather than overriding the threshold during persistence.
         return detection.confidence_score < HUMAN_REVIEW_THRESHOLD
 
     @staticmethod
@@ -1194,6 +1196,3 @@ class DocumentProcessingWorkflow:
                 f"{state.document_id}"
             )
         return state.processing_job
-
-
-

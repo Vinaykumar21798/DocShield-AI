@@ -57,8 +57,8 @@ def run_startup_validation() -> None:
     Validate critical runtime dependencies and schema compatibility.
 
     PostgreSQL schema validation is strict because the API cannot safely serve
-    document state without it. Ollama validation is optional and enabled with
-    OLLAMA_REQUIRED=true because the LLM detectors are fail-safe downstream.
+    document state without it. The Ollama startup model check is optional and
+    enabled with OLLAMA_REQUIRED=true for the Qwen detector runtime.
     """
     logger = logging.getLogger(__name__)
     logger.info("Initializing startup validation")
@@ -152,7 +152,7 @@ def run_startup_validation() -> None:
         ) from exc
 
     if not _is_enabled(os.getenv("OLLAMA_REQUIRED", "false")):
-        logger.info("Ollama startup validation skipped")
+        logger.info("Ollama startup model check skipped")
         return
 
     ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -160,7 +160,7 @@ def run_startup_validation() -> None:
         model.strip()
         for model in os.getenv(
             "OLLAMA_REQUIRED_MODELS",
-            "qwen2.5:8b,qwen3:4b",
+            "qwen3:4b",
         ).split(",")
         if model.strip()
     ]
@@ -183,7 +183,7 @@ def run_startup_validation() -> None:
                 f"Ollama: {missing_models}. Available models: "
                 f"{installed_models}"
             )
-        logger.info("Ollama validation: OK")
+        logger.info("Ollama startup model check: OK")
     except RuntimeError:
         raise
     except Exception as exc:

@@ -99,30 +99,26 @@ class FailDetector(FakeDetector):
         raise AssertionError(f"{self.name} should not execute")
 
 
-class FakeValidator:
-    def __init__(self):
-        self.context = None
-        self.entities = None
 
-    def validate_batch(self, context, entities):
-        self.context = context
-        self.entities = list(entities)
-        for entity in entities:
-            entity.metadata["validated_by"] = "fake_validator"
-            entity.metadata["valid"] = True
-        return entities
+class CrashDetector(FakeDetector):
+    def detect(self, text, page_number=1):
+        self.seen_texts.append(text)
+        self.contexts.append(getattr(self, "orchestration_context", None))
+        raise RuntimeError(f"{self.name} crashed")
 
 
-def service_with_detectors(regex, presidio, gliner, medspacy):
+def service_with_detectors(regex, presidio, gliner, medspacy, qwen=None):
     service = DetectionService()
     service.regex = regex
     service._presidio = presidio
     service._gliner = gliner
     service._medspacy = medspacy
+    if qwen is not None:
+        service._qwen3b = qwen
     return service
 
 
-def test_dynamic_orchestrator_masks_text_between_detector_stages(monkeypatch):
+def test_dynamic_orchestrator_collects_candidates_from_original_text(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "true")
     text = "Name: Alpha\nName: Beta\nName: Gamma"
 
@@ -144,8 +140,8 @@ def test_dynamic_orchestrator_masks_text_between_detector_stages(monkeypatch):
     results = service.detect(text)
 
     assert [item.entity_value for item in results] == ["Alpha", "Beta", "Gamma"]
-    assert presidio.seen_texts == ["Name:      \nName: Beta\nName: Gamma"]
-    assert gliner.seen_texts == ["Name:      \nName:     \nName: Gamma"]
+    assert presidio.seen_texts == [text]
+    assert gliner.seen_texts == [text]
     assert medspacy.seen_texts == []
     assert presidio.contexts[0]["remaining_text"] == presidio.seen_texts[0]
     assert [e.entity_value for e in presidio.contexts[0]["previous_entities"]] == ["Alpha"]
@@ -189,11 +185,11 @@ def test_financial_route_runs_presidio_before_gliner(monkeypatch):
 
     results = service.detect(text)
 
-    assert [item.detector for item in results] == ["gliner", "regex"]
+    assert [item.detector for item in results] == ["GLiNER", "Regex"]
     assert presidio.seen_texts
     assert gliner.seen_texts
-    assert "ravi@example.com" not in presidio.seen_texts[0]
-    assert "ravi@example.com" not in gliner.seen_texts[0]
+    assert presidio.seen_texts[0] == text
+    assert gliner.seen_texts[0] == text
     assert gliner.contexts[0]["executed_detectors"] == ["regex", "presidio"]
 
 
@@ -220,55 +216,158 @@ def test_healthcare_route_runs_medspacy_before_gliner(monkeypatch):
 
     results = service.detect(text)
 
-    assert [item.entity_value for item in results] == ["Back Pain"]
+    assert {item.entity_value for item in results} == {"Maya Rao", "Back Pain"}
     assert medspacy.contexts[0]["executed_detectors"] == [
         "regex",
-        "presidio",
     ]
     assert gliner.contexts[0]["executed_detectors"] == [
         "regex",
-        "presidio",
         "medspacy",
+        "presidio",
     ]
-    assert "Back Pain" not in gliner.seen_texts[0]
+    assert medspacy.seen_texts[0] == text
+    assert gliner.seen_texts[0] == text
 
 
-def test_llm_validation_receives_only_low_confidence_entities_with_bounded_context(
+def test_low_confidence_entity_continues_to_next_detector_until_resolved(
     monkeypatch,
 ):
-    monkeypatch.setenv("BYPASS_LLM", "false")
-    monkeypatch.setenv("DETECTION_HIGH_CONFIDENCE_THRESHOLD", "0.45")
-    monkeypatch.setenv("DETECTION_LLM_CONTEXT_WINDOW", "10")
-    text = "." * 500 + "SSN: 123-45-6789" + "." * 500
-    ssn_start = text.index("123-45-6789")
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    monkeypatch.setenv("DETECTION_HIGH_CONFIDENCE_THRESHOLD", "0.80")
+    text = "Name: Alice"
+    start = text.index("Alice")
 
     regex = FakeDetector(
         "regex",
         {
-            "type": "SSN",
-            "value": "123-45-6789",
-            "start": ssn_start,
-            "end": ssn_start + len("123-45-6789"),
-            "confidence": 0.50,
+            "type": "PERSON",
+            "value": "Alice",
+            "start": start,
+            "end": start + len("Alice"),
+            "confidence": 0.70,
+        },
+    )
+    presidio = FakeDetector("presidio", result=None)
+    gliner = FakeDetector(
+        "gliner",
+        {
+            "type": "PERSON",
+            "value": "Alice",
+            "start": start,
+            "end": start + len("Alice"),
+            "confidence": 0.92,
+        },
+    )
+    qwen = FakeDetector(
+        "qwen3b",
+        {
+            "type": "PERSON",
+            "value": "Alice",
+            "start": start,
+            "end": start + len("Alice"),
+            "confidence": 0.99,
         },
     )
     service = service_with_detectors(
         regex,
-        FailDetector("presidio"),
-        FailDetector("gliner"),
+        presidio,
+        gliner,
         FailDetector("medspacy"),
+        qwen=qwen,
     )
-    validator = FakeValidator()
-    service.validator = validator
 
     results = service.detect(text)
 
     assert len(results) == 1
-    assert validator.entities == results
-    assert "123-45-6789" in validator.context
-    assert validator.context != text
-    assert len(validator.context) < len(text)
+    assert results[0].entity_value == "Alice"
+    assert results[0].confidence_score == 0.92
+    assert results[0].detector == "GLiNER"
+    assert regex.seen_texts == [text]
+    assert presidio.seen_texts == [text]
+    assert gliner.seen_texts == [text]
+    assert qwen.seen_texts == []
 
+
+def test_regex_below_80_routes_forward_and_later_detector_becomes_final(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "false")
+    monkeypatch.setenv("DETECTION_HIGH_CONFIDENCE_THRESHOLD", "0.80")
+    text = "ICD code: E11.9"
+    start = text.index("E11.9")
+
+    regex = FakeDetector(
+        "regex",
+        {
+            "type": "ICD10_CODE",
+            "value": "E11.9",
+            "start": start,
+            "end": start + len("E11.9"),
+            "confidence": 0.79,
+        },
+    )
+    class ContextRelativeQwen(FakeDetector):
+        def detect(self, text, page_number=1):
+            self.seen_texts.append(text)
+            self.contexts.append(getattr(self, "orchestration_context", None))
+            qwen_start = text.index("E11.9")
+            return [
+                DetectionResult(
+                    entity_type="ICD10_CODE",
+                    entity_value="E11.9",
+                    confidence_score=0.79,
+                    start_char=qwen_start,
+                    end_char=qwen_start + len("E11.9"),
+                    page_number=page_number,
+                    detector=self.name,
+                    metadata={"test_detector": True},
+                )
+            ]
+
+    qwen = ContextRelativeQwen("qwen3b")
+    service = service_with_detectors(
+        regex,
+        FakeDetector("presidio", result=None),
+        FakeDetector("gliner", result=None),
+        FakeDetector("medspacy", result=None),
+        qwen=qwen,
+    )
+
+    results = service.detect(text)
+
+    assert len(results) == 1
+    assert results[0].entity_value == "E11.9"
+    assert results[0].confidence_score == 0.79
+    assert results[0].confidence_score < 0.80
+    assert results[0].detector == "Qwen3:4b"
+    assert qwen.seen_texts
+
+
+def test_detector_crash_is_skipped_and_next_detector_runs(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    text = "Name: Beta"
+    start = text.index("Beta")
+
+    regex = CrashDetector("regex")
+    presidio = FakeDetector(
+        "presidio",
+        {
+            "type": "PERSON",
+            "value": "Beta",
+            "start": start,
+            "end": start + len("Beta"),
+        },
+    )
+    service = service_with_detectors(
+        regex,
+        presidio,
+        FailDetector("gliner"),
+        FailDetector("medspacy"),
+    )
+
+    results = service.detect(text)
+
+    assert [item.entity_value for item in results] == ["Beta"]
+    assert regex.seen_texts == [text]
+    assert presidio.seen_texts == [text]
 
 def test_detector_with_no_entities_routes_to_next_candidate_detector(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "true")
@@ -291,6 +390,33 @@ def test_detector_with_no_entities_routes_to_next_candidate_detector(monkeypatch
     assert [item.entity_value for item in results] == ["Beta"]
     assert regex.seen_texts == [text]
     assert presidio.seen_texts == [text]
+
+
+def test_blank_entity_value_is_dropped_before_state_or_persistence(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    text = "Name:"
+
+    regex = FakeDetector(
+        "regex",
+        {
+            "type": "PERSON",
+            "value": "",
+            "start": 0,
+            "end": 0,
+            "confidence": 0.90,
+        },
+    )
+    service = service_with_detectors(
+        regex,
+        FailDetector("presidio"),
+        FailDetector("gliner"),
+        FailDetector("medspacy"),
+    )
+
+    results = service.detect(text)
+
+    assert results == []
+    assert regex.seen_texts == [text]
 
 
 def test_pipeline_stops_on_absent_entity_candidates_not_leftover_labels(monkeypatch):
@@ -343,32 +469,36 @@ class FakeQwenDetector(BaseDetector):
         ]
 
 
-def test_qwen_runs_only_on_bounded_unresolved_candidate_context(monkeypatch):
+def test_qwen_runs_last_on_remaining_unmasked_text(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "false")
-    monkeypatch.setenv("DETECTION_LLM_ENABLED", "false")
-    monkeypatch.setenv("DETECTION_LLM_CONTEXT_WINDOW", "10")
-    monkeypatch.setenv("DETECTION_MAX_UNRESOLVED_LLM_CONTEXTS", "1")
     text = "x" * 300 + "\nName: Alice\n" + "y" * 300
     alice_start = text.index("Alice")
+    fake_qwen = FakeQwenDetector()
 
     service = service_with_detectors(
         FakeDetector("regex", result=None),
         FakeDetector("presidio", result=None),
         FakeDetector("gliner", result=None),
         FakeDetector("medspacy", result=None),
+        qwen=fake_qwen,
     )
-    fake_qwen = FakeQwenDetector()
-    service._qwen3b = fake_qwen
 
     results = service.detect(text)
 
     assert [item.entity_value for item in results] == ["Alice"]
     assert results[0].start_char == alice_start
-    assert fake_qwen.seen_texts
-    assert fake_qwen.seen_texts[0] != text
+    assert results[0].detector == "Qwen3:4b"
+    assert len(fake_qwen.seen_texts) == 1
+    assert "Alice" in fake_qwen.seen_texts[0]
     assert len(fake_qwen.seen_texts[0]) < len(text)
-    assert fake_qwen.contexts[0]["text_offset"] > 0
-
+    context_offset = fake_qwen.contexts[0]["text_offset"]
+    assert context_offset <= alice_start
+    assert alice_start < context_offset + len(fake_qwen.seen_texts[0])
+    assert fake_qwen.contexts[0]["executed_detectors"] == [
+        "regex",
+        "presidio",
+        "gliner",
+    ]
 
 def test_eob_detection_extracts_clean_healthcare_entities(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "true")
@@ -423,7 +553,7 @@ HR Department
     by_type = {entity.entity_type: entity for entity in results}
 
     assert by_type["PERSON"].entity_value == "Rebecca Norris"
-    assert by_type["PERSON"].detector == "presidio"
+    assert by_type["PERSON"].detector == "Presidio"
     assert by_type["ADDRESS"].entity_value == "USCGC Miller, FPO AE 99567"
     assert by_type["ADDRESS"].detector == "Regex"
     assert "ZIP_CODE" not in by_type
@@ -636,11 +766,11 @@ PATIENT NAME: Michael J. Roberts
 ADDRESS: 542 Willow Lane
 CITY, STATE ZIP: Farmington Hills, MI 48334
 RE: NOTICE OF DATA BREACH INVOLVING YOUR HEALTH INFORMATION
-• Full name and date of birth (08/23/1962)
-• Medical Record Number: EHS-78245912
-• Health insurance information: Medicare #8752A69JK21
+- Full name and date of birth (08/23/1962)
+- Medical Record Number: EHS-78245912
+- Health insurance information: Medicare #8752A69JK21
 Clinical information related to your diabetes care, including recent A1C results (7.2% from your 03/22/2025 visit)
-• Medication information including your current prescription for Metformin 1000mg
+- Medication information including your current prescription for Metformin 1000mg
 """
 
     results = DetectionService().detect(text)
@@ -648,7 +778,7 @@ Clinical information related to your diabetes care, including recent A1C results
 
     # Verify correct mappings
     assert ("DATE", "May 14, 2025") in detected
-    assert ("PERSON", "Michael J. Roberts") in detected
+    assert ("PATIENT", "Michael J. Roberts") in detected
     assert ("ADDRESS", "542 Willow Lane") in detected
     assert ("ZIP_CODE", "48334") in detected
     assert ("MEDICAL_RECORD_NUMBER", "EHS-78245912") in detected

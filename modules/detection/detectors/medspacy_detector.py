@@ -20,7 +20,9 @@ logger = logging.getLogger(__name__)
 class MedSpaCyDetector(BaseDetector):
 
     DEFAULT_CONFIDENCE = 0.85
-    FALLBACK_CONFIDENCE = 0.78
+    # These fallback matches come from the same small, exact phrase list used
+    # by TargetMatcher, so they are safe for the normal auto-ready threshold.
+    FALLBACK_CONFIDENCE = 0.85
 
     ALLOWED_LABELS = {
         "PROBLEM",
@@ -48,6 +50,8 @@ class MedSpaCyDetector(BaseDetector):
         ("persistent fever", "SYMPTOM"),
         ("shortness of breath", "SYMPTOM"),
         ("chest pain", "SYMPTOM"),
+        ("abdominal pain", "SYMPTOM"),
+        ("loose stools", "SYMPTOM"),
         ("back pain", "DIAGNOSIS"),
         ("fever", "SYMPTOM"),
         ("headache", "SYMPTOM"),
@@ -62,7 +66,6 @@ class MedSpaCyDetector(BaseDetector):
         ("synthroid", "MEDICATION"),
         ("crestor", "MEDICATION"),
         ("align", "MEDICATION"),
-        ("dicyclomine 10mg", "MEDICATION"),
         ("dicyclomine", "MEDICATION"),
         ("probiotic", "MEDICATION"),
         ("chest x-ray", "PROCEDURE"),
@@ -73,6 +76,7 @@ class MedSpaCyDetector(BaseDetector):
         ("ecg", "PROCEDURE"),
         ("coronary angiography", "PROCEDURE"),
         ("blood glucose", "LAB"),
+        ("complete blood count", "LAB"),
         ("cbc", "LAB"),
         ("hemoglobin", "LAB"),
         ("a1c", "LAB"),
@@ -222,7 +226,8 @@ class MedSpaCyDetector(BaseDetector):
             reverse=True,
         )
         for phrase, label in rules:
-            pattern = r"(?<!\w)" + re.sub(r'\\?\s+', r'\s+', re.escape(phrase)) + r"(?!\w)"
+            escaped_terms = [re.escape(term) for term in phrase.split()]
+            pattern = r"(?<!\w)" + r"\s+".join(escaped_terms) + r"(?!\w)"
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
                 if self._overlaps(match.start(), match.end(), detections):
                     continue

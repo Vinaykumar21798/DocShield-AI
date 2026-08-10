@@ -83,8 +83,17 @@ def list_document_entities(
     entities = (
         db.query(Entity)
         .filter(Entity.document_id == document_id)
-        .order_by(Entity.created_at.asc())
         .all()
+    )
+    entities.sort(
+        key=lambda entity: (
+            int(entity.page_number)
+            if str(entity.page_number or "").isdigit()
+            else 10**9,
+            entity.start_char if entity.start_char is not None else 10**9,
+            entity.end_char if entity.end_char is not None else 10**9,
+            entity.created_at,
+        )
     )
     return [_serialize_entity(entity) for entity in entities]
 
