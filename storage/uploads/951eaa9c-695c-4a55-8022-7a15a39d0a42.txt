@@ -1,0 +1,20 @@
+
+CONFIDENTIAL MEDICAL & COMPLIANCE RECORD
+
+Patient Information:
+Name: Jane Marie Watson
+Date of Birth: 1990-11-23
+SSN: 999-45-6789
+Medical Record Number: MRN-554433
+Primary Diagnosis: Severe Acute Asthma, Chronic Migraine
+Prescriptions: Albuterol 90mcg, Sumatriptan 50mg
+
+Payment Details:
+Cardholder Name: Jane Watson
+Credit Card Number: 4532-1111-2222-3333
+CVV: 492
+Expiry Date: 11/29
+IBAN: US89370400440532013000
+
+Email: jane.watson@example.com
+Phone: +1-555-019-2834
