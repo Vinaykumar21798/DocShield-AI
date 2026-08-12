@@ -34,6 +34,7 @@ from database.repositories.processing_job_repository import (
 from database.repositories.redaction_repository import RedactionRepository
 from database.repositories.report_repository import ReportRepository
 from database.repositories.review_repository import ReviewRepository
+from database.repositories.run_repository import RunRepository
 from modules.classification.service import (
     ClassificationResult,
     DocumentClassificationService,
@@ -53,6 +54,7 @@ from modules.extraction.native import (
 from modules.extraction.mixed_pdf import MixedPDFExtractionService
 from modules.extraction.ocr import OCRDecisionEngine, OCREngine
 from modules.extraction.paddle import PaddleOCRExtractionService
+from modules.upload.storage import StorageService
 from orchestration.execution_plan import WorkflowStep
 from orchestration.planner import WorkflowPlanner
 from orchestration.state import WorkflowState
@@ -68,9 +70,6 @@ DOCUMENT_TYPE_UNKNOWN = DocumentType.UNKNOWN.value
 OCR_ENGINE_PLACEHOLDER = "PLACEHOLDER"
 OCR_PLACEHOLDER_TEXT = "TODO - OCR not implemented"
 DEFAULT_WORKER_ID = "document-processing-worker"
-EXTRACTED_TEXT_DIR = Path("storage/extracted_text")
-REDACTED_TEXT_DIR = Path("storage/redacted")
-REPORTS_DIR = Path("storage/reports")
 HUMAN_REVIEW_THRESHOLD = 0.80
 
 STARTUP_WORKFLOW_STEPS = {
@@ -161,6 +160,8 @@ class DocumentProcessingWorkflow:
         self.document_repository = document_repo
         self.processing_job_repository = processing_job_repo
         self.ocr_result_repository = ocr_result_repo
+        self.run_repository = RunRepository(db)
+        self.storage = StorageService()
         self.classification_service = (
             classification_service or document_classification_service
         )
@@ -572,7 +573,7 @@ class DocumentProcessingWorkflow:
         extracted_text = state.extracted_text or OCR_PLACEHOLDER_TEXT
         extraction_method = state.ocr_engine or OCR_ENGINE_PLACEHOLDER
         state.extracted_text_path = self._save_extracted_text_file(
-            document.id,
+            document,
             extracted_text,
         )
 
@@ -597,12 +598,15 @@ class DocumentProcessingWorkflow:
         )
         state.extracted_text = extracted_text
 
-    @staticmethod
     def _save_extracted_text_file(
-        document_id: str,
+        self,
+        document: Document,
         extracted_text: str,
     ) -> str:
-        text_path = EXTRACTED_TEXT_DIR / f"{document_id}.txt"
+        text_path = self.storage.extracted_path(
+            document.run_id,
+            document.id,
+        )
         text_path.parent.mkdir(parents=True, exist_ok=True)
         text_path.write_text(extracted_text, encoding="utf-8")
         return text_path.as_posix()
@@ -740,7 +744,7 @@ class DocumentProcessingWorkflow:
         redaction_repository.delete_by_document_id(document.id)
         redacted_text = self._apply_redactions(source_text, entities)
         redacted_file_path = self._save_redacted_text_file(
-            document.id,
+            document,
             redacted_text,
         )
 
@@ -838,7 +842,7 @@ class DocumentProcessingWorkflow:
                 for entity in ordered_entities
             ],
         }
-        report_path = self._save_report_file(document.id, report_payload)
+        report_path = self._save_report_file(document, report_payload)
 
         report_repository.create(
             Report(
@@ -929,22 +933,28 @@ class DocumentProcessingWorkflow:
 
         return redacted_text
 
-    @staticmethod
     def _save_redacted_text_file(
-        document_id: str,
+        self,
+        document: Document,
         redacted_text: str,
     ) -> str:
-        redacted_path = REDACTED_TEXT_DIR / f"{document_id}_redacted.txt"
+        redacted_path = self.storage.redacted_path(
+            document.run_id,
+            document.id,
+        )
         redacted_path.parent.mkdir(parents=True, exist_ok=True)
         redacted_path.write_text(redacted_text, encoding="utf-8")
         return redacted_path.as_posix()
 
-    @staticmethod
     def _save_report_file(
-        document_id: str,
+        self,
+        document: Document,
         report_payload: dict,
     ) -> str:
-        report_path = REPORTS_DIR / f"{document_id}_audit_report.json"
+        report_path = self.storage.report_path(
+            document.run_id,
+            document.id,
+        )
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(
             json.dumps(report_payload, indent=2),
@@ -964,6 +974,11 @@ class DocumentProcessingWorkflow:
     def _complete_workflow(self, state: WorkflowState) -> None:
         document = self._require_document(state)
         processing_job = self._require_processing_job(state)
+        
+        # Update Run status
+        run = self.document_repository.get_document_by_id(self.db, document.id).run
+        if run:
+            self.run_repository.increment_completed(run.run_id)
 
         state.document = self.document_repository.update_status(
             self.db,
@@ -984,6 +999,12 @@ class DocumentProcessingWorkflow:
         error_message = str(exc)
         state.error = error_message
         state.status = DOCUMENT_STATUS_FAILED
+
+        # Update Run status
+        document = self._require_document(state)
+        run = document.run
+        if run:
+            self.run_repository.increment_failed(run.run_id)
 
         self.logger.exception(
             "Document processing workflow failed for document_id=%s",

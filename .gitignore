@@ -112,12 +112,9 @@ docker-compose.override.yml
 *.bak
 *.orig
 
-storage/extracted_text/*
-!storage/extracted_text/.gitkeep
-storage/redacted/*
-!storage/redacted/.gitkeep
-storage/reports/*
-!storage/reports/.gitkeep
+storage/runs/*
+storage/uploads/*
+storage/temp/*
 
 # ==========================================
 # Node / Scratch

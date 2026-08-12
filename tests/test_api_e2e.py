@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from fastapi.testclient import TestClient
 
 from api.dependencies import get_db
@@ -74,8 +72,10 @@ def test_upload_process_and_read_extracted_text_e2e(
             assert text_response.json()["processing_status"] == "COMPLETED"
             assert "Invoice Number INV-2002" in text_response.json()["extracted_text"]
 
-            expected_text_path = (
-                Path("storage/extracted_text") / f"{document_id}.txt"
+            saved_document = db_session.get(Document, document_id)
+            expected_text_path = StorageService.extracted_path(
+                saved_document.run_id,
+                document_id,
             )
             assert text_response.json()["extracted_text_path"] == (
                 expected_text_path.as_posix()

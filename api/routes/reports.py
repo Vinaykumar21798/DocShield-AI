@@ -8,6 +8,7 @@ from api.dependencies import DatabaseSession
 from api.routes.artifacts import resolve_artifact_path
 from api.schemas.report import ReportDetailResponse, ReportResponse
 from database.models import Report
+from modules.upload.storage import StorageService
 
 router = APIRouter(tags=["Reports"])
 
@@ -42,7 +43,7 @@ def _load_report_payload(report: Report) -> Optional[Dict[str, Any]]:
 
     artifact_path = resolve_artifact_path(
         report.report_path,
-        "storage/reports",
+        str(StorageService.STORAGE_DIR),
     )
     try:
         return json.loads(artifact_path.read_text(encoding="utf-8"))
@@ -113,7 +114,7 @@ def download_report_file(
 
     artifact_path = resolve_artifact_path(
         report.report_path,
-        "storage/reports",
+        str(StorageService.STORAGE_DIR),
     )
     return FileResponse(
         path=artifact_path,

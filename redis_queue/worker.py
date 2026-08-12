@@ -86,6 +86,10 @@ class Worker:
         db = self.session_factory()
 
         try:
+            # Log run context if available
+            if job.run_id:
+                logger.info("Processing document_id=%s within run_id=%s", job.document_id, job.run_id)
+
             workflow = self.workflow_factory(db)
             workflow.execute(str(job.document_id))
 
@@ -135,7 +139,10 @@ class Worker:
         )
 
         try:
-            self.producer.publish(DocumentJob(document_id=job.document_id))
+            self.producer.publish(DocumentJob(
+                document_id=job.document_id,
+                run_id=job.run_id,
+            ))
         except Exception as exc:
             logger.exception(
                 "Failed to requeue document_id=%s after retry scheduling",

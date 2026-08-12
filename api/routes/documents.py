@@ -1,4 +1,6 @@
-from typing import List
+from typing import List, Optional
+from datetime import datetime
+from pydantic import BaseModel
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -6,7 +8,9 @@ from api.dependencies import DatabaseSession
 from api.schemas.document_status import DocumentStatusResponse
 from api.schemas.entity import EntityResponse
 from api.schemas.extracted_text import ExtractedTextResponse
-from database.models import Document, Entity
+from api.schemas.run import RunResponse, RunProgress
+from database.models import Document, Entity, Run
+from database.repositories.run_repository import RunRepository
 from modules.extraction.service import (
     DocumentNotFoundError,
     ExtractedTextNotFoundError,
@@ -20,6 +24,7 @@ router = APIRouter(
 
 
 def _serialize_entity(entity: Entity) -> EntityResponse:
+
     return EntityResponse(
         entity_id=entity.id,
         document_id=entity.document_id,
@@ -40,7 +45,51 @@ def _serialize_entity(entity: Entity) -> EntityResponse:
 
 
 @router.get(
+    "/runs/{run_id}",
+    response_model=RunResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get Run Progress",
+    description="Return Run information and document-level progress.",
+)
+def get_run_progress(
+    run_id: str,
+    db: DatabaseSession = None,
+) -> RunResponse:
+    run_repo = RunRepository(db)
+    run = run_repo.get_by_run_id(run_id)
+    
+    if run is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run not found: {run_id}",
+        )
+    
+    documents = db.query(Document).filter(Document.run_id == run.id).all()
+    
+    return RunResponse(
+        run_id=run.run_id,
+        status=run.status,
+        total_files=run.total_files,
+        completed_files=run.completed_files,
+        failed_files=run.failed_files,
+        created_at=run.created_at,
+        started_at=run.started_at,
+        completed_at=run.completed_at,
+        documents=[
+            RunProgress(
+                document_id=doc.id,
+                filename=doc.filename,
+                status=doc.status,
+                document_type=doc.document_type,
+            )
+            for doc in documents
+        ],
+    )
+
+
+@router.get(
     "/{document_id}/status",
+
     response_model=DocumentStatusResponse,
     status_code=status.HTTP_200_OK,
     summary="Get Document Processing Status",

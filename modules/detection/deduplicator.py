@@ -15,10 +15,12 @@ class Deduplicator:
         detections: list[DetectionResult],
     ) -> list[DetectionResult]:
 
-        # First, group exact duplicates (same page, start_char, end_char)
-        # to keep the highest-confidence final owner for that span.
+        # First, group exact duplicates (same page, start_char, end_char,
+        # entity_type) to keep the highest-confidence final owner for that
+        # same typed span. Competing types for the same span are preserved so
+        # the overlap resolver can choose using detector/type priority.
         unique_entities: dict[
-            tuple[int, int, int],
+            tuple[int, int, int, str],
             DetectionResult,
         ] = {}
 
@@ -27,6 +29,7 @@ class Deduplicator:
                 detection.page_number,
                 detection.start_char,
                 detection.end_char,
+                detection.entity_type.upper(),
             )
 
             if key not in unique_entities:
@@ -34,15 +37,6 @@ class Deduplicator:
                 continue
 
             existing = unique_entities[key]
-
-            # Collect conflicting types
-            if existing.entity_type.upper() != detection.entity_type.upper():
-                conflicting = existing.metadata.get("conflicting_types") or [existing.entity_type]
-                if detection.entity_type not in conflicting:
-                    conflicting.append(detection.entity_type)
-                existing.metadata["conflicting_types"] = conflicting
-                detection.metadata["conflicting_types"] = conflicting
-
 
             # Compare confidence
             if detection.confidence_score > existing.confidence_score:
@@ -68,6 +62,17 @@ class Deduplicator:
                     and detection.start_char < acc.end_char
                     and acc.start_char < detection.end_char
                 ):
+                    same_exact_span = (
+                        detection.start_char == acc.start_char
+                        and detection.end_char == acc.end_char
+                    )
+                    same_value = (
+                        detection.entity_value.strip().lower()
+                        == acc.entity_value.strip().lower()
+                    )
+                    if same_exact_span and same_value:
+                        continue
+
                     overlaps = True
                     # Record conflicting types for overlapping spans
                     if acc.entity_type.upper() != detection.entity_type.upper():

@@ -134,6 +134,9 @@ class RegexDetector(BaseDetector):
             r"(?im:\b(?:Hospital|Clinic|Medical Facility)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,6})[ \t]*$)"
             r"|\b[A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z][A-Za-z0-9&.'-]*){0,5}\s+(?:Family Medicine|Hospital|Hospitals|Clinic|Clinics|Medical Center|Healthcare System|Health System|Healthcare|Institute|Sanatorium|Infirmary)\b",
 
+        "INSURANCE_PROVIDER":
+            r"(?im:^\s*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,8}[ \t]+(?:Insurance|Assurance)[ \t]+(?:Company|Co\.?|Corporation|Corp\.?|Plan|Plans|Group))[ \t]*$)",
+
         "ORGANIZATION":
             rf"(?im:\b(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}})[ \t]*$)"
             rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}}\s+(?:Pvt[ \t]+Ltd|Ltd|Inc|Corp|Corporation|LLC|Company|Group|Association))\b)",
@@ -242,6 +245,7 @@ class RegexDetector(BaseDetector):
         "DATE_RANGE": 84,
         "VISIT_DATE": 84,
         "START_DATE": 84,
+        "INSURANCE_PROVIDER": 89,
         "PROVIDER": 88,
         "ADDRESS": 82,
         "PO_BOX": 82,
@@ -306,6 +310,7 @@ class RegexDetector(BaseDetector):
         "VISIT_DATE": ["visit date", "service date", "date of service", "collection date"],
         "DOCTOR": ["doctor", "physician", "consultant"],
         "HOSPITAL": ["hospital", "clinic", "medical facility"],
+        "INSURANCE_PROVIDER": ["insurance", "insurance company", "health plan"],
         "ORGANIZATION": ["organization", "company", "insurance company", "agreement", "signed between"],
         "PROVIDER": ["provider"],
         "ADDRESS": ["address", "mailing address", "home address", "office address"],
@@ -498,7 +503,11 @@ class RegexDetector(BaseDetector):
 
                 # Label-based names are accepted only when the value itself
                 # still looks like a person, not a placeholder or organization.
-                if entity in {"PATIENT", "PROVIDER", "PERSON", "DOCTOR"}:
+                if entity == "PROVIDER":
+                    if not self.validate_provider_value(value):
+                        continue
+
+                if entity in {"PATIENT", "PERSON", "DOCTOR"}:
                     if not self.validate_labeled_person_value(value):
                         continue
 
@@ -639,7 +648,20 @@ class RegexDetector(BaseDetector):
         start: int,
     ) -> bool:
 
-        window = 40
+        window = 160 if entity == "CPT_CODE" else 40
+
+        if entity == "CPT_CODE":
+            line_start = text.rfind("\n", 0, start) + 1
+            line_end = text.find("\n", start)
+            if line_end == -1:
+                line_end = len(text)
+            line = text[line_start:line_end]
+            offset = start - line_start
+            if (
+                re.search(self.DATE_VALUE_PATTERN, line[:offset], re.IGNORECASE)
+                and re.search(r"\b[A-TV-Z][0-9]{2}(?:\.[A-Z0-9]{1,4})?\b", line[offset:], re.IGNORECASE)
+            ):
+                return True
 
         left = max(0, start - window)
         right = min(len(text), start + window)
@@ -689,7 +711,10 @@ class RegexDetector(BaseDetector):
                 digits = digits[1:]
             return len(digits) == 10
 
-        if entity in {"PATIENT", "PROVIDER", "PERSON", "DOCTOR"}:
+        if entity == "PROVIDER":
+            return self.validate_provider_value(value)
+
+        if entity in {"PATIENT", "PERSON", "DOCTOR"}:
             return self.validate_labeled_person_value(value)
 
         if entity == "HOSPITAL":
@@ -832,6 +857,29 @@ class RegexDetector(BaseDetector):
             return False
         return bool(re.search(r"[A-Za-z]{3,}", normalized))
 
+    def validate_provider_value(self, value: str) -> bool:
+        normalized = " ".join(value.strip().split())
+        normalized_key = normalized.lower()
+        if not self.validate_labeled_text_value(normalized):
+            return False
+        if normalized_key in self.LABELED_NAME_ROLE_VALUES:
+            return False
+        if self.validate_labeled_person_value(normalized):
+            return True
+        if any(
+            keyword in normalized_key
+            for keyword in (
+                "hospital",
+                "clinic",
+                "medical center",
+                "healthcare",
+                "health system",
+                "family medicine",
+            )
+        ):
+            return True
+        return bool(re.search(r"\b(?:md|do|np|pa-c)\b", normalized_key))
+
     def validate_address_value(self, value: str) -> bool:
         normalized = " ".join(value.strip().split())
         normalized_key = normalized.lower()
@@ -844,6 +892,16 @@ class RegexDetector(BaseDetector):
 
         if re.fullmatch(r"(?i)(n/?a|none|unknown|not available|not applicable|redacted)", normalized):
             return False
+
+        lines = [line.strip() for line in value.splitlines() if line.strip()]
+        if len(lines) > 1:
+            first_line = lines[0].lower()
+            rest = " ".join(lines[1:])
+            if (
+                re.search(r"\b(?:insurance|company|department|corp|corporation|llc|ltd)\b", first_line)
+                and re.search(r"\b(?:p\.?o\.?\s+box|box\s+\d+|\d{5}(?:-\d{4})?)\b", rest, re.IGNORECASE)
+            ):
+                return False
 
         # UK postcode or military APO/FPO/DPO formats are common in OCR output.
         if re.search(r"\b[A-Z]{1,2}\d[A-Z\d]?[ \t]*\d[A-Z]{2}\b", normalized):

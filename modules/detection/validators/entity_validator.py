@@ -65,6 +65,20 @@ class EntityValidator:
         "protected health information",
         "secured",
         "the health insurance portability",
+        "ppo",
+        "hmo",
+        "epo",
+        "pos",
+        "individual",
+        "family",
+        "date of service",
+        "level 4",
+        "totals",
+        "phi",
+        "keep",
+        "comprehensive",
+        "metabolic",
+        "panel",
     }
     CLINICAL_VALUE_TYPES = {
         "abdominal pain": "SYMPTOM",
@@ -89,12 +103,18 @@ class EntityValidator:
         r"^\(?\s*[$€£₹]\s*\d{1,3}(?:,\d{3})*(?:\.\d{1,2})?\s*\)?$"
         r"|^\(?\s*[$€£₹]\s*\d+(?:\.\d{1,2})?\s*\)?$"
     )
+    DATE_VALUE_PATTERN = (
+        r"(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
+        r"|\d{4}-\d{1,2}-\d{1,2}"
+        r"|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4}"
+        r"|\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\s+\d{4})"
+    )
     TIME_PATTERN = re.compile(
         r"^(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[AP]M)?$",
         re.IGNORECASE,
     )
     CPT_CONTEXT_PATTERN = re.compile(
-        r"\b(?:cpt(?:\s*/\s*hcpcs)?|hcpcs|procedure\s+code|service\s+code)\b",
+        r"\b(?:cpt(?:\s*/\s*hcpcs)?|hcpcs|procedure\s+code|service\s+code|service\s+details|procedure\s+diagnosis|service\s+description\s+code)\b",
         re.IGNORECASE,
     )
 
@@ -171,10 +191,7 @@ class EntityValidator:
         structurally_validated = False
         semantic_key = cls._semantic_key(value)
 
-        if (
-            entity_type in cls.GENERIC_SEMANTIC_TYPES
-            and semantic_key in cls.BAD_GENERIC_VALUES
-        ):
+        if cls._is_rejected_semantic_value(entity_type, value, semantic_key):
             return None
 
         clinical_type = cls.CLINICAL_VALUE_TYPES.get(semantic_key)
@@ -183,7 +200,10 @@ class EntityValidator:
             structurally_validated = True
 
         if entity_type == "ORGANIZATION":
-            if semantic_key == "medicare":
+            if semantic_key == "medicare" or re.search(
+                r"\b(?:insurance|assurance)\b.*\b(?:company|co|corp|corporation|plan|plans|group)\b",
+                semantic_key,
+            ):
                 entity_type = "INSURANCE_PROVIDER"
                 structurally_validated = True
             elif re.search(
@@ -309,6 +329,33 @@ class EntityValidator:
         )
 
     @classmethod
+    def _is_rejected_semantic_value(
+        cls,
+        entity_type: str,
+        value: str,
+        semantic_key: str,
+    ) -> bool:
+        semantic_types = cls.GENERIC_SEMANTIC_TYPES | {
+            "HOSPITAL",
+            "MEDICAL_FACILITY",
+            "HEALTHCARE_ORGANIZATION",
+        }
+        if entity_type not in semantic_types:
+            return False
+
+        if semantic_key in cls.BAD_GENERIC_VALUES:
+            return True
+
+        normalized = cls._normalized_text(value)
+        if re.match(r"^(?:[•*\-]|â€¢)\s*(?:keep|always|this)\b", normalized, re.IGNORECASE):
+            return True
+
+        if re.fullmatch(r"(?i)(?:level\s*\d+|date of service|total|totals|phi|ppo|hmo|epo|pos)", normalized):
+            return True
+
+        return False
+
+    @classmethod
     def _align_exact_span(
         cls,
         candidate: DetectionResult,
@@ -358,8 +405,24 @@ class EntityValidator:
     ) -> bool:
         if metadata and metadata.get("structured_table"):
             return True
-        left = max(0, start - 120)
-        right = min(len(source_text), end + 80)
+
+        line_start = source_text.rfind("\n", 0, start) + 1
+        line_end = source_text.find("\n", end)
+        if line_end == -1:
+            line_end = len(source_text)
+        line = source_text[line_start:line_end]
+        offset_start = start - line_start
+        offset_end = end - line_start
+        line_left = line[:offset_start]
+        line_right = line[offset_end:]
+        if (
+            re.search(cls.DATE_VALUE_PATTERN, line_left, re.IGNORECASE)
+            and re.search(r"\b[A-TV-Z][0-9][0-9A-Z](?:\.[0-9A-Z]{1,4})?\b", line_right, re.IGNORECASE)
+        ):
+            return True
+
+        left = max(0, start - 180)
+        right = min(len(source_text), end + 120)
         return bool(cls.CPT_CONTEXT_PATTERN.search(source_text[left:right]))
 
     @staticmethod

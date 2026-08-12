@@ -181,3 +181,125 @@ def test_pipeline_cascading_and_masking():
     )
     state2.add_entities([entity_high], detector_name="regex", mask_confidence_threshold=0.85)
     assert state2.is_span_unmasked(0, 5) is False
+
+
+def test_qwen_duplicate_upgrades_low_confidence_previous_entity():
+    text = "Claim diagnosis E11.9"
+    state = PipelineState(text)
+    start = text.index("E11.9")
+    previous = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.70,
+        start_char=start,
+        end_char=start + len("E11.9"),
+        page_number=1,
+        detector="regex",
+    )
+    state.add_entities(
+        [previous],
+        detector_name="regex",
+        mask_confidence_threshold=0.80,
+    )
+
+    qwen_duplicate = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.95,
+        start_char=start,
+        end_char=start + len("E11.9"),
+        page_number=1,
+        detector="qwen3b",
+    )
+
+    is_duplicate = DetectionService._matches_previous_entity(
+        qwen_duplicate,
+        state,
+        mask_confidence_threshold=0.80,
+    )
+
+    assert is_duplicate is True
+    assert qwen_duplicate.metadata["duplicate_upgraded_previous"] is True
+    assert state.resolved_entities[0].confidence_score == 0.95
+    assert state.resolved_entities[0].detector == "qwen3b"
+    assert state.resolved_entities[0].metadata["upgraded_by_duplicate"] is True
+    assert state.resolved_entities[0].metadata["upgraded_from_detector"] == "regex"
+    assert state.is_span_unmasked(start, start + len("E11.9")) is False
+
+
+def test_qwen_shifted_overlapping_duplicate_upgrades_previous_span_without_moving_it():
+    state = PipelineState("0123456789E11.9abcdef")
+    previous = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.70,
+        start_char=10,
+        end_char=15,
+        page_number=1,
+        detector="regex",
+    )
+    state.add_entities(
+        [previous],
+        detector_name="regex",
+        mask_confidence_threshold=0.80,
+    )
+
+    qwen_shifted = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.92,
+        start_char=11,
+        end_char=16,
+        page_number=1,
+        detector="qwen3b",
+    )
+
+    is_duplicate = DetectionService._matches_previous_entity(
+        qwen_shifted,
+        state,
+        mask_confidence_threshold=0.80,
+    )
+
+    assert is_duplicate is True
+    assert state.resolved_entities[0].start_char == 10
+    assert state.resolved_entities[0].end_char == 15
+    assert state.resolved_entities[0].confidence_score == 0.92
+    assert state.resolved_entities[0].detector == "qwen3b"
+
+
+def test_same_value_non_overlapping_qwen_result_is_not_duplicate():
+    state = PipelineState("E11.9 then E11.9")
+    previous = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.70,
+        start_char=0,
+        end_char=5,
+        page_number=1,
+        detector="regex",
+    )
+    state.add_entities(
+        [previous],
+        detector_name="regex",
+        mask_confidence_threshold=0.80,
+    )
+
+    qwen_second_occurrence = DetectionResult(
+        entity_type="ICD10_CODE",
+        entity_value="E11.9",
+        confidence_score=0.92,
+        start_char=11,
+        end_char=16,
+        page_number=1,
+        detector="qwen3b",
+    )
+
+    is_duplicate = DetectionService._matches_previous_entity(
+        qwen_second_occurrence,
+        state,
+        mask_confidence_threshold=0.80,
+    )
+
+    assert is_duplicate is False
+    assert state.resolved_entities[0].confidence_score == 0.70
+    assert state.resolved_entities[0].detector == "regex"

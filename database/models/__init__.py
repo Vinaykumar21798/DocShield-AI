@@ -6,6 +6,8 @@ from .report import Report
 from .document import Document
 from .processing_job import ProcessingJob
 from .ocr_result import OCRResult
+from .run import Run
+from .run_sequence import RunSequence
 
 __all__ = [
     "Entity",
@@ -16,4 +18,6 @@ __all__ = [
     "Document",
     "ProcessingJob",
     "OCRResult",
+    "Run",
+    "RunSequence",
 ]

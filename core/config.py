@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     )
 
     upload_dir: str = Field(..., alias="UPLOAD_DIR")
+    storage_dir: str = Field("storage", alias="STORAGE_DIR")
     max_file_size_mb: int = Field(..., alias="MAX_FILE_SIZE_MB")
 
     startup_validation_enabled: bool = Field(

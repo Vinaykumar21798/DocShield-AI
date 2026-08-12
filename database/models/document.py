@@ -1,6 +1,5 @@
 from uuid import uuid4
-
-from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy import Column, DateTime, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -39,6 +38,13 @@ class Document(Base):
         String(50),
         default="UPLOADED",
         nullable=False,
+    )
+
+    run_id = Column(
+        String(36),
+        ForeignKey("runs.id"),
+        nullable=True,
+        index=True,
     )
 
     uploaded_by = Column(String(100))
@@ -82,4 +88,9 @@ class Document(Base):
         "Report",
         back_populates="document",
         cascade="all, delete-orphan",
+    )
+
+    run = relationship(
+        "Run",
+        back_populates="documents",
     )

@@ -210,6 +210,12 @@ class MedSpaCyDetector(BaseDetector):
                 )
             )
 
+        self._add_fallback_rule_detections(
+            text,
+            page_number,
+            detections,
+            source="target_rules_supplement",
+        )
         detections.sort(key=lambda entity: entity.start_char)
         return detections
 
@@ -219,7 +225,22 @@ class MedSpaCyDetector(BaseDetector):
         page_number: int,
     ) -> List[DetectionResult]:
         detections: list[DetectionResult] = []
+        self._add_fallback_rule_detections(
+            text,
+            page_number,
+            detections,
+            source="fallback_rules",
+        )
+        detections.sort(key=lambda entity: entity.start_char)
+        return detections
 
+    def _add_fallback_rule_detections(
+        self,
+        text: str,
+        page_number: int,
+        detections: list[DetectionResult],
+        source: str,
+    ) -> None:
         rules = sorted(
             self.TARGET_RULES,
             key=lambda item: len(item[0]),
@@ -243,15 +264,12 @@ class MedSpaCyDetector(BaseDetector):
                         detector=self.name,
                         metadata={
                             "clinical": True,
-                            "source": "fallback_rules",
+                            "source": source,
                             "model": "deterministic",
                             "resolved": True,
                         },
                     )
                 )
-
-        detections.sort(key=lambda entity: entity.start_char)
-        return detections
 
     @staticmethod
     def _overlaps(

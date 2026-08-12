@@ -794,3 +794,89 @@ Clinical information related to your diabetes care, including recent A1C results
     assert not any(entity.entity_value == "CITY" for entity in results)
     # Generic healthcare phrase should not be matched as HOSPITAL
     assert not any("types of information" in entity.entity_value for entity in results)
+
+
+def test_qwen_context_uses_original_text_with_known_entity_metadata(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "false")
+    text = "Patient Name: John Doe\nDiagnosis: asthma"
+    patient_start = text.index("John Doe")
+    diagnosis_start = text.index("asthma")
+
+    regex = FakeDetector(
+        "regex",
+        {
+            "type": "PATIENT",
+            "value": "John Doe",
+            "start": patient_start,
+            "end": patient_start + len("John Doe"),
+            "confidence": 0.95,
+        },
+    )
+    qwen = FakeDetector(
+        "qwen3b",
+        {
+            "type": "DIAGNOSIS",
+            "value": "asthma",
+            "start": diagnosis_start,
+            "end": diagnosis_start + len("asthma"),
+            "confidence": 0.91,
+        },
+    )
+    service = service_with_detectors(
+        regex,
+        FakeDetector("presidio", result=None),
+        FakeDetector("gliner", result=None),
+        FakeDetector("medspacy", result=None),
+        qwen=qwen,
+    )
+
+    results = service.detect(text, document_type="medical_record")
+
+    assert qwen.seen_texts == [text]
+    assert qwen.contexts[0]["known_entities"] == [
+        {
+            "entity_type": "PATIENT",
+            "start_char": patient_start,
+            "end_char": patient_start + len("John Doe"),
+            "original_start_char": patient_start,
+            "original_end_char": patient_start + len("John Doe"),
+            "confidence_score": 0.95,
+            "detector": "regex",
+        }
+    ]
+    assert {(item.entity_type, item.entity_value) for item in results} >= {
+        ("PATIENT", "John Doe"),
+        ("DIAGNOSIS", "asthma"),
+    }
+
+
+def test_competing_same_span_types_resolve_by_detection_priority():
+    from modules.detection.deduplicator import Deduplicator
+
+    detections = [
+        DetectionResult(
+            entity_type="DATE",
+            entity_value="99214",
+            confidence_score=0.99,
+            start_char=5,
+            end_char=10,
+            page_number=1,
+            detector="presidio",
+        ),
+        DetectionResult(
+            entity_type="CPT_CODE",
+            entity_value="99214",
+            confidence_score=0.90,
+            start_char=5,
+            end_char=10,
+            page_number=1,
+            detector="regex",
+        ),
+    ]
+
+    deduped = Deduplicator.deduplicate(detections)
+    resolved = DetectionService()._resolve_overlapping_spans(deduped)
+
+    assert len(deduped) == 2
+    assert len(resolved) == 1
+    assert resolved[0].entity_type == "CPT_CODE"

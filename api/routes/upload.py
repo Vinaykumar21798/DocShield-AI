@@ -31,14 +31,16 @@ async def upload_document(
 
     upload_service = UploadService(db)
 
-    document = await upload_service.upload_single_document(file)
+    run, documents = await upload_service.upload_single_document(file)
 
     return {
         "message": "Document uploaded successfully.",
+        "run_id": run.run_id,
+        "total_files": len(documents),
         "document": {
-            "document_id": document.id,
-            "filename": document.filename,
-            "status": document.status,
+            "document_id": documents[0].id,
+            "filename": documents[0].filename,
+            "status": documents[0].status,
         },
     }
 
@@ -75,11 +77,12 @@ async def upload_documents(
 
     upload_service = UploadService(db)
 
-    documents = await upload_service.upload_documents(files)
+    run, documents = await upload_service.upload_documents(files)
 
     return {
         "message": "Documents uploaded successfully.",
-        "total_files": len(files),
+        "run_id": run.run_id,
+        "total_files": run.total_files,
         "uploaded": len(documents),
         "documents": [
             {

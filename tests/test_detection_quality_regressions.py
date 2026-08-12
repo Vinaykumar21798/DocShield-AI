@@ -1,4 +1,4 @@
-﻿import json
+import json
 from types import SimpleNamespace
 
 from modules.detection.detectors.base_detector import BaseDetector
@@ -454,3 +454,119 @@ def test_qwen_recovery_uses_distinct_nearest_occurrences():
 
 
 
+
+
+EOB_REGRESSION_SAMPLE = """EXPLANATION OF BENEFITS (EOB)
+HEALTHGUARD INSURANCE COMPANY
+P.O. Box 45678, Grand Rapids, MI 49501
+MEMBER INFORMATION
+Patient Name: David A. Wilson
+Group Name: Midwest Technology Solutions
+Plan Type: PPO
+CLAIMS SUMMARY
+Provider: Farmington Medical Center
+Provider NPI: 1592847603
+SERVICE DETAILS
+Date of Service	Procedure Diagnosis Provider Allowed Not
+Service Description Code Code Charges Amount Covered
+Office Visit,
+04/17/2024 Established 99214 E11.9, I10 $225.00 $175.00 $50.00 $0.00 $35.
+Patient, Level 4
+Comprehensive
+04/17/2024 Metabolic 80053 E11.9 $85.00 $65.00 $20.00 $0.00 $13.
+Panel
+Hemoglobin
+04/17/2024	83036 E11.9 $95.00 $75.00 $20.00 $0.00 $15.
+A1c
+04/17/2024 Lipid Panel 80061 E78.5 $120.00 $90.00 $30.00 $0.00 $18.
+ECG, routine,
+04/17/2024 with	93000 I10, R00.2 $175.00 $140.00 $35.00 $0.00 $28.
+interpretation
+TOTALS	$700.00 $545.00 $155.00 $0.00 $10
+PATIENT MEDICALINFORMATION
+Current Medications:
+â€¢ Metformin 1000mg twice daily
+â€¢ Lisinopril 20mg daily
+â€¢ Atorvastatin 40mg daily
+â€¢ Aspirin 81mg daily
+Recent Test Results:
+â€¢ Hemoglobin A1c: 7.4%
+YOUR APPEAL RIGHTS
+Send your appeal to:
+HealthGuard Insurance Company
+Appeals Department
+P.O. Box 87654
+Grand Rapids, MI 49501
+NOTES
+â€¢ Keep this document for your tax records.
+CONFIDENTIAL HEALTH INFORMATION: This document contains protected health information (PHI).
+"""
+
+
+def test_eob_regression_detects_deterministic_healthcare_entities(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "true")
+    monkeypatch.setenv("GLINER_ENABLED", "false")
+
+    results = DetectionService().detect(
+        EOB_REGRESSION_SAMPLE,
+        document_type="MEDICAL_RECORD",
+    )
+    detected = {(entity.entity_type, entity.entity_value) for entity in results}
+
+    assert ("PROVIDER", "Farmington Medical Center") in detected
+    assert ("INSURANCE_PROVIDER", "HEALTHGUARD INSURANCE COMPANY") in detected
+    assert ("INSURANCE_PROVIDER", "HealthGuard Insurance Company") in detected
+    for code in {"99214", "80053", "83036", "80061", "93000"}:
+        assert ("CPT_CODE", code) in detected
+    for medication in {"Lisinopril", "Atorvastatin", "Aspirin"}:
+        assert ("MEDICATION", medication) in detected
+    assert ("CLINICAL_MEASUREMENT", "7.4%") in detected
+
+    rejected_values = {
+        "PPO",
+        "Individual /",
+        "Date of Service",
+        "Level 4",
+        "TOTALS",
+        "PHI",
+        "â€¢ Keep",
+        "Comprehensive",
+        "Metabolic",
+        "Panel",
+    }
+    assert not rejected_values & {entity.entity_value for entity in results}
+
+    redacted = DocumentProcessingWorkflow._apply_redactions(
+        EOB_REGRESSION_SAMPLE,
+        results,
+    )
+    assert "Farmington Medical Center" not in redacted
+    assert "HealthGuard Insurance Company" not in redacted
+    assert "80053" not in redacted
+    assert "Lisinopril" not in redacted
+    assert "7.4%" not in redacted
+    assert "Plan Type: PPO" in redacted
+    assert "Patient, Level 4" in redacted
+    assert "TOTALS" in redacted
+    assert "Keep this document" in redacted
+
+
+def test_validator_rejects_eob_table_labels_and_qwen_lab_fragments():
+    text = (
+        "Plan Type: PPO\nDate of Service\nPatient, Level 4\nTOTALS\n"
+        "CONFIDENTIAL HEALTH INFORMATION (PHI)\n"
+        "â€¢ Keep this document\nComprehensive\nMetabolic\nPanel\n"
+    )
+    candidates = [
+        _result(text, "PPO", "ORGANIZATION", detector="presidio"),
+        _result(text, "Date of Service", "ORGANIZATION", detector="presidio"),
+        _result(text, "Level 4", "PERSON", detector="presidio"),
+        _result(text, "TOTALS", "ORGANIZATION", detector="presidio"),
+        _result(text, "PHI", "ORGANIZATION", detector="presidio"),
+        _result(text, "â€¢ Keep", "PERSON", detector="presidio"),
+        _result(text, "Comprehensive", "MEDICAL_FACILITY", detector="qwen3b"),
+        _result(text, "Metabolic", "MEDICAL_FACILITY", detector="qwen3b"),
+        _result(text, "Panel", "MEDICAL_FACILITY", detector="qwen3b"),
+    ]
+
+    assert EntityValidator.validate_candidates(candidates, text) == []

@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import os
@@ -111,6 +111,7 @@ class DetectionService:
         "mrn": "regex",
         "medical_record_number": "regex",
         "insurance_id": "regex",
+        "insurance_provider": "regex",
         "claim_number": "regex",
         "ifsc_code": "regex",
         "upi_id": "regex",
@@ -143,9 +144,9 @@ class DetectionService:
         "organization": "presidio",
         "address": "presidio",
         # GLiNER
-        "doctor": "gliner",
-        "patient": "gliner",
-        "hospital": "gliner",
+        "doctor": ("regex", "gliner"),
+        "patient": ("regex", "gliner"),
+        "hospital": ("regex", "gliner"),
         "nurse": "gliner",
         "physician": "gliner",
         "healthcare staff": "gliner",
@@ -153,14 +154,14 @@ class DetectionService:
         "medical facility": "gliner",
         "medical_facility": "gliner",
         "healthcare organization": "gliner",
-        "healthcare_organization": "gliner",
+        "healthcare_organization": ("regex", "gliner"),
         # MedSpaCy
         "problem": "medspacy",
-        "medication": "medspacy",
-        "procedure": "medspacy",
+        "medication": ("regex", "medspacy"),
+        "procedure": ("regex", "medspacy"),
         "lab": "medspacy",
         "symptom": "medspacy",
-        "diagnosis": "medspacy",
+        "diagnosis": ("regex", "medspacy"),
         "allergy": "medspacy",
         "vital_sign": "medspacy",
         "disease": "medspacy",
@@ -207,6 +208,7 @@ class DetectionService:
         "mrn",
         "medical_record_number",
         "insurance_id",
+        "insurance_provider",
         "claim_number",
         "ifsc_code",
         "upi_id",
@@ -317,6 +319,7 @@ class DetectionService:
         custom_text: str | None = None,
         context_offset: int = 0,
         allow_claimed_spans: bool = False,
+        known_entities: list[dict] | None = None,
     ) -> list[DetectionResult]:
         """
         Executes one detector against the current unmasked text and updates
@@ -336,6 +339,7 @@ class DetectionService:
             run_text,
             candidate_summary,
             context_offset,
+            known_entities,
         )
 
         start_time = time.perf_counter()
@@ -405,6 +409,7 @@ class DetectionService:
         detector_name: str,
         mask_confidence_threshold: float | None = None,
         allow_claimed_spans: bool = False,
+        known_entities: list[dict] | None = None,
     ) -> list[DetectionResult]:
         accepted = []
         for entity in entities:
@@ -427,11 +432,22 @@ class DetectionService:
                 state,
                 mask_confidence_threshold,
             ):
-                logger.info(
-                    "Skipping %s entity from %s because it duplicates a previous entity",
-                    entity.entity_type,
-                    detector_name,
-                )
+                if entity.metadata.pop("duplicate_upgraded_previous", False):
+                    logger.info(
+                        "Upgraded previous %s entity from %s duplicate: value=%r confidence=%.3f span=%s-%s",
+                        entity.entity_type,
+                        detector_name,
+                        entity.entity_value,
+                        entity.confidence_score,
+                        entity.start_char,
+                        entity.end_char,
+                    )
+                else:
+                    logger.info(
+                        "Skipping %s entity from %s because it duplicates a previous entity",
+                        entity.entity_type,
+                        detector_name,
+                    )
                 continue
 
             if allow_claimed_spans:
@@ -499,6 +515,7 @@ class DetectionService:
         remaining_text: str,
         candidate_summary: dict,
         context_offset: int,
+        known_entities: list[dict] | None = None,
     ) -> None:
         setattr(
             detector,
@@ -508,6 +525,7 @@ class DetectionService:
                 "previous_entities": list(state.resolved_entities),
                 "remaining_candidates": candidate_summary,
                 "text_offset": context_offset,
+                "known_entities": known_entities or [],
                 "executed_detectors": list(state.executed_detectors),
                 "skipped_detectors": list(state.skipped_detectors),
             },
@@ -538,33 +556,91 @@ class DetectionService:
                 continue
             if previous.entity_type.upper() != entity_type:
                 continue
-            if (
-                previous.start_char == entity.start_char
-                and previous.end_char == entity.end_char
-            ):
-                # Duplicate span/type found. A later detector may resolve a
-                # previously low-confidence result even if the score is close.
-                should_replace = entity.confidence_score > previous.confidence_score
+            if not DetectionService._is_duplicate_span_or_value(previous, entity):
+                continue
+
+            should_replace = DetectionService._should_replace_previous_entity(
+                previous,
+                entity,
+                mask_confidence_threshold,
+            )
+            if should_replace:
+                previous_detector = previous.detector
+                previous_confidence = previous.confidence_score
+                DetectionService._copy_detection_result(previous, entity)
+                previous.metadata["upgraded_from_detector"] = previous_detector
+                previous.metadata["upgraded_from_confidence"] = previous_confidence
+                previous.metadata["upgraded_by_duplicate"] = True
+                entity.metadata["duplicate_upgraded_previous"] = True
+
                 if (
                     mask_confidence_threshold is not None
-                    and previous.confidence_score < mask_confidence_threshold
-                    and entity.confidence_score >= previous.confidence_score
-                    and entity.detector != previous.detector
+                    and previous.confidence_score >= mask_confidence_threshold
                 ):
-                    should_replace = True
+                    state.mask_manager.add_entities([previous])
+            else:
+                entity.metadata["duplicate_upgraded_previous"] = False
 
-                if should_replace:
-                    DetectionService._copy_detection_result(previous, entity)
-
-                    # Trigger masking if the updated confidence now exceeds the threshold.
-                    if (
-                        mask_confidence_threshold is not None
-                        and previous.confidence_score >= mask_confidence_threshold
-                    ):
-                        state.mask_manager.add_entities([previous])
-
-                return True
+            return True
         return False
+
+    @staticmethod
+    def _is_duplicate_span_or_value(
+        previous: DetectionResult,
+        entity: DetectionResult,
+    ) -> bool:
+        if (
+            previous.start_char == entity.start_char
+            and previous.end_char == entity.end_char
+        ):
+            return True
+
+        if not DetectionService._normalized_entity_value_equal(
+            previous.entity_value,
+            entity.entity_value,
+        ):
+            return False
+
+        return DetectionService._span_overlap_ratio(previous, entity) >= 0.50
+
+    @staticmethod
+    def _should_replace_previous_entity(
+        previous: DetectionResult,
+        entity: DetectionResult,
+        mask_confidence_threshold: float | None = None,
+    ) -> bool:
+        if entity.confidence_score > previous.confidence_score:
+            return True
+
+        if mask_confidence_threshold is None:
+            return False
+
+        return (
+            previous.confidence_score < mask_confidence_threshold
+            and entity.confidence_score >= previous.confidence_score
+            and entity.detector != previous.detector
+        )
+
+    @staticmethod
+    def _normalized_entity_value_equal(left: str, right: str) -> bool:
+        return " ".join(left.split()).casefold() == " ".join(right.split()).casefold()
+
+    @staticmethod
+    def _span_overlap_ratio(
+        previous: DetectionResult,
+        entity: DetectionResult,
+    ) -> float:
+        overlap = max(
+            0,
+            min(previous.end_char, entity.end_char)
+            - max(previous.start_char, entity.start_char),
+        )
+        if overlap <= 0:
+            return 0.0
+
+        previous_length = max(1, previous.end_char - previous.start_char)
+        entity_length = max(1, entity.end_char - entity.start_char)
+        return overlap / max(previous_length, entity_length)
 
     @staticmethod
     def _copy_detection_result(
@@ -808,6 +884,7 @@ class DetectionService:
                     page_number,
                     custom_text=context["text"],
                     context_offset=context["start"],
+                    known_entities=context.get("known_entities", []),
                 )
             )
         return collected
@@ -818,10 +895,10 @@ class DetectionService:
         remaining_candidates: dict,
         config: DynamicDetectionConfig,
     ) -> list[dict]:
-        candidate_contexts = state.candidate_contexts(
+        candidate_contexts = self._qwen_original_contexts_for_candidates(
+            state,
             remaining_candidates.get("candidates", []),
-            window=self.QWEN_CONTEXT_WINDOW,
-            max_contexts=self.QWEN_MAX_CONTEXTS,
+            config,
         )
 
         low_confidence_candidates = []
@@ -855,10 +932,10 @@ class DetectionService:
                 candidate["start"],
             )
         )
-        low_confidence_contexts = state.candidate_contexts(
+        low_confidence_contexts = self._qwen_original_contexts_for_candidates(
+            state,
             low_confidence_candidates,
-            window=self.QWEN_CONTEXT_WINDOW,
-            max_contexts=self.QWEN_MAX_CONTEXTS,
+            config,
         )
 
         contexts: list[dict] = []
@@ -873,6 +950,81 @@ class DetectionService:
                 break
 
         return contexts
+
+    def _qwen_original_contexts_for_candidates(
+        self,
+        state: PipelineState,
+        candidates: list[dict],
+        config: DynamicDetectionConfig,
+    ) -> list[dict]:
+        contexts: list[dict] = []
+        seen_ranges: set[tuple[int, int]] = set()
+
+        for candidate in candidates[: self.QWEN_MAX_CONTEXTS]:
+            start = max(0, candidate["start"] - self.QWEN_CONTEXT_WINDOW)
+            end = min(
+                len(state.original_text),
+                candidate["end"] + self.QWEN_CONTEXT_WINDOW,
+            )
+            raw_text = state.original_text[start:end]
+            leading = len(raw_text) - len(raw_text.lstrip())
+            trailing = len(raw_text.rstrip())
+            context_start = start + leading
+            context_end = start + trailing
+            if context_start >= context_end:
+                continue
+
+            key = (context_start, context_end)
+            if key in seen_ranges:
+                continue
+            seen_ranges.add(key)
+            contexts.append(
+                {
+                    "start": context_start,
+                    "end": context_end,
+                    "text": state.original_text[context_start:context_end],
+                    "candidate": candidate,
+                    "known_entities": self._known_entities_for_qwen_context(
+                        state,
+                        context_start,
+                        context_end,
+                        config,
+                    ),
+                }
+            )
+
+        return contexts
+
+    def _known_entities_for_qwen_context(
+        self,
+        state: PipelineState,
+        context_start: int,
+        context_end: int,
+        config: DynamicDetectionConfig,
+    ) -> list[dict]:
+        known_entities: list[dict] = []
+        for entity in state.resolved_entities:
+            if entity.confidence_score < config.high_confidence_threshold:
+                continue
+            if not self._is_valid_entity(entity, len(state.original_text)):
+                continue
+            if entity.end_char <= context_start or entity.start_char >= context_end:
+                continue
+
+            known_entities.append(
+                {
+                    "entity_type": entity.entity_type,
+                    "start_char": max(entity.start_char, context_start) - context_start,
+                    "end_char": min(entity.end_char, context_end) - context_start,
+                    "original_start_char": entity.start_char,
+                    "original_end_char": entity.end_char,
+                    "confidence_score": round(entity.confidence_score, 4),
+                    "detector": entity.detector,
+                }
+            )
+
+        known_entities.sort(key=lambda item: (item["start_char"], item["end_char"]))
+        return known_entities
 
     def _finalize_results(
         self,
@@ -986,7 +1138,7 @@ class DetectionService:
                 preceding = text[max(0, entity.start_char - 240):entity.start_char]
                 has_name_label = bool(
                     re.search(
-                        r"(?:^|\n)[ \t]*[â€¢*\-]?[ \t]*Name[ \t]*[:\-][ \t]*$",
+                        r"(?:^|\n)[ \t]*[ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢*\-]?[ \t]*Name[ \t]*[:\-][ \t]*$",
                         preceding,
                         re.IGNORECASE,
                     )
@@ -1169,8 +1321,12 @@ class DetectionService:
     def _overlap_sorting_key(self, entity: DetectionResult) -> tuple:
         entity_type = entity.entity_type.lower()
         detector_names = self._detector_names(entity.detector)
-        owner = self.AUTHORITATIVE_OWNERS.get(entity_type)
-        is_authoritative = 1 if owner in detector_names else 0
+        owners = self.AUTHORITATIVE_OWNERS.get(entity_type)
+        if isinstance(owners, str):
+            owner_names = {owners}
+        else:
+            owner_names = set(owners or ())
+        is_authoritative = 1 if detector_names & owner_names else 0
         type_rank = 1 if entity_type in self.SPECIALIZED_TYPES else 0
         detector_priority = max(
             self.DETECTOR_PRIORITY.get(detector_name, 0)
@@ -1236,5 +1392,3 @@ class DetectionService:
         ]
         owner = (visible_parts or parts or ["Unknown"])[-1]
         return display_names.get(owner.lower(), owner)
-
-

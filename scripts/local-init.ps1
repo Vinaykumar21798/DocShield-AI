@@ -9,10 +9,8 @@ if (!(Test-Path ".env.local")) {
 }
 
 New-Item -ItemType Directory -Force `
+    "storage/runs", `
     "storage/uploads", `
-    "storage/extracted_text", `
-    "storage/redacted", `
-    "storage/reports", `
     "storage/temp" | Out-Null
 
 if (!(Test-Path ".venv")) {

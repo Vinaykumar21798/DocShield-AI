@@ -115,6 +115,23 @@ class Qwen3BDetector(BaseDetector):
         return match.start(), match.end()
 
 
+    @staticmethod
+    def _format_known_entities(known_entities: list[dict]) -> str:
+        if not known_entities:
+            return "None"
+
+        lines = []
+        for entity in known_entities:
+            lines.append(
+                "- {entity_type} at chars {start_char}-{end_char} "
+                "(already detected; do not return)".format(
+                    entity_type=entity.get("entity_type", "ENTITY"),
+                    start_char=entity.get("start_char"),
+                    end_char=entity.get("end_char"),
+                )
+            )
+        return "\n".join(lines)
+
     def detect(
         self,
         text: str,
@@ -123,8 +140,12 @@ class Qwen3BDetector(BaseDetector):
         if not text or not text.strip():
             return []
 
+        context = getattr(self, "orchestration_context", {}) or {}
+        known_entities = context.get("known_entities") or []
+        known_entities_text = self._format_known_entities(known_entities)
+
         prompt = f"""You are a senior clinical and PII/PHI information extraction assistant.
-Extract all PII and PHI entities from the input text below.
+Extract unresolved PII and PHI entities from the input text below.
 Use ONLY the following entity categories:
 - PERSON
 - PATIENT
@@ -199,7 +220,11 @@ Return at most 12 results. If no real entity values exist, return {{"results": [
 Do not return labels, headings, or field names such as "Date of Service" unless the label itself is the sensitive value.
 DATE values must be real calendar dates. Never classify money, CPT/HCPCS codes, or ICD-10 codes as DATE.
 ICD10_CODE and CPT_CODE must follow their standard code shapes and appear in matching clinical context.
+Known high-confidence spans are already detected. Use them only as context. Do not return any entity whose character range overlaps a known span.
 Return ONLY valid JSON. No reasoning, no markdown wrappers, no explanation.
+
+Known high-confidence spans:
+{known_entities_text}
 
 Input Text:
 {text}

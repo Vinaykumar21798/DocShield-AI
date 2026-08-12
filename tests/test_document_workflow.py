@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -12,12 +11,14 @@ from database.models import (
     ProcessingJob,
     Redaction,
     Report,
+    Run,
 )
 from modules.classification.service import DocumentType
 from modules.detection.models.detection_result import DetectionResult
 from modules.extraction.native import TextExtractionResult
 from modules.extraction.ocr import OCRDecision, OCREngine
 from modules.extraction.service import ExtractionService
+from modules.upload.storage import StorageService
 from orchestration.workflow import DocumentProcessingWorkflow
 
 
@@ -28,6 +29,12 @@ def create_document_with_job(
     file_type="text/plain",
     retry_count=0,
 ):
+    run = Run(
+        id=str(uuid4()),
+        run_id=f"RUN-{uuid4().hex[:6].upper()}",
+        status="QUEUED",
+        total_files=1,
+    )
     document = Document(
         id=str(uuid4()),
         filename=filename,
@@ -36,6 +43,7 @@ def create_document_with_job(
         file_size=100,
         storage_path=str(storage_path),
         status="PENDING",
+        run_id=run.id,
     )
     processing_job = ProcessingJob(
         id=str(uuid4()),
@@ -46,6 +54,7 @@ def create_document_with_job(
         retry_count=retry_count,
     )
 
+    db_session.add(run)
     db_session.add(document)
     db_session.add(processing_job)
     db_session.commit()
@@ -95,8 +104,9 @@ def test_workflow_completes_native_text_document(
     assert "Invoice Number INV-1001" in ocr_result.extracted_text
     assert ocr_result.confidence_score > 0
 
-    expected_text_path = (
-        Path("storage/extracted_text") / f"{document.id}.txt"
+    expected_text_path = StorageService.extracted_path(
+        document.run_id,
+        document.id,
     )
     assert ocr_result.extracted_text_path == expected_text_path.as_posix()
     assert state.extracted_text_path == expected_text_path.as_posix()
@@ -342,7 +352,10 @@ def test_workflow_resumes_from_stored_ocr_checkpoint(
             is_searchable=True,
             extracted_text=text,
             extracted_text_path=(
-                Path("storage/extracted_text") / f"{document.id}.txt"
+                StorageService.extracted_path(
+                    document.run_id,
+                    document.id,
+                )
             ).as_posix(),
             page_count=1,
             confidence_score=0.99,

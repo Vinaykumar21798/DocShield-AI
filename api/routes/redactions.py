@@ -7,6 +7,7 @@ from api.dependencies import DatabaseSession
 from api.routes.artifacts import resolve_artifact_path
 from api.schemas.redaction import RedactionResponse
 from database.models import Redaction
+from modules.upload.storage import StorageService
 
 router = APIRouter(tags=["Redactions"])
 
@@ -65,7 +66,7 @@ def download_redacted_file(
 
     artifact_path = resolve_artifact_path(
         redaction.redacted_file_path,
-        "storage/redacted",
+        str(StorageService.STORAGE_DIR),
     )
     return FileResponse(
         path=artifact_path,
