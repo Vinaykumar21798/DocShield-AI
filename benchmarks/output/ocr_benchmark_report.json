@@ -1,0 +1,38 @@
+{
+    "Native 2-Page PDF": {
+        "engine": "NATIVE_PDF",
+        "cer": 0.5882352941176471,
+        "wer": 8.0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "f1": 1.0,
+        "confidence": 1.0
+    },
+    "Scanned PDF with Searchable Footer": {
+        "engine": "PADDLEOCR",
+        "cer": 0.375,
+        "wer": 6.0,
+        "recall": 0.5,
+        "precision": 1.0,
+        "f1": 0.6666666666666666,
+        "confidence": 0.88
+    },
+    "Short Native PDF": {
+        "engine": "NATIVE_PDF",
+        "cer": 0.0,
+        "wer": 0.0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "f1": 1.0,
+        "confidence": 1.0
+    },
+    "Native PDF with Logo": {
+        "engine": "NATIVE_PDF",
+        "cer": 0.0,
+        "wer": 0.0,
+        "recall": 1.0,
+        "precision": 1.0,
+        "f1": 1.0,
+        "confidence": 1.0
+    }
+}

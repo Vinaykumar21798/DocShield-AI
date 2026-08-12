@@ -57,6 +57,8 @@ class OCRDecisionEngine:
     }
 
     MIN_SEARCHABLE_TEXT_LENGTH = 10
+    SUBSTANTIAL_TEXT_THRESHOLD = 500
+    MAX_IMAGE_AREA_RATIO = 0.30
 
     def decide(self, document: Document) -> OCRDecision:
         file_path = self._get_storage_path(document)
@@ -165,9 +167,45 @@ class OCRDecisionEngine:
         page = pdf_document.load_page(page_index)
         page_text = page.get_text("text").strip()
         text_length = len(page_text)
+        
+        # Heuristic to distinguish native PDFs from scanned PDFs with searchable footers/headers.
+        # A page is considered searchable if it has substantial text, 
+        # or if it has some text but isn't dominated by a large image (which usually indicates a scan).
+        is_searchable = False
+        
+        if text_length >= self.SUBSTANTIAL_TEXT_THRESHOLD:
+            # Page contains enough text to be considered a native document regardless of images.
+            is_searchable = True
+        elif text_length >= self.MIN_SEARCHABLE_TEXT_LENGTH:
+            # Page has some text; check if it is dominated by a large image (typical for scanned docs with footers).
+            images = page.get_images(full=True)
+            if not images:
+                is_searchable = True
+            else:
+                page_area = page.rect.width * page.rect.height
+                is_dominated_by_image = False
+                
+                for img in images:
+                    try:
+                        # get_image_rects returns a list of rectangles where the image is placed on the page.
+                        rects = page.get_image_rects(img[0])
+                        for rect in rects:
+                            img_area = rect.width * rect.height
+                            if img_area / page_area > self.MAX_IMAGE_AREA_RATIO:
+                                is_dominated_by_image = True
+                                break
+                    except Exception:
+                        # If we can't determine the rect for a specific image, we skip it.
+                        continue
+                    if is_dominated_by_image:
+                        break
+                
+                if not is_dominated_by_image:
+                    is_searchable = True
+
         return PDFPageSearchability(
             page_number=page_index + 1,
-            is_searchable=(text_length >= self.MIN_SEARCHABLE_TEXT_LENGTH),
+            is_searchable=is_searchable,
             text_length=text_length,
         )
 

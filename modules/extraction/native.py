@@ -72,7 +72,7 @@ class NativePDFExtractionService:
             if page_text:
                 page_texts.append(page_text)
 
-        return "\n\n".join(page_texts).strip()
+        return "\n\n\f\n\n".join(page_texts).strip()
 
     def _get_file_path(self, document: Document) -> Path:
         if not document.storage_path:
