@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional, Tuple, List
+import fitz
 
 from database.models import Document
 
@@ -182,23 +183,24 @@ class OCRDecisionEngine:
             if not images:
                 is_searchable = True
             else:
-                page_area = page.rect.width * page.rect.height
-                is_dominated_by_image = False
+                page_rect = page.rect
+                page_area = page_rect.width * page_rect.height
                 
+                # Calculate the union area of all image rectangles to avoid double-counting overlapping images.
+                all_rects = []
                 for img in images:
                     try:
-                        # get_image_rects returns a list of rectangles where the image is placed on the page.
                         rects = page.get_image_rects(img[0])
-                        for rect in rects:
-                            img_area = rect.width * rect.height
-                            if img_area / page_area > self.MAX_IMAGE_AREA_RATIO:
-                                is_dominated_by_image = True
-                                break
+                        for r in rects:
+                            # Clip rectangle to page bounds
+                            clipped = r & page_rect
+                            if not clipped.is_empty:
+                                all_rects.append(clipped)
                     except Exception:
-                        # If we can't determine the rect for a specific image, we skip it.
                         continue
-                    if is_dominated_by_image:
-                        break
+                
+                union_area = self._calculate_union_area(all_rects)
+                is_dominated_by_image = (union_area / page_area) > self.MAX_IMAGE_AREA_RATIO
                 
                 if not is_dominated_by_image:
                     is_searchable = True
@@ -208,6 +210,54 @@ class OCRDecisionEngine:
             is_searchable=is_searchable,
             text_length=text_length,
         )
+
+    @staticmethod
+    def _calculate_union_area(rects: List[fitz.Rect]) -> float:
+        """
+        Calculates the area of the union of multiple rectangles.
+        Uses a simple coordinate compression (sweep-line) approach.
+        """
+        if not rects:
+            return 0.0
+        
+        # Extract all x-coordinates
+        x_coords = sorted(set([r.x0 for r in rects] + [r.x1 for r in rects]))
+        x_map = {x: i for i, x in enumerate(x_coords)}
+        
+        # Create a grid of y-intervals for each x-strip
+        # strip_y_intervals[i] contains a list of (y0, y1) for rectangles covering the strip [x_coords[i], x_coords[i+1]]
+        strip_y_intervals = [[] for _ in range(len(x_coords) - 1)]
+        
+        for r in rects:
+            for i in range(x_map[r.x0], x_map[r.x1]):
+                strip_y_intervals[i].append((r.y0, r.y1))
+        
+        total_area = 0.0
+        for i in range(len(x_coords) - 1):
+            width = x_coords[i+1] - x_coords[i]
+            if width <= 0:
+                continue
+                
+            # Calculate the length of the union of y-intervals in this strip
+            intervals = sorted(strip_y_intervals[i])
+            if not intervals:
+                continue
+                
+            union_y_len = 0.0
+            curr_y0, curr_y1 = intervals[0]
+            
+            for next_y0, next_y1 in intervals[1:]:
+                if next_y0 < curr_y1:
+                    curr_y1 = max(curr_y1, next_y1)
+                else:
+                    union_y_len += curr_y1 - curr_y0
+                    curr_y0, curr_y1 = next_y0, next_y1
+            
+            union_y_len += curr_y1 - curr_y0
+            total_area += width * union_y_len
+            
+        return total_area
+
 
     def _get_storage_path(self, document: Document) -> Path:
         if not document.storage_path:
