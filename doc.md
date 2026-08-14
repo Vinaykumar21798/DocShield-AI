@@ -47,23 +47,25 @@ Rules:
 ## 4. End-to-End Workflow
 
 ```text
-Client uploads document
-  -> FastAPI validates file
-  -> API stores original file under storage/uploads
-  -> API creates documents row
+Client uploads document(s)
+  -> FastAPI validates file(s)
+  -> API creates Run UUID (one per upload batch)
+  -> API creates Document UUID(s) linked to Run
+  -> API stores original file under storage/runs/{run_id}/documents/{doc_id}/original
   -> API creates processing_jobs row
   -> API pushes job to Redis key document_processing
   -> Worker consumes Redis job
   -> Worker runs DocumentProcessingWorkflow
   -> Workflow classifies document/domain
+  -> Workflow decides OCR engine (Native / PaddleOCR / Mixed)
   -> Workflow extracts text and OCR metadata
   -> Workflow stores ocr_results row
-  -> Workflow writes extracted text artifact
+  -> Workflow writes extracted text artifact to storage/.../extracted/content.txt
   -> Workflow runs detection pipeline
   -> Workflow stores entities and confidence_scores rows
   -> Workflow creates reviews rows where human decision is needed
-  -> Workflow creates redacted artifact
-  -> Workflow creates audit report JSON
+  -> Workflow creates redacted artifact under storage/.../redacted/redacted.txt
+  -> Workflow creates audit report JSON under storage/.../report.json
   -> Workflow marks document/job completed
 ```
 
@@ -81,7 +83,95 @@ FAILED -> RETRY_QUEUED or PENDING -> PROCESSING
 
 `workflow_stage` stores the current or failed stage. `last_completed_stage` stores the latest durable checkpoint so retries can avoid repeating completed work where supported.
 
-## 5. Detection Workflow
+## 5. Run & Document Management
+
+DocShield-AI tracks uploads as Runs to support single-file and bulk uploads while keeping every document traceable to its originating batch.
+
+### Run to Document Relationship
+
+Single-file upload:
+
+```text
+1 file
+  -> 1 Run UUID
+  -> 1 Document UUID
+```
+
+Bulk upload:
+
+```text
+N files
+  -> 1 Run UUID
+  -> N Document UUIDs
+```
+
+`documents.run_id` is a foreign key to `runs.id` and links each document to its upload Run. Each Run also gets a human-readable identifier (`RUN-000001`, `RUN-000002`, ...) generated from the atomic `run_sequence` counter (`database/repositories/run_repository.py`).
+
+### Run Lifecycle
+
+A Run is created with `status = QUEUED` and a `total_files` count. As documents finish, the worker increments `completed_files` and `failed_files`; when `completed_files + failed_files == total_files`, the Run is marked `COMPLETED` (or `FAILED` when only failures remain). Run-level status and counters live in the `runs` table.
+
+## 6. OCR Extraction & Routing
+
+DocShield-AI decides the extraction engine per document. For PDFs, the routing logic inspects each page and classifies it as searchable or scanned (`modules/extraction/ocr.py`).
+
+### Routing Architecture
+
+| Engine | Use Case |
+| --- | --- |
+| `NATIVE_PDF` | PDF pages with substantial searchable text. |
+| `NATIVE_TEXT` | Plain text and DOCX documents. |
+| `PADDLEOCR` | Scanned or image-dominated pages. |
+| `MIXED_PDF` | PDFs with both searchable and scanned pages. |
+
+### Routing Logic
+
+Per page:
+
+1. Substantial text: if `text_length >= 500`, the page is searchable.
+2. Composite searchability: if `text_length >= 10` AND the geometric union of all image rectangles covers at most `30%` of the page area, the page is searchable.
+3. Otherwise the page is scanned and routed to PaddleOCR.
+
+At document level:
+
+- All pages searchable -> `NATIVE_PDF`
+- No searchable pages -> `PADDLEOCR`
+- Mixed -> `MIXED_PDF`
+
+### Verified Improvements
+
+- **Native PDF page attribution**: native extraction joins page text with the standardized page separator `\n\n\f\n\n` so entities are attributed to the correct page number.
+- **Searchable-footer routing bug**: scanned PDFs with a small amount of native text (for example a footer) were misrouted to `NATIVE_PDF`, silently losing the scanned body. The composite heuristic above fixes this.
+- **Multi-image routing bug**: scanned pages composed of several medium-sized images were misrouted to `NATIVE_PDF`. Image rectangles are now merged with a geometric union (coordinate compression / sweep-line), so overlapping or repeated image references are not double-counted.
+- Correct `PADDLEOCR` routing for scanned multi-image pages.
+- Correct `MIXED_PDF` routing for documents that combine native and scanned pages.
+- Added OCR benchmark and OCR regression tests.
+
+### Validation Status
+
+| Area | Status |
+| --- | --- |
+| Searchable-footer routing | Completed |
+| Multi-image routing | Completed |
+| Mixed PDF routing | Completed |
+| Native page attribution | Completed |
+| OCR benchmark | Completed |
+| OCR regression tests | Passing |
+
+### OCR Benchmark Result
+
+In the synthetic scanned-footer benchmark scenario the measured recall of the scanned body improved from `0.000` to `0.500` after the routing fix. This figure is specific to the synthetic benchmark scenario and is NOT a universal OCR recall metric.
+
+### Current Scope
+
+The identified OCR routing and page-attribution improvements are complete for the current PoC scope. The following remain future enhancements:
+
+- OCR preprocessing
+- Orientation correction
+- Confidence-based reprocessing
+- Coordinate-aware detection and redaction
+
+## 7. Detection Workflow
 
 Detection is routed by document domain and remaining unresolved candidate spans.
 
@@ -147,7 +237,7 @@ Important behavior:
 - If a detector crashes, the error is logged, that detector is skipped, and the next detector runs when candidates remain.
 - A detector crash should not fail the whole document unless the workflow cannot continue safely.
 
-## 6. Detection UI Result Rule
+## 8. Detection UI Result Rule
 
 The UI should display the final stored detector for each persisted entity row.
 
@@ -177,12 +267,12 @@ Decision: Approve / Reject only when review is required
 
 Do not show detector chains like `Regex,ollama` unless the database intentionally stores a combined detector provenance field. The review UI should stay aligned with the persisted entity/review records.
 
-## 7. Database Schema
+## 9. Database Schema
 
 Current Alembic head:
 
 ```text
-0005_processing_job_checkpoint
+0006_add_run_tracking
 ```
 
 Expected public tables:
@@ -197,6 +287,8 @@ processing_jobs
 redactions
 reports
 reviews
+runs
+run_sequence
 ```
 
 Table responsibilities:
@@ -211,6 +303,8 @@ Table responsibilities:
 | `reviews` | Human review decisions and corrections |
 | `redactions` | Redaction metadata and output file path |
 | `reports` | Audit report metadata and output file path |
+| `runs` | Upload batch metadata, status, and completion counters |
+| `run_sequence` | Atomic counter used to generate human-readable Run IDs |
 | `alembic_version` | Current migration version |
 
 Useful SQL:
@@ -242,7 +336,7 @@ order by created_at desc
 limit 10;
 ```
 
-## 8. Docker Runbook
+## 10. Docker Runbook
 
 Start Docker:
 
@@ -292,7 +386,7 @@ Stop Docker:
 .\scripts\docker-down.ps1
 ```
 
-## 9. Local Python Runbook
+## 11. Local Python Runbook
 
 Initialize local environment:
 
@@ -352,7 +446,7 @@ Local UI:
 http://localhost:8000/ui/
 ```
 
-## 10. UI Test
+## 12. UI Test
 
 Use Docker UI unless you are specifically testing local Python:
 
@@ -388,7 +482,7 @@ If the UI stays pending, check worker logs:
 .\scripts\docker-logs.ps1
 ```
 
-## 11. pgAdmin Test
+## 13. pgAdmin Test
 
 Docker connection:
 
@@ -424,9 +518,9 @@ Servers
             Tables
 ```
 
-You should see the 9 expected tables listed in the database schema section.
+You should see the 11 expected tables listed in the database schema section.
 
-## 12. RedisInsight Test
+## 14. RedisInsight Test
 
 Docker Redis connection:
 
@@ -468,16 +562,25 @@ document_processing
 
 The key may disappear or stay empty because the worker consumes jobs quickly.
 
-## 13. Storage
+## 15. Storage
 
-Docker with `docker-compose.local-gui.yml` writes runtime artifacts to the repo:
+Docker with `docker-compose.local-gui.yml` writes runtime artifacts to the repo under UUID-based run and document directories:
 
 ```text
-storage/uploads/
-storage/extracted_text/
-storage/redacted/
-storage/reports/
+storage/
+└── runs/
+    └── {run_uuid}/
+        └── documents/
+            └── {document_uuid}/
+                ├── original/
+                ├── extracted/
+                │   └── content.txt
+                ├── redacted/
+                │   └── redacted.txt
+                └── report.json
 ```
+
+The layout is produced by `modules/upload/storage.py`. The original uploaded file is stored under `original/` with a sanitized filename; the extracted text, redacted text, and audit report are written to `content.txt`, `redacted.txt`, and `report.json` respectively.
 
 Check files through the API container:
 
@@ -487,7 +590,7 @@ docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.loca
 
 Runtime files are ignored by git. Keep only `.gitkeep` placeholders if a directory needs to exist in a clean clone.
 
-## 14. OCR Behavior
+## 16. OCR Behavior
 
 Extraction routing:
 
@@ -501,7 +604,17 @@ Extraction routing:
 
 Mixed PDF output includes page-level metadata such as searchable pages, OCR pages, extraction method, and structured OCR output when available.
 
-## 15. API Reference
+### Verified Improvements
+
+- **Native PDF page attribution**: native extraction joins page text with the standardized page separator `\n\n\f\n\n` so entities are attributed to the correct page number.
+- **Searchable-footer routing fix**: scanned PDFs that carry a small amount of native text (for example a footer) are no longer misrouted to `NATIVE_PDF`, which previously lost the scanned body.
+- **Multi-image routing fix**: image rectangles are merged with a geometric union (sweep-line) so overlapping or repeated image references are not double-counted; scanned pages built from several medium-sized images now route to `PADDLEOCR`.
+- **MIXED_PDF routing**: documents that combine native and scanned pages are routed to `MIXED_PDF` and each page is extracted with the appropriate engine.
+- OCR benchmark and OCR regression tests cover these scenarios.
+
+See "OCR Extraction & Routing" (Section 6) for the routing decision details, the validation status table, and the benchmark result.
+
+## 17. API Reference
 
 Base URLs:
 
@@ -535,7 +648,7 @@ Docker: http://localhost:8001/docs
 Local:  http://localhost:8000/docs
 ```
 
-## 16. Tests
+## 18. Tests
 
 Run local tests:
 
@@ -555,7 +668,13 @@ Focused detection tests:
 python -m pytest tests/test_detection.py tests/test_detector_selector.py tests/test_regex_detector.py -q
 ```
 
-## 17. Troubleshooting
+Focused OCR tests:
+
+```powershell
+python -m pytest tests/test_ocr_routing_logic.py tests/test_ocr_repro_misrouting.py tests/test_ocr_repro_page_attribution.py tests/test_ocr_multi_image_investigation.py -q
+```
+
+## 19. Troubleshooting
 
 Docker project is missing or split in Docker Desktop:
 
@@ -607,7 +726,7 @@ docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.loca
 
 Keep `numpy==1.26.4` unless the spaCy/thinc/MedSpaCy stack is retested.
 
-## 18. Maintenance Rules
+## 20. Maintenance Rules
 
 - Keep README focused on first-run setup.
 - Keep detailed operating notes in this file.
