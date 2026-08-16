@@ -1,4 +1,4 @@
-# DocShield-AI — Current PoC Technical Context
+﻿# DocShield-AI — Current PoC Technical Context
 
 ## 1. Executive Summary
 DocShield-AI is a specialized PII/PHI redaction system designed for healthcare and enterprise documents. It currently implements a multi-stage pipeline that transforms uploaded documents into redacted text files with associated audit reports.
@@ -7,6 +7,8 @@ DocShield-AI is a specialized PII/PHI redaction system designed for healthcare a
 
 **Core Flow**:
 `Upload` $\rightarrow$ `Classification` $\rightarrow$ `OCR/Extraction` $\rightarrow$ `Dynamic Detection Orchestration` $\rightarrow$ `Entity Merging/Validation` $\rightarrow$ `Confidence Scoring` $\rightarrow$ `Human Review Trigger` $\rightarrow$ `Text Redaction` $\rightarrow$ `Audit Report Generation`.
+
+**Bulk Processing**: Uploads (single or batch) are grouped under a `Run` (UUID) that aggregates 1–N `Document`s; progress is tracked via `total_files` / `completed_files` / `failed_files` counters.
 
 **Main Technologies**:
 - **Backend**: Python (FastAPI), SQLAlchemy.
@@ -78,7 +80,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 | Stage | Actual implementation | Important files/functions | Input | Output |
 | :--- | :--- | :--- | :--- | :--- |
-| **Upload** | File validation & storage | `modules/upload/service.py` | File | `Document` record |
+| **Upload** | Validation, storage & `Run` creation | `modules/upload/service.py` | File(s) | `Run` + `Document` records |
 | **Classification** | Rules-based weighted signals | `modules/classification/service.py` | Filename/Text | `DocumentType` |
 | **OCR Decision** | Extension/content-type check | `modules/extraction/ocr.py` | File | `OCREngine` selection |
 | **Extraction** | Native/PaddleOCR extraction | `modules/extraction/paddle.py` | File | `extracted_text` |
@@ -92,18 +94,37 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 5. Document Processing & OCR
+## 5. Run & Document Tracking
+- **Run**: A bulk-upload unit. One upload request (single or batch) creates exactly one `Run` (max 100 files) that aggregates 1–N `Document`s.
+- **Models** (`database/models/`):
+  - `Run` (table `runs`): `id` (UUID PK), `run_id` (unique, e.g. `RUN-000001`), `status` (`QUEUED` → `COMPLETED`/`FAILED`), counters `total_files` / `completed_files` / `failed_files`, timestamps.
+  - `RunSequence` (table `run_sequence`): single-row `last_value` counter used to generate sequential `RUN-xxxxxx` IDs atomically.
+  - `Document` (table `documents`): gained `run_id` FK → `runs.id` (indexed, nullable).
+- **Run lifecycle** (`database/repositories/run_repository.py` → `RunRepository`):
+  - `create_run()` increments `run_sequence` (`with_for_update()`) and generates `RUN-{n:06d}`.
+  - `increment_completed()` / `increment_failed()` auto-set terminal status when `completed_files + failed_files == total_files`.
+- **API**: `POST /upload/` (single → `run_id` + `document_id`), `POST /upload/bulk` (multi-file → `run_id`, `total_files`, `documents[]`), `GET /documents/runs/{run_id}` (progress + per-document status).
+- **Storage**: Each document is stored under `{STORAGE_DIR}/runs/{run_id}/documents/{document_id}/` → `original/`, `extracted/`, `redacted/`, `report.json` (`modules/upload/storage.py`).
+
+## 6. Document Processing & OCR
 - **Supported Types**: PDF, PNG, JPG, JPEG, TIFF, BMP, TXT, DOCX.
-- **OCR Engines**: 
-  - **NativePDF**: PyMuPDF (for searchable PDFs).
-  - **PaddleOCR**: Used for scanned images/PDFs (via `modules/extraction/paddle.py`).
-  - **MixedPDF**: Combination of native and OCR for hybrid documents.
-- **Behavior**: `OCRDecisionEngine` inspects page searchability. If text length < 10 chars, page is marked as scanned.
+- **OCR Engines** (`OCREngine` in `modules/extraction/ocr.py`):
+  - **NATIVE_PDF**: PyMuPDF (for fully searchable PDFs).
+  - **NATIVE_TEXT**: For `.txt` / `.docx` (no OCR).
+  - **PADDLEOCR**: Used for scanned images/PDFs (via `modules/extraction/paddle.py`).
+  - **MIXED_PDF**: Combination of native + OCR for hybrid documents.
+- **Routing** (`OCRDecisionEngine`): Per-document decision from per-page searchability. Heuristics in `_inspect_pdf_page`:
+  - `SUBSTANTIAL_TEXT_THRESHOLD = 500`: page text ≥ 500 chars → searchable regardless of images.
+  - `MIN_SEARCHABLE_TEXT_LENGTH = 10`: text ≥ 10 chars but < 500 → searchable unless dominated by images.
+  - `MAX_IMAGE_AREA_RATIO = 0.30`: if the **union** of all image rect areas (clipped to page) exceeds 30% of page area, the page is treated as scanned (multi-image safe).
+  - All searchable → `NATIVE_PDF`; none → `PADDLEOCR`; mixed → `MIXED_PDF`; images → `PADDLEOCR`; text/word → `NATIVE_TEXT`.
+- **Page attribution**: Native extraction joins pages with `\n\n\f\n\n` (form-feed separator) so page numbers stay correct.
+- **Verified fixes**: Scanned body + short searchable footer now routes to `PADDLEOCR` (previously misrouted to `NATIVE_PDF`); overlapping multi-image pages are no longer misclassified.
 - **Limitations**: No OCR preprocessing (denoising/deskewing) found; output is currently plain text.
 
 ---
 
-## 6. PII/PHI Detection Pipeline
+## 7. PII/PHI Detection Pipeline
 
 | Detector | Technology | Entities | Input | Output | Trigger | Confidence | Fallback | Used? |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -117,7 +138,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 7. Entity Taxonomy
+## 8. Entity Taxonomy
 
 ### PII
 - `PERSON`, `EMAIL`, `PHONE_NUMBER`, `US_PHONE_NUMBER`, `ADDRESS`, `DATE_OF_BIRTH`, `SSN`, `PASSPORT_NUMBER`, `AADHAAR_NUMBER`, `PAN_NUMBER`, `DRIVING_LICENSE`, `ZIP_CODE`, `PIN_CODE`.
@@ -129,7 +150,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 8. Orchestration / Decision Logic
+## 9. Orchestration / Decision Logic
 **Brain**: `DetectionService` + `DetectorSelector`.
 **Logic**: 
 1. **Domain Classification**: `DetectorSelector` classifies text into `financial`, `healthcare`, `corporate`, `legal`, `generic`, or `mixed`.
@@ -141,7 +162,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 9. Entity Merge, Deduplication & Validation
+## 10. Entity Merge, Deduplication & Validation
 - **Validation**: `EntityValidator` filters out labels (e.g., "Name:") and reclassifies candidates based on context (e.g., "Comprehensive Metabolic Panel" $\rightarrow$ `LAB`).
 - **Deduplication**: `Deduplicator` removes exact span duplicates, keeping the highest confidence.
 - **Overlap Resolution**: `DetectionService._resolve_overlapping_spans` uses a priority key: `(is_authoritative, type_rank, detector_priority, confidence, length)`.
@@ -149,7 +170,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 10. Confidence & Risk Scoring
+## 11. Confidence & Risk Scoring
 - **Calculation**: `ConfidenceCalculator` calibrates scores based on the detector:
   - **Regex**: Base 0.4 $\rightarrow$ +0.3 if context match $\rightarrow$ +0.3 if validation pass.
   - **MedSpaCy**: Capped at 0.95.
@@ -162,7 +183,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 11. Redaction Pipeline
+## 12. Redaction Pipeline
 - **Mechanism**: Text-based replacement in `DocumentProcessingWorkflow._apply_redactions`.
 - **Operation**: Replaces identified spans with `[REDACTED_{ENTITY_TYPE}]`.
 - **Output**: Saves a new `.txt` file in `storage/redacted/`.
@@ -170,13 +191,13 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 12. Redaction Verification & Release Decision
+## 13. Redaction Verification & Release Decision
 - **Implementation**: Not found in codebase. The system currently generates a report and a redacted file.
 - **Release Decision**: No automated "APPROVE/BLOCK" logic exists; the system marks entities as `is_redacted = True` and creates a `Review` object for those below the threshold.
 
 ---
 
-## 13. Human Review Workflow
+## 14. Human Review Workflow
 - **Trigger**: `confidence_score < 0.80`.
 - **Storage**: `Review` model in database.
 - **Process**: Reviewers can approve/reject via API (`api/routes/reviews.py`).
@@ -184,7 +205,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 14. Frontend / UI
+## 15. Frontend / UI
 - **Framework**: Vanilla JavaScript / HTML / CSS.
 - **Features**:
   - **Upload**: File selection and submission.
@@ -195,29 +216,39 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 15. Backend APIs
+## 16. Backend APIs
 
 | Method | Endpoint | Purpose | Input | Output | Source |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| POST | `/upload` | Ingest document | File | `DocumentID` | `upload.py` |
-| GET | `/documents/{id}` | Get doc status | ID | `DocumentStatus` | `documents.py` |
-| GET | `/reports/{id}` | Get audit report | ID | `ReportJSON` | `reports.py` |
-| GET | `/reviews/{id}` | List pending reviews | ID | `ReviewList` | `reviews.py` |
-| PATCH | `/reviews/{id}` | Update review status | ID + Status | `Review` | `reviews.py` |
-| GET | `/health` | System health check | None | `Status` | `health.py` |
+| POST | `/upload/` | Single document upload | File | `run_id`, `document_id` | `upload.py` |
+| POST | `/upload/bulk` | Multi-file upload (max 100) | `files[]` | `run_id`, `total_files`, `documents[]` | `upload.py` |
+| GET | `/documents/runs/{run_id}` | Run progress & per-doc status | run_id | `RunStatus` | `documents.py` |
+| GET | `/documents/{id}/status` | Document processing status | ID | `DocumentStatus` | `documents.py` |
+| GET | `/documents/{id}/entities` | List detected entities | ID | Entity list | `documents.py` |
+| GET | `/documents/{id}/text` | Extracted text + OCR metadata | ID | Text + metadata | `documents.py` |
+| GET | `/documents/{id}/reviews` | List document reviews | ID | Review list | `reviews.py` |
+| PATCH | `/reviews/{review_id}` | Submit human review decision | ID + Status | `Review` | `reviews.py` |
+| GET | `/documents/{id}/redactions` | List redactions | ID | Redaction list | `redactions.py` |
+| GET | `/redactions/{redaction_id}/file` | Download redacted artifact | ID | File | `redactions.py` |
+| GET | `/documents/{id}/reports` | List document reports | ID | Report list | `reports.py` |
+| GET | `/reports/{report_id}` | Report metadata + payload | ID | `ReportJSON` | `reports.py` |
+| GET | `/reports/{report_id}/file` | Download report artifact | ID | File | `reports.py` |
+| GET | `/health/` | System health check | None | `Status` | `health.py` |
 
 ---
 
-## 16. Database & Storage
+## 17. Database & Storage
 - **Database**: PostgreSQL (via SQLAlchemy).
-- **Models**: `Document`, `ProcessingJob`, `OCRResult`, `Entity`, `ConfidenceScore`, `Redaction`, `Report`, `Review`.
+- **Models**: `Document`, `ProcessingJob`, `OCRResult`, `Entity`, `ConfidenceScore`, `Redaction`, `Report`, `Review`, `Run`, `RunSequence`.
+- **Run relationship**: `Document.run_id` FK → `runs.id` (indexed, nullable); one `Run` → many `Document`s (max 100 per run).
 - **Storage**:
-  - **Local Filesystem**: `storage/uploads`, `storage/extracted_text`, `storage/redacted`, `storage/reports`.
+  - **Primary layout** (UUID tree via `modules/upload/storage.py`): `storage/runs/{run_id}/documents/{document_id}/` → `original/{file}`, `extracted/content.txt`, `redacted/redacted.txt`, `report.json`.
+  - **Legacy fallback**: `storage/uploads` (UUID filename + extension) used when `run_id`/`document_id` are absent.
 - **State**: `ProcessingJob` tracks `workflow_stage` and `last_completed_stage` for resume capabilities.
 
 ---
 
-## 17. Queue, Cache & Async Processing
+## 18. Queue, Cache & Async Processing
 - **Implementation**: Custom Redis-based queue in `redis_queue/`.
 - **Components**:
   - `producer.py`: Pushes jobs to Redis.
@@ -227,7 +258,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 18. AI / LLM / SLM Integration
+## 19. AI / LLM / SLM Integration
 
 | Model | Provider | Purpose | Location | Input | Output |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -239,7 +270,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 19. Configuration & Environment
+## 20. Configuration & Environment
 - **AI**: `OLLAMA_HOST`, `BYPASS_LLM`.
 - **Database**: `DATABASE_URL`.
 - **Redis**: `REDIS_HOST`, `REDIS_PORT`.
@@ -247,7 +278,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 20. Security & Privacy
+## 21. Security & Privacy
 - **Implemented**:
   - File type validation on upload.
   - PII/PHI separation in taxonomy.
@@ -259,7 +290,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 21. Testing & Evaluation
+## 22. Testing & Evaluation
 - **Unit Tests**: Broad coverage for all detectors (e.g., `test_regex_detector.py`).
 - **Integration Tests**: `test_api_e2e.py`, `test_document_workflow.py`.
 - **Regression Tests**: `test_detection_quality_regressions.py` (tests specific complex samples like EOBs).
@@ -269,7 +300,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 22. Current Detection Accuracy Problems
+## 23. Current Detection Accuracy Problems
 
 ### Confirmed problems
 - **OCR Line Breaks**: Entities split across lines (e.g., phone numbers) are difficult to capture; handled via special Regex logic but fragile.
@@ -285,7 +316,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 23. Current PoC Strengths
+## 24. Current PoC Strengths
 - **Hybrid Pipeline**: Combines high-precision Regex with high-recall LLMs.
 - **Dynamic Routing**: Adapts detector sequence based on document domain.
 - **Resilience**: Workflow checkpointing allows resuming failed jobs.
@@ -294,7 +325,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 24. Current PoC Weaknesses
+## 25. Current PoC Weaknesses
 1. **Redaction Target**: Only redacts extracted `.txt` files, not original PDFs.
 2. **OCR Pipeline**: Basic extraction; lacks advanced layout analysis.
 3. **LLM Latency**: Sequential context processing in Qwen is slow for large docs.
@@ -303,7 +334,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 25. Current PoC Maturity Assessment
+## 26. Current PoC Maturity Assessment
 **Assessment**: **Functional PoC**
 
 - **Reasoning**:
@@ -315,7 +346,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ---
 
-## 26. Actual Current Architecture Diagram
+## 27. Actual Current Architecture Diagram
 ```mermaid
 flowchart TD
     A[Client] --> B[Upload API]
@@ -338,7 +369,7 @@ flowchart TD
 
 ---
 
-## 27. Critical File Map
+## 28. Critical File Map
 
 | Component | File | Important class/function | Responsibility |
 | :--- | :--- | :--- | :--- |
@@ -349,10 +380,12 @@ flowchart TD
 | **OCR Engine** | `modules/extraction/ocr.py` | `OCRDecisionEngine` | Engine selection |
 | **Validation** | `modules/detection/validators/entity_validator.py` | `EntityValidator` | Filtering & Reclassification |
 | **Classification** | `modules/classification/service.py` | `DocumentClassificationService` | Doc type identification |
+| **Run Tracking** | `database/repositories/run_repository.py` | `RunRepository` | Run creation, sequence IDs & status aggregation |
+| **Run Model** | `database/models/run.py` | `Run`, `RunSequence` | Bulk-upload run aggregation & ID counter |
 
 ---
 
-## 28. Current State vs Intended State
+## 29. Current State vs Intended State
 
 | Area | Current implementation | Evidence | Missing / Not implemented |
 | :--- | :--- | :--- | :--- |
@@ -365,7 +398,7 @@ flowchart TD
 
 ---
 
-## 29. One-Page Technical Summary
+## 30. One-Page Technical Summary
 1. **What does it do?** Detects and redacts PII/PHI from documents.
 2. **Document Flow**: Upload $\rightarrow$ Classify $\rightarrow$ OCR $\rightarrow$ Detect $\rightarrow$ Validate $\rightarrow$ Redact $\rightarrow$ Report.
 3. **Detectors**: Regex, Presidio, GLiNER, MedSpaCy, Qwen3:4b.
