@@ -909,7 +909,7 @@ class DetectionService:
             )
             state.add_entities(
                 validated,
-                detector_name="qwen_validation",
+                detector_name="Qwen",
                 mask_confidence_threshold=config.high_confidence_threshold,
             )
             state.clear_pending_candidates()
@@ -934,7 +934,7 @@ class DetectionService:
             )
             state.add_entities(
                 validated,
-                detector_name="qwen_validation",
+                detector_name="Qwen",
                 mask_confidence_threshold=config.high_confidence_threshold,
             )
             state.clear_pending_candidates()
@@ -1558,8 +1558,10 @@ class DetectionService:
             "presidio": "Presidio",
             "medspacy": "MedSpaCy",
             "gliner": "GLiNER",
+            "qwen": "Qwen3:4b",
             "qwen3b": "Qwen3:4b",
             "qwen3:4b": "Qwen3:4b",
+            "qwen_validation": "Qwen3:4b",
         }
         ignored = {"ollama", "validator", "llm-validation"}
         parts = [

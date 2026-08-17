@@ -610,7 +610,9 @@ Return EXACTLY JSON format:
                         val = self._heuristic_validate_candidate(cand, item["chunk_text"], document_type)
 
                     if val.decision == "CONFIRM":
-                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.85)
+                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.88)
+                        cand.detector = "Qwen"
+                        cand.entity_owner = "qwen3b"
                         cand.metadata["qwen_validation"] = "CONFIRM"
                         cand.metadata["qwen_reason"] = val.reason
                         validated_results.append(cand)
@@ -618,7 +620,9 @@ Return EXACTLY JSON format:
                         new_type = (val.corrected_type or cand.entity_type).upper()
                         cand.entity_type = new_type
                         cand.canonical_type = new_type
-                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.85)
+                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.90)
+                        cand.detector = "Qwen"
+                        cand.entity_owner = "qwen3b"
                         cand.metadata["qwen_validation"] = "RECLASSIFY"
                         cand.metadata["qwen_reason"] = val.reason
                         validated_results.append(cand)
@@ -635,7 +639,9 @@ Return EXACTLY JSON format:
             cand = item["candidate"]
             val = self._heuristic_validate_candidate(cand, item["chunk_text"], document_type)
             if val.decision == "CONFIRM":
-                cand.confidence_score = max(cand.confidence_score, val.confidence_score)
+                cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.88)
+                cand.detector = "Qwen"
+                cand.entity_owner = "qwen3b"
                 cand.metadata["qwen_validation"] = "CONFIRM"
                 cand.metadata["qwen_reason"] = val.reason
                 validated_results.append(cand)
@@ -643,7 +649,9 @@ Return EXACTLY JSON format:
                 new_type = (val.corrected_type or cand.entity_type).upper()
                 cand.entity_type = new_type
                 cand.canonical_type = new_type
-                cand.confidence_score = max(cand.confidence_score, val.confidence_score)
+                cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.90)
+                cand.detector = "Qwen"
+                cand.entity_owner = "qwen3b"
                 cand.metadata["qwen_validation"] = "RECLASSIFY"
                 cand.metadata["qwen_reason"] = val.reason
                 validated_results.append(cand)
@@ -661,7 +669,31 @@ Return EXACTLY JSON format:
         val_lower = candidate.entity_value.strip().lower()
         chunk_lower = chunk_text.lower()
 
-        # 1. REJECT known benefit / policy / form / terminology noise
+        # 1. REJECT multilingual / Spanish language access disclaimers
+        SPANISH_DISCLAIMER_TERMS = {
+            "español", "espanol", "spanish", "tagalog", "chinese", "navajo",
+            "para obtener", "para obtener ayuda", "llame al", "si usted", "o alguien",
+            "language access", "language access services", "ayuda en español",
+            "atención", "atencion", "assistance services",
+        }
+        if any(term in val_lower for term in SPANISH_DISCLAIMER_TERMS) or (val_lower in {"al", "para", "obtener", "ayuda"}):
+            return CandidateValidationItem(
+                id=1,
+                decision="REJECT",
+                reason=f"Term '{candidate.entity_value}' is part of a multilingual language access disclaimer, not personal PII.",
+                confidence_score=0.95,
+            )
+
+        # 2. REJECT candidates containing digits or phone numbers tagged as PERSON / LOCATION
+        if candidate.entity_type in {"PERSON", "LOCATION"} and any(c.isdigit() for c in candidate.entity_value):
+            return CandidateValidationItem(
+                id=1,
+                decision="REJECT",
+                reason=f"Candidate '{candidate.entity_value}' contains digits/phone number and is not a valid {candidate.entity_type}.",
+                confidence_score=0.95,
+            )
+
+        # 3. REJECT known benefit / policy / form / terminology noise
         REJECT_TERMS = {
             "mail order", "mail-order", "preauth", "pre-auth", "preauthorization",
             "minimum value", "minimum value standard", "hearing", "hearing aids",
@@ -692,7 +724,7 @@ Return EXACTLY JSON format:
                 confidence_score=0.95,
             )
 
-        # 2. RECLASSIFY pharmacy / facility / organization names misclassified as PERSON
+        # 4. RECLASSIFY pharmacy / facility / organization names misclassified as PERSON
         if "pharmacy" in chunk_lower or "rx" in chunk_lower or "dispense" in chunk_lower or "pharmacy" in val_lower:
             if candidate.entity_type == "PERSON" and any(term in val_lower for term in ["westfield", "walgreens", "cvs", "rite aid", "walmart", "kroger", "pharmacy", "apothecary"]):
                 return CandidateValidationItem(
@@ -703,7 +735,22 @@ Return EXACTLY JSON format:
                     confidence_score=0.90,
                 )
 
-        # 3. Proper Person validation: real capitalized full names or labeled patient names
+        # 5. Clean doctor names if trailing visit terms are present
+        if candidate.entity_type in {"DOCTOR", "PHYSICIAN"}:
+            for suffix in [" office visit", " specialist consult", " consult", " follow up", " evaluation", " exam"]:
+                if val_lower.endswith(suffix):
+                    clean_val = candidate.entity_value[:-len(suffix)].strip()
+                    candidate.entity_value = clean_val
+                    candidate.end_char = candidate.start_char + len(clean_val)
+                    break
+            return CandidateValidationItem(
+                id=1,
+                decision="CONFIRM",
+                reason="Doctor entity confirmed in clinical context.",
+                confidence_score=0.90,
+            )
+
+        # 6. Proper Person validation: real capitalized full names or labeled patient names
         if candidate.entity_type == "PERSON":
             words = candidate.entity_value.strip().split()
             if len(words) == 1 and val_lower in {"patient", "doctor", "physician", "provider", "nurse", "member", "subscriber", "admin", "preauth", "hearing", "vision", "dental"}:
@@ -733,5 +780,5 @@ Return EXACTLY JSON format:
             id=1,
             decision="CONFIRM",
             reason="Plural semantic validation confirmed candidate.",
-            confidence_score=0.80,
+            confidence_score=0.85,
         )

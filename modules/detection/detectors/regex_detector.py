@@ -497,13 +497,20 @@ class RegexDetector(BaseDetector):
                     if not self.has_context(entity, text, start_char):
                         continue
 
-                # Label-based names are accepted only when the value itself
-                # still looks like a person, not a placeholder or organization.
-                if entity == "PROVIDER":
-                    if not self.validate_provider_value(value):
-                        continue
+                if entity in {"PATIENT", "PERSON", "DOCTOR", "PROVIDER"}:
+                    CLINICAL_SUFFIXES = [
+                        " Office Visit", " Specialist Consult", " Consult", " Consultation",
+                        " Follow Up", " Follow-Up", " Evaluation", " Exam", " Examination",
+                        " Surgery", " Procedure", " Therapy", " Clinic", " Hospital",
+                        " Center", " Service", " Department", " Standard",
+                    ]
+                    for suffix in CLINICAL_SUFFIXES:
+                        if value.lower().endswith(suffix.lower()):
+                            strip_len = len(suffix)
+                            value = value[:-strip_len].strip()
+                            end_char = start_char + len(value)
+                            break
 
-                if entity in {"PATIENT", "PERSON", "DOCTOR"}:
                     if not self.validate_labeled_person_value(value):
                         continue
 

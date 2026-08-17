@@ -257,3 +257,96 @@ def test_locked_high_confidence_entities_never_duplicated():
     assert len(accepted) == 0
     assert len(state.resolved_entities) == 1
     assert state.resolved_entities[0].detector == "regex"
+
+
+def test_spanish_disclaimers_rejected():
+    """
+    11. Spanish disclaimer tokens ('Español', 'Para obtener', 'al 1-800-555-1234') are rejected.
+    """
+    text = "Language Access Services: Spanish (Español): Para obtener ayuda en Español, llame al 1-800-555-1234."
+    qwen = Qwen3BDetector()
+    chunks = SemanticChunker().chunk_document(text)
+
+    cands = [
+        DetectionResult(
+            entity_type="LOCATION",
+            entity_value="Español",
+            confidence_score=0.75,
+            start_char=text.index("Español"),
+            end_char=text.index("Español") + 7,
+            page_number=1,
+            detector="presidio",
+        ),
+        DetectionResult(
+            entity_type="PERSON",
+            entity_value="Para obtener",
+            confidence_score=0.75,
+            start_char=text.index("Para obtener"),
+            end_char=text.index("Para obtener") + 12,
+            page_number=1,
+            detector="presidio",
+        ),
+        DetectionResult(
+            entity_type="PERSON",
+            entity_value="al 1-800-555-1234",
+            confidence_score=0.75,
+            start_char=text.index("al 1-800-555-1234"),
+            end_char=text.index("al 1-800-555-1234") + 17,
+            page_number=1,
+            detector="presidio",
+        ),
+    ]
+
+    validated = qwen.validate_candidates(cands, chunks, document_type="Summary of Benefits and Coverage (SBC)")
+    assert len(validated) == 0
+
+
+def test_doctor_visit_suffix_cleaning():
+    """
+    12. Doctor name trailing visit/procedure suffixes are cleaned.
+    """
+    text = "Attending Physician: Dr. Robert Chen Office Visit\nConsultant: Dr. Sarah Johnson Specialist Consult"
+    regex = RegexDetector()
+    results = regex.detect(text)
+
+    doc_names = [e.entity_value for e in results if e.entity_type == "DOCTOR"]
+    assert "Dr. Robert Chen" in doc_names
+    assert "Dr. Sarah Johnson" in doc_names
+    assert "Dr. Robert Chen Office Visit" not in doc_names
+
+
+def test_confirmed_entities_attributed_to_qwen():
+    """
+    13. Validated entities are attributed to Qwen with upgraded confidence.
+    """
+    text = "Coverage members: Jane R. Smith, Robert Smith, Emma Smith, Noah Smith."
+    qwen = Qwen3BDetector()
+    chunks = SemanticChunker().chunk_document(text)
+
+    cands = [
+        DetectionResult(
+            entity_type="PERSON",
+            entity_value="Jane R. Smith",
+            confidence_score=0.75,
+            start_char=text.index("Jane R. Smith"),
+            end_char=text.index("Jane R. Smith") + len("Jane R. Smith"),
+            page_number=1,
+            detector="presidio",
+        ),
+        DetectionResult(
+            entity_type="PERSON",
+            entity_value="Robert Smith",
+            confidence_score=0.75,
+            start_char=text.index("Robert Smith"),
+            end_char=text.index("Robert Smith") + len("Robert Smith"),
+            page_number=1,
+            detector="presidio",
+        ),
+    ]
+
+    validated = qwen.validate_candidates(cands, chunks, document_type="Insurance Policy / Benefit Summary")
+    assert len(validated) == 2
+    for item in validated:
+        assert item.detector == "Qwen"
+        assert item.confidence_score >= 0.85
+

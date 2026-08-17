@@ -67,6 +67,13 @@ class ConfidenceCalculator:
                 # entity as absolutely certain.
                 final_score = min(score, 0.95)
 
+            elif "qwen" in detector or detection.metadata.get("qwen_validation") in {"CONFIRM", "RECLASSIFY"}:
+
+                # Qwen contextual validation / LLM discovery
+                final_score = max(score, 0.88)
+                detection.detector = "Qwen"
+                detection.entity_owner = "qwen3b"
+
             else:
 
                 final_score = score
