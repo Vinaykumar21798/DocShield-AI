@@ -115,7 +115,7 @@ class RegexDetector(BaseDetector):
             rf"|(?im:\bPatient Information[ \t]*:[ \t]*(?:\r?\n)[ \t]*[•*\-]?[ \t]*Name[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b)",
 
         "US_PHONE_NUMBER":
-            rf"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{{3}}\){US_PHONE_SEPARATOR}\d{{3}}{US_PHONE_SEPARATOR}\d{{4}}|\b\d{{3}}[-. \t]\d{{3}}[-. \t]\d{{4}}\b)",
+            rf"(?<!\w)(?:\+?1[-. \t]?)?(?:\(\d{{3}}\){US_PHONE_SEPARATOR}\d{{3}}{US_PHONE_SEPARATOR}\d{{4}}|\b\d{{3}}[-. \t]\d{{3}}[-. \t]\d{{4}}\b)",
 
         "PHONE_NUMBER":
             r"(?im)\b(?:Phone|Mobile|Tel|Cell|Contact)[ \t]*(?:Number|No|#)?[ \t]*[:\-]?[ \t]*((?:\+?\d{1,3}[-. \t]*)?(?:\(\d{3}\)|\d{3})[-. \t]*\d{3}[-. \t]*\d{4})\b|\b(?:\+91[-\s]?)?[6-9]\d{9}\b",

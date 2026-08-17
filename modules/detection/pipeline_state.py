@@ -139,6 +139,7 @@ class PipelineState:
     original_text: str
 
     resolved_entities: list[DetectionResult] = field(default_factory=list)
+    pending_candidates: list[DetectionResult] = field(default_factory=list)
     executed_detectors: list[str] = field(default_factory=list)
     skipped_detectors: list[str] = field(default_factory=list)
     execution_time: dict[str, float] = field(default_factory=dict)
@@ -167,6 +168,16 @@ class PipelineState:
         if detector_name not in self.executed_detectors:
             self.executed_detectors.append(detector_name)
         self.detection_history.append({"step": detector_name, "count": len(entities)})
+
+    def add_pending_candidates(self, candidates: list[DetectionResult]) -> None:
+        """Adds low-confidence candidate detections to the pending validation queue."""
+        for c in candidates:
+            if self.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80):
+                self.pending_candidates.append(c)
+
+    def clear_pending_candidates(self) -> None:
+        """Clears the pending candidate validation queue."""
+        self.pending_candidates.clear()
 
     def log_skipped(self, detector_name: str) -> None:
         """Logs a skipped detector."""

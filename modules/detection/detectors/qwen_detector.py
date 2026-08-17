@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import time
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
@@ -86,18 +86,24 @@ token is not.
 """
 
 
+class CandidateValidationItem(BaseModel):
+    id: int
+    decision: Literal["CONFIRM", "RECLASSIFY", "REJECT"]
+    corrected_type: Optional[str] = None
+    reason: str
+    confidence_score: float = Field(default=0.85, ge=0.0, le=1.0)
+
+
+class CandidateValidationResponse(BaseModel):
+    validations: List[CandidateValidationItem]
+
+
 class Qwen3BEntity(BaseModel):
     entity_type: str
     entity_value: str
     confidence_score: float
     start_char: int
     end_char: int
-    # Populated by the model only for structured input (JSON/CSV/table
-    # records), e.g. "patients[3].identifiers.mrn" or "row_12.ssn". Left None
-    # for free-text spans. Kept optional so unstructured-mode responses are
-    # unaffected. This is intentionally NOT added to DetectionResult itself --
-    # it is folded into DetectionResult.metadata so the result schema used
-    # across the rest of the pipeline stays unchanged.
     field_path: Optional[str] = None
 
 
@@ -496,3 +502,236 @@ Input Text:
         except Exception as exc:
             logger.exception("Qwen3:4b detection failed: %s", exc)
             return []
+
+    def validate_candidates(
+        self,
+        candidates: list[DetectionResult],
+        chunks: list[Any],
+        document_type: str | None = None,
+    ) -> list[DetectionResult]:
+        """
+        Validates low-confidence candidates (e.g. Presidio 0.75) against their enclosing
+        semantic chunks using Qwen3:4b (with heuristic fallback).
+
+        Decisions:
+        - CONFIRM: Genuine PII/PHI entity, type is correct -> kept with upgraded confidence.
+        - RECLASSIFY: Genuine entity, wrong type -> updated to corrected_type.
+        - REJECT: Contextual/business/technical noise (e.g. Mail Order, Preauth) -> dropped.
+        """
+        if not candidates:
+            return []
+
+        candidate_items = []
+        for idx, cand in enumerate(candidates):
+            enclosing_chunk = None
+            for ch in chunks:
+                if ch.start_char <= cand.start_char and cand.end_char <= ch.end_char:
+                    enclosing_chunk = ch
+                    break
+            if not enclosing_chunk and chunks:
+                enclosing_chunk = min(chunks, key=lambda ch: abs(ch.start_char - cand.start_char))
+
+            chunk_text = enclosing_chunk.text if enclosing_chunk else ""
+            candidate_items.append({
+                "id": idx + 1,
+                "candidate": cand,
+                "chunk": enclosing_chunk,
+                "chunk_text": chunk_text,
+            })
+
+        validated_results: list[DetectionResult] = []
+
+        bypass_llm = os.getenv("BYPASS_LLM", "false").strip().lower() in {"1", "true", "yes", "on"}
+        if self.client is not None and not bypass_llm:
+            try:
+                target_entities = TaxonomyService.get_target_entities(document_type)
+                must_have_str = ", ".join((target_entities.get("MUST_HAVE") or DEFAULT_MUST_HAVE)[:30])
+                nice_to_have_str = ", ".join((target_entities.get("NICE_TO_HAVE") or DEFAULT_NICE_TO_HAVE)[:30])
+
+                items_prompt_list = []
+                for item in candidate_items:
+                    cand = item["candidate"]
+                    items_prompt_list.append(
+                        f"ID {item['id']}: Value: \"{cand.entity_value}\" | Detected Type: {cand.entity_type} | "
+                        f"Detector: {cand.detector} (Confidence: {cand.confidence_score:.2f})\n"
+                        f"Enclosing Semantic Context:\n\"\"\"{item['chunk_text']}\"\"\""
+                    )
+                items_str = "\n\n".join(items_prompt_list)
+
+                prompt = f"""You are a specialized PII/PHI compliance validation model.
+Validate the following low-confidence candidate entities extracted from a {document_type or 'medical/business'} document against their enclosing semantic context and taxonomy.
+
+For each candidate ID, decide:
+- "CONFIRM": The candidate is a real sensitive PII/PHI entity and the detected entity_type is correct.
+- "RECLASSIFY": The candidate is a real sensitive entity, but the detected type is wrong. Provide the correct uppercase entity_type in "corrected_type" (e.g., PHARMACY, ORGANIZATION, DOCUMENT_CREATION_DATE).
+- "REJECT": The candidate is NOT sensitive personal data or is contextual/business/policy terminology/generic noise that must be dropped (e.g., benefit terms like 'Mail Order', 'Preauth', 'Minimum Value', clinical terms like 'Hearing' in 'hearing aids', form labels, table headers).
+
+Taxonomy MUST_HAVE: {must_have_str}
+Taxonomy NICE_TO_HAVE: {nice_to_have_str}
+
+Candidates:
+{items_str}
+
+Return EXACTLY JSON format:
+{{
+    "validations": [
+        {{
+            "id": 1,
+            "decision": "REJECT",
+            "corrected_type": null,
+            "reason": "Mail Order in benefit table refers to pharmacy delivery service, not a person",
+            "confidence_score": 0.95
+        }}
+    ]
+}}
+"""
+                response = self.client.chat(
+                    model=self.MODEL_NAME,
+                    messages=[{"role": "user", "content": prompt}],
+                    think=False,
+                    format="json",
+                    options={
+                        "temperature": 0.10,
+                        "top_p": 0.90,
+                        "num_predict": 512,
+                    },
+                    keep_alive=self.KEEP_ALIVE,
+                )
+                raw = response.message.content.strip() if hasattr(response, "message") else ""
+                if raw.startswith("```"):
+                    raw = raw.replace("```json", "").replace("```", "").strip()
+                parsed = CandidateValidationResponse.model_validate_json(raw)
+                val_by_id = {v.id: v for v in parsed.validations}
+
+                for item in candidate_items:
+                    cand = item["candidate"]
+                    val = val_by_id.get(item["id"])
+                    if not val:
+                        val = self._heuristic_validate_candidate(cand, item["chunk_text"], document_type)
+
+                    if val.decision == "CONFIRM":
+                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.85)
+                        cand.metadata["qwen_validation"] = "CONFIRM"
+                        cand.metadata["qwen_reason"] = val.reason
+                        validated_results.append(cand)
+                    elif val.decision == "RECLASSIFY":
+                        new_type = (val.corrected_type or cand.entity_type).upper()
+                        cand.entity_type = new_type
+                        cand.canonical_type = new_type
+                        cand.confidence_score = max(cand.confidence_score, val.confidence_score or 0.85)
+                        cand.metadata["qwen_validation"] = "RECLASSIFY"
+                        cand.metadata["qwen_reason"] = val.reason
+                        validated_results.append(cand)
+                    else:
+                        logger.info("Qwen validated REJECT for low-confidence candidate %r (%s): %s", cand.entity_value, cand.entity_type, val.reason)
+
+                return validated_results
+
+            except Exception as exc:
+                logger.warning("Qwen LLM validation call failed (%s); falling back to semantic heuristic validation", exc)
+
+        # Semantic Heuristic validation fallback
+        for item in candidate_items:
+            cand = item["candidate"]
+            val = self._heuristic_validate_candidate(cand, item["chunk_text"], document_type)
+            if val.decision == "CONFIRM":
+                cand.confidence_score = max(cand.confidence_score, val.confidence_score)
+                cand.metadata["qwen_validation"] = "CONFIRM"
+                cand.metadata["qwen_reason"] = val.reason
+                validated_results.append(cand)
+            elif val.decision == "RECLASSIFY":
+                new_type = (val.corrected_type or cand.entity_type).upper()
+                cand.entity_type = new_type
+                cand.canonical_type = new_type
+                cand.confidence_score = max(cand.confidence_score, val.confidence_score)
+                cand.metadata["qwen_validation"] = "RECLASSIFY"
+                cand.metadata["qwen_reason"] = val.reason
+                validated_results.append(cand)
+            else:
+                logger.info("Heuristic validation REJECT for candidate %r (%s): %s", cand.entity_value, cand.entity_type, val.reason)
+
+        return validated_results
+
+    def _heuristic_validate_candidate(
+        self,
+        candidate: DetectionResult,
+        chunk_text: str,
+        document_type: str | None = None,
+    ) -> CandidateValidationItem:
+        val_lower = candidate.entity_value.strip().lower()
+        chunk_lower = chunk_text.lower()
+
+        # 1. REJECT known benefit / policy / form / terminology noise
+        REJECT_TERMS = {
+            "mail order", "mail-order", "preauth", "pre-auth", "preauthorization",
+            "minimum value", "minimum value standard", "hearing", "hearing aids",
+            "in-network", "out-of-network", "tier 1", "tier 2", "tier 3",
+            "copay", "coinsurance", "deductible", "generic", "preferred brand",
+            "non-preferred", "specialty", "prior authorization", "step therapy",
+            "quantity limit", "emergency room", "urgent care", "routine exam",
+            "preventive", "wellness", "schedule of benefits", "explanation of benefits",
+            "plan provisions", "disclaimer", "notice", "patient information",
+            "appointment details", "medical history", "coverage", "benefit", "summary",
+            "coinsurance rate", "eligible expenses", "out of pocket", "out-of-pocket",
+        }
+
+        if val_lower in REJECT_TERMS:
+            return CandidateValidationItem(
+                id=1,
+                decision="REJECT",
+                reason=f"Term '{candidate.entity_value}' is insurance/benefit terminology, not an individual PII/PHI entity.",
+                confidence_score=0.95,
+            )
+
+        # If 'hearing' appears in 'hearing aids' or benefit schedule context
+        if "hearing" in val_lower and ("hearing aids" in chunk_lower or "hearing aid" in chunk_lower or "benefit" in chunk_lower):
+            return CandidateValidationItem(
+                id=1,
+                decision="REJECT",
+                reason="'Hearing' in hearing aids context is a service category, not a location or person.",
+                confidence_score=0.95,
+            )
+
+        # 2. RECLASSIFY pharmacy / facility / organization names misclassified as PERSON
+        if "pharmacy" in chunk_lower or "rx" in chunk_lower or "dispense" in chunk_lower or "pharmacy" in val_lower:
+            if candidate.entity_type == "PERSON" and any(term in val_lower for term in ["westfield", "walgreens", "cvs", "rite aid", "walmart", "kroger", "pharmacy", "apothecary"]):
+                return CandidateValidationItem(
+                    id=1,
+                    decision="RECLASSIFY",
+                    corrected_type="ORGANIZATION",
+                    reason=f"'{candidate.entity_value}' in pharmacy context is a pharmacy/organization name, not an individual person.",
+                    confidence_score=0.90,
+                )
+
+        # 3. Proper Person validation: real capitalized full names or labeled patient names
+        if candidate.entity_type == "PERSON":
+            words = candidate.entity_value.strip().split()
+            if len(words) == 1 and val_lower in {"patient", "doctor", "physician", "provider", "nurse", "member", "subscriber", "admin", "preauth", "hearing", "vision", "dental"}:
+                return CandidateValidationItem(
+                    id=1,
+                    decision="REJECT",
+                    reason="Single generic role or benefit token is not a specific person.",
+                    confidence_score=0.95,
+                )
+            if len(words) >= 2 and all(w[0].isupper() for w in words if w.isalpha()):
+                return CandidateValidationItem(
+                    id=1,
+                    decision="CONFIRM",
+                    reason=f"'{candidate.entity_value}' is a multi-token capitalized person name in context.",
+                    confidence_score=0.88,
+                )
+
+        if candidate.confidence_score >= 0.80:
+            return CandidateValidationItem(
+                id=1,
+                decision="CONFIRM",
+                reason="High confidence candidate confirmed.",
+                confidence_score=candidate.confidence_score,
+            )
+
+        return CandidateValidationItem(
+            id=1,
+            decision="CONFIRM",
+            reason="Plural semantic validation confirmed candidate.",
+            confidence_score=0.80,
+        )

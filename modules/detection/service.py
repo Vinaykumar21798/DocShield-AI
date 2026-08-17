@@ -367,33 +367,54 @@ class DetectionService:
                 len(state.original_text),
                 detector.name,
             )
-            entities = self._filter_new_entities(
-                raw_entities,
-                state,
-                detector.name,
-                mask_confidence_threshold=self.config.high_confidence_threshold,
-                allow_claimed_spans=allow_claimed_spans,
-            )
+            high_conf_threshold = self.config.high_confidence_threshold
+            accepted_high: list[DetectionResult] = []
+            pending_low: list[DetectionResult] = []
+
+            for entity in raw_entities:
+                if DetectionService._matches_previous_entity(
+                    entity,
+                    state,
+                    high_conf_threshold,
+                ):
+                    continue
+
+                if not allow_claimed_spans and not state.is_span_unmasked(entity.start_char, entity.end_char, min_confidence=0.80):
+                    logger.info(
+                        "Suppressing %s from %s because span %d-%d is already locked by high-confidence entity",
+                        entity.entity_type,
+                        detector.name,
+                        entity.start_char,
+                        entity.end_char,
+                    )
+                    continue
+
+                if entity.confidence_score >= high_conf_threshold or detector.name.lower() == "regex":
+                    accepted_high.append(entity)
+                else:
+                    pending_low.append(entity)
+
             state.add_entities(
-                entities,
+                accepted_high,
                 detector.name,
-                mask_confidence_threshold=self.config.high_confidence_threshold,
+                mask_confidence_threshold=high_conf_threshold,
             )
 
-            if len(entities) != len(raw_entities):
+            if pending_low:
+                state.add_pending_candidates(pending_low)
                 logger.info(
-                    "%s produced %d entities; accepted %d on unmasked spans",
+                    "%s queued %d low-confidence candidate(s) for Qwen contextual validation",
                     detector.name,
-                    len(raw_entities),
-                    len(entities),
+                    len(pending_low),
                 )
 
             logger.info(
-                "%s detected %d accepted entities",
+                "%s detected %d high-confidence entities, %d queued for validation",
                 detector.name,
-                len(entities),
+                len(accepted_high),
+                len(pending_low),
             )
-            return entities
+            return accepted_high
 
         except Exception:
             duration = time.perf_counter() - start_time
@@ -855,7 +876,7 @@ class DetectionService:
                     state,
                     page_number,
                     custom_text=state.original_text,
-                    allow_claimed_spans=True,
+                    allow_claimed_spans=False,
                 )
             self._calibrate_confidence(state.resolved_entities, config)
             remaining = state.remaining_candidate_summary(
@@ -878,6 +899,21 @@ class DetectionService:
                     remaining["count"],
                 )
 
+        # If any pending candidates remain after loop, validate them with Qwen
+        if state.pending_candidates:
+            all_chunks = self.chunker.chunk_document(state.original_text)
+            validated = self.qwen3b.validate_candidates(
+                state.pending_candidates,
+                all_chunks,
+                document_type=document_type,
+            )
+            state.add_entities(
+                validated,
+                detector_name="qwen_validation",
+                mask_confidence_threshold=config.high_confidence_threshold,
+            )
+            state.clear_pending_candidates()
+
         return domain, route
 
     def _run_qwen_detector(
@@ -888,6 +924,22 @@ class DetectionService:
         remaining_candidates: dict,
         config: DynamicDetectionConfig,
     ) -> list[DetectionResult]:
+        # 1. Contextual Validation Phase for low-confidence candidates
+        if state.pending_candidates:
+            all_chunks = self.chunker.chunk_document(state.original_text)
+            validated = detector.validate_candidates(
+                state.pending_candidates,
+                all_chunks,
+                document_type=getattr(self, "_current_document_type", None),
+            )
+            state.add_entities(
+                validated,
+                detector_name="qwen_validation",
+                mask_confidence_threshold=config.high_confidence_threshold,
+            )
+            state.clear_pending_candidates()
+
+        # 2. Residual Entity Discovery Phase
         contexts = self._qwen_contexts(
             state,
             remaining_candidates,
@@ -895,13 +947,13 @@ class DetectionService:
         )
         if not contexts:
             logger.info(
-                "Skipping Qwen3:4b because no unresolved candidate or low-confidence context remains"
+                "Skipping Qwen3:4b residual discovery because no unresolved candidate or low-confidence context remains"
             )
             state.add_entities([], detector.name)
             return []
 
         logger.info(
-            "Running Qwen3:4b on %d bounded context(s), max_contexts=%d window=%d",
+            "Running Qwen3:4b residual discovery on %d bounded context(s), max_contexts=%d window=%d",
             len(contexts),
             self.QWEN_MAX_CONTEXTS,
             self.QWEN_CONTEXT_WINDOW,
