@@ -79,6 +79,47 @@ class EntityValidator:
         "comprehensive",
         "metabolic",
         "panel",
+        "disclaimer & notice",
+        "disclaimer",
+        "equipment & technical metadata",
+        "technical metadata",
+        "attending physician",
+        "primary nurse",
+        "discharge summary",
+        "patient information",
+        "admission & discharge",
+        "clinical course & diagnosis",
+        "procedures performed",
+        "discharge medications",
+        "laboratory & vital signs at discharge",
+        "insurance & billing",
+        "md",
+        "rn",
+        "sn",
+        "npi",
+        "blood pressure",
+        "heart rate",
+        "pulse",
+        "spo2",
+        "vital sign",
+        "vital signs",
+        "blood glucose",
+        "glucose",
+        "creatinine",
+        "fasting blood glucose",
+        "serum creatinine",
+        "peak troponin",
+        "peak troponin i",
+        "troponin",
+        "ecg",
+        "ekg",
+        "diagnosis",
+        "diagnoses",
+        "primary diagnosis",
+        "secondary diagnoses",
+        "clinical course",
+        "procedures",
+        "medications",
     }
     CLINICAL_VALUE_TYPES = {
         "abdominal pain": "SYMPTOM",
@@ -162,9 +203,11 @@ class EntityValidator:
     @classmethod
     def validate_candidates(
         cls,
-        candidates: list[DetectionResult],
+        candidates: list[DetectionResult] | None,
         source_text: str,
     ) -> list[DetectionResult]:
+        if not candidates:
+            return []
         validated: list[DetectionResult] = []
         for candidate in candidates:
             result = cls.validate_candidate(candidate, source_text)
@@ -339,11 +382,22 @@ class EntityValidator:
             "HOSPITAL",
             "MEDICAL_FACILITY",
             "HEALTHCARE_ORGANIZATION",
+            "VITAL_SIGN",
+            "LAB",
+            "PROCEDURE",
+            "SYMPTOM",
+            "CLINICAL_MEASUREMENT",
+            "DIAGNOSIS",
+            "DISEASE",
+            "MEDICATION",
         }
         if entity_type not in semantic_types:
             return False
 
         if semantic_key in cls.BAD_GENERIC_VALUES:
+            return True
+
+        if re.search(r"\b(?:machine|serial|serial\s+number|model\s+number|catheter|asset\s+tag|lot\s+number|equipment)\b", semantic_key):
             return True
 
         normalized = cls._normalized_text(value)

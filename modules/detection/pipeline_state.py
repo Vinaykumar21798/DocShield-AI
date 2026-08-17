@@ -2,7 +2,6 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from modules.detection.mask_manager import MaskManager
 from modules.detection.models.detection_result import DetectionResult
 
 CANDIDATE_LABEL_WORDS = {
@@ -134,7 +133,7 @@ class PipelineState:
     Responsibilities:
     - Store the original document text.
     - Track all detected entities.
-    - Manage masked regions through MaskManager.
+    - Track unmasked spans directly via entity intervals.
     """
 
     original_text: str
@@ -145,9 +144,6 @@ class PipelineState:
     execution_time: dict[str, float] = field(default_factory=dict)
     detection_history: list[dict] = field(default_factory=list)
     confidence_summary: dict[str, int] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        self.mask_manager = MaskManager(self.original_text)
 
     def add_entities(
         self,
@@ -168,15 +164,6 @@ class PipelineState:
 
         self.resolved_entities.extend(entities)
 
-        if mask_confidence_threshold is not None:
-            maskable = [
-                e for e in entities
-                if e.confidence_score >= mask_confidence_threshold
-            ]
-            self.mask_manager.add_entities(maskable)
-        else:
-            self.mask_manager.add_entities(entities)
-
         if detector_name not in self.executed_detectors:
             self.executed_detectors.append(detector_name)
         self.detection_history.append({"step": detector_name, "count": len(entities)})
@@ -194,15 +181,21 @@ class PipelineState:
         self,
         start: int,
         end: int,
+        min_confidence: float = 0.80,
     ) -> bool:
         """
         Returns True when a detector result belongs entirely to text that has
-        not already been claimed by a previous detector.
+        not already been claimed by an existing high-confidence entity.
         """
-        if start < 0 or end > len(self.mask_manager.mask) or start >= end:
+        if start < 0 or end > len(self.original_text) or start >= end:
             return False
 
-        return not any(self.mask_manager.mask[start:end])
+        for entity in self.resolved_entities:
+            if entity.confidence_score >= min_confidence:
+                if max(start, entity.start_char) < min(end, entity.end_char):
+                    return False
+
+        return True
 
     def remaining_candidate_summary(
         self,
@@ -576,15 +569,13 @@ class PipelineState:
     @property
     def current_text(self) -> str:
         """
-        Returns the remaining (masked) text for the next detector.
+        Returns the original document text for detector processing.
         """
-
-        return self.mask_manager.remaining_text()
+        return self.original_text
 
     @property
     def has_remaining_text(self) -> bool:
         """
         Returns True if unresolved text still exists.
         """
-
-        return self.mask_manager.has_remaining_text()
+        return bool(self.original_text.strip())

@@ -105,7 +105,7 @@ class RegexDetector(BaseDetector):
             r"\b\d{6}\b",
 
         "SSN":
-            r"\b\d{3}-\d{2}-\d{4}\b",
+            r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b|(?im)\b(?:SSN|Social Security Number|Social Security #|Social Security)[ \t]*[:\-]?[ \t]*(\d{9})\b",
 
         "PERSON":
             rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?({LABELED_NAME_PATTERN})[ \t]*$)"
@@ -115,10 +115,13 @@ class RegexDetector(BaseDetector):
             rf"|(?im:\bPatient Information[ \t]*:[ \t]*(?:\r?\n)[ \t]*[•*\-]?[ \t]*Name[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b)",
 
         "US_PHONE_NUMBER":
-            rf"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{{3}}\){US_PHONE_SEPARATOR}\d{{3}}{US_PHONE_SEPARATOR}\d{{4}}|\d{{3}}{US_PHONE_SEPARATOR}\d{{3}}{US_PHONE_SEPARATOR}\d{{4}})\b",
+            rf"(?<!\w)(?:\+1[-. \t]?)?(?:\(\d{{3}}\){US_PHONE_SEPARATOR}\d{{3}}{US_PHONE_SEPARATOR}\d{{4}}|\b\d{{3}}[-. \t]\d{{3}}[-. \t]\d{{4}}\b)",
+
+        "PHONE_NUMBER":
+            r"(?im)\b(?:Phone|Mobile|Tel|Cell|Contact)[ \t]*(?:Number|No|#)?[ \t]*[:\-]?[ \t]*((?:\+?\d{1,3}[-. \t]*)?(?:\(\d{3}\)|\d{3})[-. \t]*\d{3}[-. \t]*\d{4})\b|\b(?:\+91[-\s]?)?[6-9]\d{9}\b",
 
         "DATE_OF_BIRTH":
-            rf"(?i:\b(?:DOB|Date of Birth)[ \t]*[:\-]?[ \t]*(?:\([ \t]*)?({DATE_VALUE_PATTERN})\b)",
+            rf"(?i:\b(?:DOB|Date of Birth|Birth Date)[ \t]*[:\-]?[ \t]*(?:\([ \t]*)?({DATE_VALUE_PATTERN})\b)",
 
         "START_DATE":
             rf"(?im)\b(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
@@ -130,16 +133,6 @@ class RegexDetector(BaseDetector):
             rf"(?im)\b(?:Doctor|Physician|Consultant)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$"
             rf"|\bDr\.?[ \t]+{LABELED_NAME_PATTERN}\b",
 
-        "HOSPITAL":
-            r"(?im:\b(?:Hospital|Clinic|Medical Facility)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,6})[ \t]*$)"
-            r"|\b[A-Z][A-Za-z0-9&.'-]*(?:\s+[A-Z][A-Za-z0-9&.'-]*){0,5}\s+(?:Family Medicine|Hospital|Hospitals|Clinic|Clinics|Medical Center|Healthcare System|Health System|Healthcare|Institute|Sanatorium|Infirmary)\b",
-
-        "INSURANCE_PROVIDER":
-            r"(?im:^\s*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){0,8}[ \t]+(?:Insurance|Assurance)[ \t]+(?:Company|Co\.?|Corporation|Corp\.?|Plan|Plans|Group))[ \t]*$)",
-
-        "ORGANIZATION":
-            rf"(?im:\b(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}})[ \t]*$)"
-            rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z][A-Za-z0-9&.'-]+(?:[ \t]+[A-Z][A-Za-z0-9&.'-]+){{0,8}}\s+(?:Pvt[ \t]+Ltd|Ltd|Inc|Corp|Corporation|LLC|Company|Group|Association))\b)",
         "PROVIDER":
             rf"\bProvider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
 
@@ -179,15 +172,6 @@ class RegexDetector(BaseDetector):
         "SALARY":
             r"(?im)\bSalary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
 
-        "DIAGNOSIS":
-            r"(?im)\bDiagnosis[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
-
-        "MEDICATION":
-            r"(?im)\bMedication[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
-
-        "PROCEDURE":
-            r"(?im)\bProcedure[ \t]*[:\-][ \t]*(.+?)[ \t]*$",
-
         "CPT_CODE":
             r"\b(?:CPT[-: \t]?)?(?:\d{5}|\d{4}[A-Z]|[A-Z]\d{4})\b",
 
@@ -195,7 +179,7 @@ class RegexDetector(BaseDetector):
             r"\b[A-TV-Z][0-9]{2}(?:\.[A-Z0-9]{1,4})?\b",
 
         "NPI_NUMBER":
-            r"\b\d{10}\b",
+            r"(?im)\b(?:NPI|Provider NPI|National Provider Identifier|NPI Number)[ \t]*[:\-]?[ \t]*([12]\d{9})\b",
 
         "MEMBER_ID":
             r"(?im)\b(?:Member|Mbr|Policy|Subscriber)[ \t]*(?:ID|Id|No|#)[ \t]*[:\-]?[ \t]*((?=[A-Za-z0-9-]{4,24}\b)(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{4,24})\b",
@@ -511,18 +495,6 @@ class RegexDetector(BaseDetector):
                     if not self.validate_labeled_person_value(value):
                         continue
 
-                if entity == "HOSPITAL":
-                    if not self.validate_facility_value(value):
-                        continue
-
-                if entity == "ORGANIZATION":
-                    if not self.validate_organization_value(value):
-                        continue
-
-                if entity in {"DIAGNOSIS", "MEDICATION", "PROCEDURE"}:
-                    if not self.validate_labeled_text_value(value):
-                        continue
-
                 if entity in {"CLAIM_NUMBER", "MEMBER_ID", "GROUP_NUMBER", "EOB_NUMBER"}:
                     if not self.validate(entity, value):
                         continue
@@ -703,7 +675,8 @@ class RegexDetector(BaseDetector):
             return len(re.sub(r"\D", "", value)[-10:]) == 10
 
         if entity == "SSN":
-            return bool(re.fullmatch(r"\d{3}-\d{2}-\d{4}", value))
+            clean = re.sub(r"\D", "", value)
+            return len(clean) == 9 and not clean.startswith("000") and clean != "123456789"
 
         if entity == "US_PHONE_NUMBER":
             digits = re.sub(r"\D", "", value)

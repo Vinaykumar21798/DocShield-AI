@@ -110,11 +110,11 @@ class DetectorSelector:
 
     DOMAIN_ROUTES = {
         "financial": ("regex", "presidio", "gliner", "qwen3b"),
-        "healthcare": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
+        "healthcare": ("regex", "presidio", "gliner", "medspacy", "qwen3b"),
         "corporate": ("regex", "presidio", "gliner", "qwen3b"),
         "legal": ("regex", "presidio", "gliner", "qwen3b"),
         "generic": ("regex", "presidio", "gliner", "qwen3b"),
-        "mixed": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
+        "mixed": ("regex", "presidio", "gliner", "medspacy", "qwen3b"),
     }
 
     DOCUMENT_TYPE_DOMAINS = {

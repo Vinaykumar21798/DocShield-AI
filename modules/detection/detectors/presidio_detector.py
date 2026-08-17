@@ -77,20 +77,6 @@ CREDENTIAL_SUFFIX_RE = re.compile(
     rf"\s+{CREDENTIAL_SUFFIX_PATTERN}\.?$",
     re.IGNORECASE,
 )
-MEDICATION_TERMS = {
-    "metformin",
-    "paracetamol",
-    "ibuprofen",
-    "aspirin",
-    "lisinopril",
-    "atorvastatin",
-    "lipitor",
-    "zocor",
-    "synthroid",
-    "crestor",
-    "dicyclomine",
-    "probiotic",
-}
 
 PERSON_CONTEXT_PATTERNS = (
     re.compile(
@@ -167,8 +153,20 @@ class PresidioDetector(BaseDetector):
                 from presidio_analyzer import AnalyzerEngine, RecognizerRegistry, PatternRecognizer, Pattern
                 from presidio_analyzer.nlp_engine import NlpEngineProvider
 
+                nlp_engine = NlpEngineProvider(
+                    nlp_configuration={
+                        "nlp_engine_name": "spacy",
+                        "models": [
+                            {
+                                "lang_code": "en",
+                                "model_name": model_name,
+                            }
+                        ],
+                    }
+                ).create_engine()
+
                 registry = RecognizerRegistry()
-                registry.load_predefined_recognizers()
+                registry.load_predefined_recognizers(nlp_engine=nlp_engine)
 
                 # Add custom NpiRecognizer
                 npi_pat = Pattern(name="npi_pattern", regex=r"\b\d{10}\b", score=0.9)
@@ -190,18 +188,6 @@ class PresidioDetector(BaseDetector):
                 for recognizer in list(registry.recognizers):
                     if recognizer.name in remove:
                         registry.remove_recognizer(recognizer.name)
-
-                nlp_engine = NlpEngineProvider(
-                    nlp_configuration={
-                        "nlp_engine_name": "spacy",
-                        "models": [
-                            {
-                                "lang_code": "en",
-                                "model_name": model_name,
-                            }
-                        ],
-                    }
-                ).create_engine()
 
                 self._analyzer = AnalyzerEngine(
                     registry=registry,
@@ -316,16 +302,10 @@ class PresidioDetector(BaseDetector):
                 if not self.is_valid_npi(entity_value):
                     continue
 
-            # Reclassify Hyperlipidemia and other diseases from PERSON/ORG/LOCATION to DISEASE
+            # If spaCy falsely tags a disease/medication term as PERSON/ORG/LOCATION, skip it so MedSpaCy handles it
             DISEASE_KEYWORDS = {"hyperlipidemia", "hypercholesterolemia", "diabetes", "hypertension", "celiac", "thyroid", "anemia", "heart disease", "gerd", "reflux", "ibs"}
             if current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"} and any(disease in value_lower for disease in DISEASE_KEYWORDS):
-                current_entity_type = "DISEASE"
-
-            if (
-                current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}
-                and value_lower in MEDICATION_TERMS
-            ):
-                current_entity_type = "MEDICATION"
+                continue
 
             # PERSON entities should never span multiple lines or include credentials.
             if current_entity_type == "PERSON":
@@ -345,9 +325,30 @@ class PresidioDetector(BaseDetector):
                 "certified mail", "ciso", "complete", "fsa", "health", "hipaa",
                 "implemented", "medical", "medical record", "medication", "needed",
                 "protected health information", "secured",
-                "the health insurance portability"
+                "the health insurance portability",
+                # Clinical / Laboratory / Diagnostic terms
+                "fasting blood glucose", "blood glucose", "glucose", "serum creatinine", "creatinine",
+                "troponin", "troponin i", "peak troponin", "blood pressure", "heart rate", "spo2",
+                "lvef", "left ventricular ejection fraction", "transthoracic echocardiogram", "echocardiogram",
+                "pci", "percutaneous coronary intervention", "acute non-st elevation myocardial infarction",
+                "nstemi", "myocardial infarction", "hypertension", "hyperlipidemia", "diabetes mellitus",
+                "type 2 diabetes", "vital signs", "lab results", "laboratory", "brilinta", "aspirin", "atorvastatin", "metformin",
+                # Section headers and metadata labels
+                "disclaimer & notice", "disclaimer", "equipment & technical metadata", "technical metadata",
+                "attending physician", "primary nurse", "discharge summary", "patient information",
+                "admission & discharge", "clinical course & diagnosis", "procedures performed",
+                "discharge medications", "laboratory & vital signs at discharge", "insurance & billing",
+                "direct deposit bank", "direct deposit", "bank account", "billing account", "discharge",
+                # Short abbreviations and credentials
+                "md", "rn", "do", "pa", "np", "sn", "npi", "acc", "grp", "mem", "ecg", "lot", "asset",
             }
-            if value_lower in BLACKLIST:
+            if value_lower in BLACKLIST or any(term == value_lower for term in BLACKLIST):
+                continue
+
+            # Reject asset/serial patterns and hardware equipment from PERSON/ORG/LOCATION
+            if re.match(r'^(?:ASSET|SN|LOT|ACC|MEM|GRP|BCBS|NPI)[\-_]', entity_value, re.IGNORECASE):
+                continue
+            if any(term in value_lower for term in ["machine", "serial", "catheter", "equipment", "lot number", "asset tag"]):
                 continue
 
             # Filter out loose/unlikely DATE_TIME matches (e.g. fractions like 5/10) with very low confidence
@@ -370,7 +371,7 @@ class PresidioDetector(BaseDetector):
             # Prevent false positives (Task 7)
             if (
                 current_entity_type == "PERSON"
-                and any(proc in value_lower for proc in ["chest x-ray", "ecg", "coronary angiography", "x-ray", "mri", "ct scan", "ct", "biopsy", "findings"])
+                and any(proc in value_lower for proc in ["chest x-ray", "ecg", "coronary angiography", "x-ray", "mri", "ct scan", "ct", "biopsy", "findings", "glucose", "creatinine", "troponin", "blood pressure", "heart rate"])
             ):
                 continue
 
@@ -382,7 +383,7 @@ class PresidioDetector(BaseDetector):
 
             # Ignore field labels
             if (
-                current_entity_type == "PERSON"
+                current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}
                 and value_lower in FIELD_LABELS
             ):
                 continue
@@ -414,11 +415,16 @@ class PresidioDetector(BaseDetector):
 
             seen.add(key)
 
+            # Calibrate statistical score for raw spacy PERSON/ORG to 0.72 so it doesn't block clinical detectors
+            calibrated_score = float(result.score)
+            if calibrated_score == 0.85 and current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}:
+                calibrated_score = 0.75
+
             detections.append(
                 DetectionResult(
                     entity_type=current_entity_type,
                     entity_value=entity_value,
-                    confidence_score=float(result.score),
+                    confidence_score=calibrated_score,
                     start_char=start_char,
                     end_char=end_char,
                     page_number=page_number,
@@ -439,7 +445,6 @@ class PresidioDetector(BaseDetector):
         self._add_supplemental_person_detections(text, page_number, detections, seen)
 
         # Supplementary Organization regex (case sensitive to match proper noun patterns)
-        import re
         org_pattern = r'\b[A-Z][a-zA-Z0-9_]+(?:\s+[A-Z][a-zA-Z0-9_]+)*\s+(?:Corporation|Corp\b|Inc\b|Inc\.|Llc|Ltd|Company|Association|Group|Solutions)\b'
         for match in re.finditer(org_pattern, text):
             val = match.group()
