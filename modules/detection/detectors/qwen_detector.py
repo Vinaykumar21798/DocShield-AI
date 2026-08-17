@@ -8,27 +8,13 @@ from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.models.detection_result import DetectionResult
+from modules.detection.taxonomy import TaxonomyService
 
 logger = logging.getLogger(__name__)
 
 
 class Qwen3BEntity(BaseModel):
-    entity_type: Literal[
-        "PERSON", "PATIENT", "DOCTOR", "PROVIDER", "NURSE",
-        "LOCATION", "ADDRESS", "DATE", "DATE_TIME", "DATE_OF_BIRTH",
-        "VISIT_DATE", "ORGANIZATION", "HOSPITAL", "MEDICAL_FACILITY",
-        "HEALTHCARE_ORGANIZATION", "EMAIL", "PHONE_NUMBER",
-        "US_PHONE_NUMBER", "SSN", "MRN", "MEDICAL_RECORD_NUMBER",
-        "INSURANCE_ID", "POLICY_NUMBER", "CLAIM_NUMBER", "MEMBER_ID",
-        "GROUP_NUMBER", "EOB_NUMBER", "NPI_NUMBER", "TAX_ID",
-        "ICD10_CODE", "CPT_CODE", "DISEASE", "DIAGNOSIS",
-        "MEDICATION", "DOSAGE", "PROCEDURE", "SYMPTOM", "LAB",
-        "LAB_RESULT", "VITAL_SIGN", "CLINICAL_FINDING",
-        "CLINICAL_MEASUREMENT", "BANK_ACCOUNT_NUMBER",
-        "CREDIT_CARD_NUMBER", "PAN_NUMBER", "AADHAAR_NUMBER",
-        "PASSPORT_NUMBER", "DRIVING_LICENSE", "IFSC_CODE", "UPI_ID",
-        "URL", "IP_ADDRESS", "ZIP_CODE", "OTHER_PHI",
-    ]
+    entity_type: str
     entity_value: str
     confidence_score: float
     start_char: int
@@ -143,64 +129,33 @@ class Qwen3BDetector(BaseDetector):
         context = getattr(self, "orchestration_context", {}) or {}
         known_entities = context.get("known_entities") or []
         known_entities_text = self._format_known_entities(known_entities)
+        document_type = context.get("document_type")
+
+        target_entities = context.get("target_entities") or TaxonomyService.get_target_entities(document_type)
+        must_have = target_entities.get("MUST_HAVE") or [
+            "PERSON", "PATIENT", "DOCTOR", "SSN", "MRN", "DIAGNOSIS", "DISEASE",
+            "MEDICATION", "EMAIL", "PHONE_NUMBER", "BANK_ACCOUNT_NUMBER",
+            "CREDIT_CARD_NUMBER", "PAN_NUMBER", "AADHAAR_NUMBER", "PASSPORT_NUMBER"
+        ]
+        nice_to_have = target_entities.get("NICE_TO_HAVE") or [
+            "PROCEDURE", "LAB", "LAB_RESULT", "VITAL_SIGN", "ALLERGY", "DATE",
+            "DATE_TIME", "LOCATION", "ADDRESS", "ORGANIZATION", "HOSPITAL",
+            "POLICY_NUMBER", "CLAIM_NUMBER", "NPI_NUMBER"
+        ]
+
+        must_have_str = "\n".join(f"- {e}" for e in must_have)
+        nice_to_have_str = "\n".join(f"- {e}" for e in nice_to_have)
 
         prompt = f"""You are a senior clinical and PII/PHI information extraction assistant.
-Extract unresolved PII and PHI entities from the input text below.
-Use ONLY the following entity categories:
-- PERSON
-- PATIENT
-- DOCTOR
-- PROVIDER
-- NURSE
-- LOCATION
-- ADDRESS
-- DATE
-- DATE_TIME
-- DATE_OF_BIRTH
-- VISIT_DATE
-- ORGANIZATION
-- HOSPITAL
-- MEDICAL_FACILITY
-- HEALTHCARE_ORGANIZATION
-- EMAIL
-- PHONE_NUMBER
-- US_PHONE_NUMBER
-- SSN
-- MRN
-- MEDICAL_RECORD_NUMBER
-- INSURANCE_ID
-- POLICY_NUMBER
-- CLAIM_NUMBER
-- MEMBER_ID
-- GROUP_NUMBER
-- EOB_NUMBER
-- NPI_NUMBER
-- TAX_ID
-- ICD10_CODE
-- CPT_CODE
-- DISEASE
-- DIAGNOSIS
-- MEDICATION
-- DOSAGE
-- PROCEDURE
-- SYMPTOM
-- LAB
-- LAB_RESULT
-- VITAL_SIGN
-- CLINICAL_FINDING
-- CLINICAL_MEASUREMENT
-- BANK_ACCOUNT_NUMBER
-- CREDIT_CARD_NUMBER
-- PAN_NUMBER
-- AADHAAR_NUMBER
-- PASSPORT_NUMBER
-- DRIVING_LICENSE
-- IFSC_CODE
-- UPI_ID
-- URL
-- IP_ADDRESS
-- ZIP_CODE
-- OTHER_PHI
+CRITICAL MANDATE:
+1. The spans listed under 'Known high-confidence spans' are ALREADY RESOLVED. Do NOT re-identify or return any entity overlapping those character ranges.
+2. Focus on discovering all OTHER MUST_HAVE and NICE_TO_HAVE entities in the surrounding text that were missed by earlier detectors.
+
+=== PRIORITY 1: MUST_HAVE ENTITIES (Highest Priority - Reliably Extract All) ===
+{must_have_str}
+
+=== PRIORITY 2: NICE_TO_HAVE ENTITIES (Secondary Priority - Extract When Present) ===
+{nice_to_have_str}
 
 Return EXACTLY this JSON schema:
 {{
@@ -216,14 +171,12 @@ Return EXACTLY this JSON schema:
 }}
 
 Strict ensure start_char and end_char indices represent the exact 0-indexed boundaries in the input text.
-Return at most 12 results. If no real entity values exist, return {{"results": []}}.
-Do not return labels, headings, or field names such as "Date of Service" unless the label itself is the sensitive value.
-DATE values must be real calendar dates. Never classify money, CPT/HCPCS codes, or ICD-10 codes as DATE.
-ICD10_CODE and CPT_CODE must follow their standard code shapes and appear in matching clinical context.
-Known high-confidence spans are already detected. Use them only as context. Do not return any entity whose character range overlaps a known span.
+Return at most 18 results. If no real entity values exist, return {{"results": []}}.
+Do not return generic labels, headings, or boilerplate noise (DROP categories).
+DATE values must be real calendar dates.
 Return ONLY valid JSON. No reasoning, no markdown wrappers, no explanation.
 
-Known high-confidence spans:
+Known high-confidence spans (DO NOT re-extract):
 {known_entities_text}
 
 Input Text:

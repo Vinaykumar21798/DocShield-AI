@@ -1,4 +1,5 @@
 from modules.detection.models.detection_result import DetectionResult
+from modules.detection.taxonomy import TaxonomyService
 
 
 class EntityMapper:
@@ -209,6 +210,7 @@ class EntityMapper:
     def normalize(
         cls,
         detections: list[DetectionResult],
+        document_type: str | None = None,
     ) -> list[DetectionResult]:
 
         for detection in detections:
@@ -216,6 +218,10 @@ class EntityMapper:
                 detection.entity_type.upper(),
                 detection.entity_type.upper(),
             )
+            # Attach policy priority (MUST_HAVE / NICE_TO_HAVE / DROP)
+            priority = TaxonomyService.get_priority(detection.entity_type, document_type)
+            detection.metadata["policy_priority"] = priority
+            detection.metadata["should_mask"] = TaxonomyService.should_mask(detection.entity_type, document_type)
 
         # Automatically assign privacy categories (PII/PHI) using Centralized PrivacyMapper
         PrivacyMapper.assign_categories(detections)

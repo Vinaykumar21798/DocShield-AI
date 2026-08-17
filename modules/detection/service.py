@@ -20,6 +20,8 @@ from modules.detection.entity_mapper import EntityMapper, PrivacyMapper
 from modules.detection.exceptions import DetectionError
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
+from modules.detection.semantic_chunker import SemanticChunker
+from modules.detection.taxonomy import TaxonomyService
 from modules.detection.validators.entity_validator import EntityValidator
 
 logger = logging.getLogger(__name__)
@@ -272,7 +274,9 @@ class DetectionService:
         self._qwen3b = None
 
         self.router = DetectorSelector()
+        self.chunker = SemanticChunker()
         self.config = DynamicDetectionConfig.from_env()
+        self._current_document_type = None
 
     @property
     def presidio(self):
@@ -347,7 +351,7 @@ class DetectionService:
             raw_entities = detector.detect(
                 run_text,
                 page_number,
-            )
+            ) or []
             duration = time.perf_counter() - start_time
             state.log_time(detector.name, duration)
             if context_offset:
@@ -528,6 +532,8 @@ class DetectionService:
                 "known_entities": known_entities or [],
                 "executed_detectors": list(state.executed_detectors),
                 "skipped_detectors": list(state.skipped_detectors),
+                "document_type": getattr(self, "_current_document_type", None),
+                "target_entities": TaxonomyService.get_target_entities(getattr(self, "_current_document_type", None)),
             },
         )
 
@@ -542,7 +548,11 @@ class DetectionService:
             entity.start = entity.start_char
             entity.end = entity.end_char
             entity.metadata["context_offset"] = context_offset
-        return entities
+    ENTITY_SPECIALIZATIONS = {
+        "PERSON": {"PATIENT", "DOCTOR", "PHYSICIAN", "NURSE", "PROVIDER", "HEALTHCARE_STAFF", "CARDHOLDER_NAME"},
+        "ORGANIZATION": {"HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION", "INSURANCE_PROVIDER"},
+        "LOCATION": {"ADDRESS", "FACILITY_ADDRESS", "CITY", "STATE"},
+    }
 
     @staticmethod
     def _matches_previous_entity(
@@ -554,7 +564,17 @@ class DetectionService:
         for previous in state.resolved_entities:
             if previous.page_number != entity.page_number:
                 continue
-            if previous.entity_type.upper() != entity_type:
+
+            prev_type = previous.entity_type.upper()
+            is_same_type = (prev_type == entity_type)
+            is_specialization = (
+                entity_type in DetectionService.ENTITY_SPECIALIZATIONS.get(prev_type, set())
+            )
+            is_reverse_specialization = (
+                prev_type in DetectionService.ENTITY_SPECIALIZATIONS.get(entity_type, set())
+            )
+
+            if not (is_same_type or is_specialization or is_reverse_specialization):
                 continue
             if not DetectionService._is_duplicate_span_or_value(previous, entity):
                 continue
@@ -563,6 +583,7 @@ class DetectionService:
                 previous,
                 entity,
                 mask_confidence_threshold,
+                is_specialization=is_specialization,
             )
             if should_replace:
                 previous_detector = previous.detector
@@ -572,12 +593,6 @@ class DetectionService:
                 previous.metadata["upgraded_from_confidence"] = previous_confidence
                 previous.metadata["upgraded_by_duplicate"] = True
                 entity.metadata["duplicate_upgraded_previous"] = True
-
-                if (
-                    mask_confidence_threshold is not None
-                    and previous.confidence_score >= mask_confidence_threshold
-                ):
-                    state.mask_manager.add_entities([previous])
             else:
                 entity.metadata["duplicate_upgraded_previous"] = False
 
@@ -608,13 +623,20 @@ class DetectionService:
         previous: DetectionResult,
         entity: DetectionResult,
         mask_confidence_threshold: float | None = None,
+        is_specialization: bool = False,
     ) -> bool:
+        # 1. Higher confidence replacement
         if entity.confidence_score > previous.confidence_score:
+            return True
+
+        # 2. Specialize a generic entity (e.g. PERSON -> PATIENT/DOCTOR) with solid confidence
+        if is_specialization and entity.confidence_score >= 0.70:
             return True
 
         if mask_confidence_threshold is None:
             return False
 
+        # 3. Upgrade low-confidence detections
         return (
             previous.confidence_score < mask_confidence_threshold
             and entity.confidence_score >= previous.confidence_score
@@ -647,6 +669,7 @@ class DetectionService:
         target: DetectionResult,
         source: DetectionResult,
     ) -> None:
+        target.entity_type = source.entity_type
         target.entity_value = source.entity_value.strip()
         target.privacy_category = source.privacy_category
         target.confidence_score = source.confidence_score
@@ -706,6 +729,10 @@ class DetectionService:
         if not text:
             return []
 
+        text = SemanticChunker.normalize_text(text)
+        if not text:
+            return []
+
         current_stage = "INITIALIZATION"
         config = DynamicDetectionConfig.from_env()
         self.config = config
@@ -733,6 +760,7 @@ class DetectionService:
                 entities,
                 config,
                 page_number,
+                document_type=document_type,
             )
 
             logger.info(
@@ -761,6 +789,7 @@ class DetectionService:
         config: DynamicDetectionConfig,
         document_type: str | None = None,
     ) -> tuple[str, tuple[str, ...]]:
+        self._current_document_type = document_type
         domain = self.router.classify_domain(
             state.original_text,
             document_type=document_type,
@@ -895,59 +924,39 @@ class DetectionService:
         remaining_candidates: dict,
         config: DynamicDetectionConfig,
     ) -> list[dict]:
-        candidate_contexts = self._qwen_original_contexts_for_candidates(
-            state,
-            remaining_candidates.get("candidates", []),
-            config,
-        )
+        all_chunks = self.chunker.chunk_document(state.original_text)
+        candidates = remaining_candidates.get("candidates", [])
 
-        low_confidence_candidates = []
-        for entity in state.resolved_entities:
-            if entity.confidence_score >= config.high_confidence_threshold:
-                continue
-            if not self._is_valid_entity(entity, len(state.original_text)):
-                continue
-            if not state.is_span_unmasked(entity.start_char, entity.end_char):
-                continue
-            low_confidence_candidates.append(
-                {
-                    "start": entity.start_char,
-                    "end": entity.end_char,
-                    "text": entity.entity_value[:80],
-                    "kind": "low_confidence_entity",
-                }
-            )
+        low_confidence_entities = [
+            entity for entity in state.resolved_entities
+            if entity.confidence_score < config.high_confidence_threshold
+            and self._is_valid_entity(entity, len(state.original_text))
+            and state.is_span_unmasked(entity.start_char, entity.end_char)
+        ]
 
-        low_confidence_candidates.sort(
-            key=lambda candidate: (
-                next(
-                    (
-                        entity.confidence_score
-                        for entity in state.resolved_entities
-                        if entity.start_char == candidate["start"]
-                        and entity.end_char == candidate["end"]
-                    ),
-                    1.0,
-                ),
-                candidate["start"],
-            )
-        )
-        low_confidence_contexts = self._qwen_original_contexts_for_candidates(
-            state,
-            low_confidence_candidates,
-            config,
+        relevant_chunks = self.chunker.select_relevant_chunks(
+            all_chunks,
+            candidates=candidates,
+            low_confidence_entities=low_confidence_entities,
+            resolved_entities=state.resolved_entities,
+            max_chunks=self.QWEN_MAX_CONTEXTS,
         )
 
         contexts: list[dict] = []
-        seen_ranges: set[tuple[int, int]] = set()
-        for context in [*candidate_contexts, *low_confidence_contexts]:
-            key = (context["start"], context["end"])
-            if key in seen_ranges:
-                continue
-            seen_ranges.add(key)
-            contexts.append(context)
-            if len(contexts) >= self.QWEN_MAX_CONTEXTS:
-                break
+        for chunk in relevant_chunks:
+            contexts.append(
+                {
+                    "start": chunk.start_char,
+                    "end": chunk.end_char,
+                    "text": chunk.text,
+                    "known_entities": self._known_entities_for_qwen_context(
+                        state,
+                        chunk.start_char,
+                        chunk.end_char,
+                        config,
+                    ),
+                }
+            )
 
         return contexts
 
@@ -1032,6 +1041,7 @@ class DetectionService:
         entities: list[DetectionResult],
         config: DynamicDetectionConfig,
         page_number: int,
+        document_type: str | None = None,
     ) -> list[DetectionResult]:
         results = [
             entity
@@ -1048,12 +1058,19 @@ class DetectionService:
             "finalize",
         )
 
-        results = EntityMapper.normalize(results)
+        results = EntityMapper.normalize(results, document_type=document_type)
         results = self._filter_valid_entities(
             results,
             len(state.original_text),
             "finalize",
         )
+
+        # Exclude DROP entities per enterprise taxonomy
+        results = [
+            entity for entity in results
+            if not TaxonomyService.is_drop(entity.entity_type, document_type)
+        ]
+
         results = self._calibrate_confidence(results, config)
         results = Deduplicator.deduplicate(results)
         results = self._resolve_overlapping_spans(results)
