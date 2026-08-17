@@ -1,0 +1,1361 @@
+{
+  "detector": "presidio",
+  "label": "Presidio",
+  "mode": "presidio+spacy",
+  "availability_error": null,
+  "input": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "input_length": 5789,
+  "page_number_passed": 1,
+  "elapsed_sec": 0.957,
+  "predictions": [
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "04/18/1982",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 132,
+      "end_char": 142,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "04/18/1982",
+      "confidence": 0.95,
+      "start": 132,
+      "end": 142,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "06/01/2024",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 634,
+      "end_char": 644,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "06/01/2024",
+      "confidence": 0.95,
+      "start": 634,
+      "end": 644,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "05/31/2025",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 662,
+      "end_char": 672,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "05/31/2025",
+      "confidence": 0.95,
+      "start": 662,
+      "end": 672,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "06/01/2024",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 5779,
+      "end_char": 5789,
+      "page_number": 6,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "06/01/2024",
+      "confidence": 0.95,
+      "start": 5779,
+      "end": 5789,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Jane R. Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 103,
+      "end_char": 116,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Jane R. Smith",
+      "confidence": 0.85,
+      "start": 103,
+      "end": 116,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Social Security",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 143,
+      "end_char": 158,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Social Security",
+      "confidence": 0.85,
+      "start": 143,
+      "end": 158,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Westfield",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 231,
+      "end_char": 240,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Westfield",
+      "confidence": 0.85,
+      "start": 231,
+      "end": 240,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Horizon Technologies Inc.",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 314,
+      "end_char": 339,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Horizon Technologies Inc.",
+      "confidence": 0.85,
+      "start": 314,
+      "end": 339,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "Last 4",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 420,
+      "end_char": 426,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Last 4",
+      "confidence": 0.85,
+      "start": 420,
+      "end": 426,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Robert Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 428,
+      "end_char": 440,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Robert Smith",
+      "confidence": 0.85,
+      "start": 428,
+      "end": 440,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Spouse\t09/22/1980",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 441,
+      "end_char": 458,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Spouse\t09/22/1980",
+      "confidence": 0.85,
+      "start": 441,
+      "end": 458,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Emma Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 471,
+      "end_char": 481,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Emma Smith",
+      "confidence": 0.85,
+      "start": 471,
+      "end": 481,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Noah Smith\tChild",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 511,
+      "end_char": 527,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Noah Smith\tChild",
+      "confidence": 0.85,
+      "start": 511,
+      "end": 527,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PPO",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 613,
+      "end_char": 616,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "PPO",
+      "confidence": 0.85,
+      "start": 613,
+      "end": 616,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Cancer",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1414,
+      "end_char": 1420,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Cancer",
+      "confidence": 0.85,
+      "start": 1414,
+      "end": 1420,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Primary",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1503,
+      "end_char": 1512,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Primary",
+      "confidence": 0.85,
+      "start": 1503,
+      "end": 1512,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Urgent",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1553,
+      "end_char": 1561,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Urgent",
+      "confidence": 0.85,
+      "start": 1553,
+      "end": 1561,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Outpatient",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1773,
+      "end_char": 1785,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Outpatient",
+      "confidence": 0.85,
+      "start": 1773,
+      "end": 1785,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Diagnostic",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1816,
+      "end_char": 1828,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Diagnostic",
+      "confidence": 0.85,
+      "start": 1816,
+      "end": 1828,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "CT",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1930,
+      "end_char": 1932,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "CT",
+      "confidence": 0.85,
+      "start": 1930,
+      "end": 1932,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PET",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1934,
+      "end_char": 1937,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "PET",
+      "confidence": 0.85,
+      "start": 1934,
+      "end": 1937,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Outpatient",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2031,
+      "end_char": 2043,
+      "page_number": 2,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Outpatient",
+      "confidence": 0.85,
+      "start": 2031,
+      "end": 2043,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Substance",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2059,
+      "end_char": 2070,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Substance",
+      "confidence": 0.85,
+      "start": 2059,
+      "end": 2070,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preferred",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2190,
+      "end_char": 2201,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Preferred",
+      "confidence": 0.85,
+      "start": 2190,
+      "end": 2201,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preferred",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2350,
+      "end_char": 2361,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Preferred",
+      "confidence": 0.85,
+      "start": 2350,
+      "end": 2361,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Eye",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2448,
+      "end_char": 2453,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Eye",
+      "confidence": 0.85,
+      "start": 2448,
+      "end": 2453,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Contact",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2576,
+      "end_char": 2585,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Contact",
+      "confidence": 0.85,
+      "start": 2576,
+      "end": 2585,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preventive",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2652,
+      "end_char": 2664,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Preventive",
+      "confidence": 0.85,
+      "start": 2652,
+      "end": 2664,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Major",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2739,
+      "end_char": 2746,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Major",
+      "confidence": 0.85,
+      "start": 2739,
+      "end": 2746,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Seasonal",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2960,
+      "end_char": 2970,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Seasonal",
+      "confidence": 0.85,
+      "start": 2960,
+      "end": 2970,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "02/28/2022",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3160,
+      "end_char": 3170,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "02/28/2022",
+      "confidence": 0.85,
+      "start": 3160,
+      "end": 3170,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Outpatient",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3289,
+      "end_char": 3301,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Outpatient",
+      "confidence": 0.85,
+      "start": 3289,
+      "end": 3301,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Advanced",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3312,
+      "end_char": 3322,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Advanced",
+      "confidence": 0.85,
+      "start": 3312,
+      "end": 3322,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "CT",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3337,
+      "end_char": 3339,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "CT",
+      "confidence": 0.85,
+      "start": 3337,
+      "end": 3339,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PET",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3346,
+      "end_char": 3349,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "PET",
+      "confidence": 0.85,
+      "start": 3346,
+      "end": 3349,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Durable",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3356,
+      "end_char": 3365,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Durable",
+      "confidence": 0.85,
+      "start": 3356,
+      "end": 3365,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Home",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3394,
+      "end_char": 3400,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Home",
+      "confidence": 0.85,
+      "start": 3394,
+      "end": 3400,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "EXCLUSIONS",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3483,
+      "end_char": 3493,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "EXCLUSIONS",
+      "confidence": 0.85,
+      "start": 3483,
+      "end": 3493,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Cosmetic",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3538,
+      "end_char": 3548,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Cosmetic",
+      "confidence": 0.85,
+      "start": 3538,
+      "end": 3548,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Services",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3634,
+      "end_char": 3644,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "• Services",
+      "confidence": 0.85,
+      "start": 3634,
+      "end": 3644,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "the United States",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3662,
+      "end_char": 3679,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "the United States",
+      "confidence": 0.85,
+      "start": 3662,
+      "end": 3679,
+      "canonical_type": "LOCATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Submit",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3861,
+      "end_char": 3867,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Submit",
+      "confidence": 0.85,
+      "start": 3861,
+      "end": 3867,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nClaims Department",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3879,
+      "end_char": 3926,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "HealthGuard Insurance Company\nClaims Department",
+      "confidence": 0.85,
+      "start": 3879,
+      "end": 3926,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3946,
+      "end_char": 3958,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Grand Rapids",
+      "confidence": 0.85,
+      "start": 3946,
+      "end": 3958,
+      "canonical_type": "LOCATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "APPEALS",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4108,
+      "end_char": 4115,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "APPEALS",
+      "confidence": 0.85,
+      "start": 4108,
+      "end": 4115,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "GRIEVANCES",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4120,
+      "end_char": 4130,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "GRIEVANCES",
+      "confidence": 0.85,
+      "start": 4120,
+      "end": 4130,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "First Level Appeal",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4131,
+      "end_char": 4149,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "First Level Appeal",
+      "confidence": 0.85,
+      "start": 4131,
+      "end": 4149,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nAppeals Department",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4151,
+      "end_char": 4199,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "HealthGuard Insurance Company\nAppeals Department",
+      "confidence": 0.85,
+      "start": 4151,
+      "end": 4199,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4215,
+      "end_char": 4227,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Grand Rapids",
+      "confidence": 0.85,
+      "start": 4215,
+      "end": 4227,
+      "canonical_type": "LOCATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nCorporate Headquarters",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4427,
+      "end_char": 4479,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "HealthGuard Insurance Company\nCorporate Headquarters",
+      "confidence": 0.85,
+      "start": 4427,
+      "end": 4479,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4501,
+      "end_char": 4513,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Grand Rapids",
+      "confidence": 0.85,
+      "start": 4501,
+      "end": 4513,
+      "canonical_type": "LOCATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "8:00 AM - 8:00 PM EST",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4617,
+      "end_char": 4638,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "8:00 AM - 8:00 PM EST",
+      "confidence": 0.85,
+      "start": 4617,
+      "end": 4638,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4686,
+      "end_char": 4715,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 0.85,
+      "start": 4686,
+      "end": 4715,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Privacy Practices",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4983,
+      "end_char": 5000,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Privacy Practices",
+      "confidence": 0.85,
+      "start": 4983,
+      "end": 5000,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "555-1234",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 5059,
+      "end_char": 5067,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "555-1234",
+      "confidence": 0.85,
+      "start": 5059,
+      "end": 5067,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 5452,
+      "end_char": 5463,
+      "page_number": 6,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "HealthGuard",
+      "confidence": 0.85,
+      "start": 5452,
+      "end": 5463,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Michael J. Williams",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 5753,
+      "end_char": 5772,
+      "page_number": 6,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "SpacyRecognizer"
+      },
+      "text": "Michael J. Williams",
+      "confidence": 0.85,
+      "start": 5753,
+      "end": 5772,
+      "canonical_type": "PERSON",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "09/22/1980",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 448,
+      "end_char": 458,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "09/22/1980",
+      "confidence": 0.6,
+      "start": 448,
+      "end": 458,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "06/12/2012",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 488,
+      "end_char": 498,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "06/12/2012",
+      "confidence": 0.6,
+      "start": 488,
+      "end": 498,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "11/04/2015",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 528,
+      "end_char": 538,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "11/04/2015",
+      "confidence": 0.6,
+      "start": 528,
+      "end": 538,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "03/15/2019",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 2907,
+      "end_char": 2917,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "03/15/2019",
+      "confidence": 0.6,
+      "start": 2907,
+      "end": 2917,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "07/10/2021",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 2948,
+      "end_char": 2958,
+      "page_number": 3,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "07/10/2021",
+      "confidence": 0.6,
+      "start": 2948,
+      "end": 2958,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "10/12/2023",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 3122,
+      "end_char": 3132,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "10/12/2023",
+      "confidence": 0.6,
+      "start": 3122,
+      "end": 3132,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "02/28/2022",
+      "privacy_category": "PII",
+      "confidence_score": 0.6,
+      "start_char": 3160,
+      "end_char": 3170,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "DateRecognizer"
+      },
+      "text": "02/28/2022",
+      "confidence": 0.6,
+      "start": 3160,
+      "end": 3170,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Horizon Technologies Inc",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 314,
+      "end_char": 338,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Org"
+      },
+      "text": "Horizon Technologies Inc",
+      "confidence": 0.85,
+      "start": 314,
+      "end": 338,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3879,
+      "end_char": 3908,
+      "page_number": 4,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Org"
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 0.85,
+      "start": 3879,
+      "end": 3908,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4151,
+      "end_char": 4180,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Org"
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 0.85,
+      "start": 4151,
+      "end": 4180,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PLAN ADMINISTRATOR\nHealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4408,
+      "end_char": 4456,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Org"
+      },
+      "text": "PLAN ADMINISTRATOR\nHealthGuard Insurance Company",
+      "confidence": 0.85,
+      "start": 4408,
+      "end": 4456,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PM EST\n\nIMPORTANT NOTICES\nNOTICE OF PRIVACY PRACTICES\nHealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4632,
+      "end_char": 4715,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Org"
+      },
+      "text": "PM EST\n\nIMPORTANT NOTICES\nNOTICE OF PRIVACY PRACTICES\nHealthGuard Insurance Company",
+      "confidence": 0.85,
+      "start": 4632,
+      "end": 4715,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "123 Maple Avenue",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 188,
+      "end_char": 204,
+      "page_number": 1,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Addr"
+      },
+      "text": "123 Maple Avenue",
+      "confidence": 0.85,
+      "start": 188,
+      "end": 204,
+      "canonical_type": "ADDRESS",
+      "entity_owner": "presidio"
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "789 Insurance Avenue",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4480,
+      "end_char": 4500,
+      "page_number": 5,
+      "detector": "presidio",
+      "metadata": {
+        "recognizer": "PatternRecognizer_Addr"
+      },
+      "text": "789 Insurance Avenue",
+      "confidence": 0.85,
+      "start": 4480,
+      "end": 4500,
+      "canonical_type": "ADDRESS",
+      "entity_owner": "presidio"
+    }
+  ]
+}

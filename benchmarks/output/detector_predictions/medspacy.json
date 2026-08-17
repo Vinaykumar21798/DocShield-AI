@@ -1,0 +1,166 @@
+{
+  "detector": "medspacy",
+  "label": "MedSpaCy",
+  "mode": "medspacy_target_matcher",
+  "availability_error": null,
+  "input": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "input_length": 5789,
+  "page_number_passed": 1,
+  "elapsed_sec": 0.529,
+  "predictions": [
+    {
+      "entity_type": "PROCEDURE",
+      "entity_value": "MRI",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 1925,
+      "end_char": 1928,
+      "page_number": 2,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "MRI",
+      "confidence": 0.85,
+      "start": 1925,
+      "end": 1928,
+      "canonical_type": "PROCEDURE",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "DISEASE",
+      "entity_value": "Hypertension",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2883,
+      "end_char": 2895,
+      "page_number": 3,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "Hypertension",
+      "confidence": 0.85,
+      "start": 2883,
+      "end": 2895,
+      "canonical_type": "DISEASE",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "DISEASE",
+      "entity_value": "Diabetes",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 2928,
+      "end_char": 2936,
+      "page_number": 3,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "Diabetes",
+      "confidence": 0.85,
+      "start": 2928,
+      "end": 2936,
+      "canonical_type": "DISEASE",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "MEDICATION",
+      "entity_value": "Lisinopril",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3008,
+      "end_char": 3018,
+      "page_number": 4,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "Lisinopril",
+      "confidence": 0.85,
+      "start": 3008,
+      "end": 3018,
+      "canonical_type": "MEDICATION",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "MEDICATION",
+      "entity_value": "Metformin",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3032,
+      "end_char": 3041,
+      "page_number": 4,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "Metformin",
+      "confidence": 0.85,
+      "start": 3032,
+      "end": 3041,
+      "canonical_type": "MEDICATION",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "PROCEDURE",
+      "entity_value": "MRI",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3332,
+      "end_char": 3335,
+      "page_number": 4,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "MRI",
+      "confidence": 0.85,
+      "start": 3332,
+      "end": 3335,
+      "canonical_type": "PROCEDURE",
+      "entity_owner": "medspacy"
+    },
+    {
+      "entity_type": "PROCEDURE",
+      "entity_value": "CT scan",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 3337,
+      "end_char": 3344,
+      "page_number": 4,
+      "detector": "medspacy",
+      "metadata": {
+        "clinical": true,
+        "source": "TargetMatcher",
+        "model": "medspacy",
+        "resolved": true
+      },
+      "text": "CT scan",
+      "confidence": 0.85,
+      "start": 3337,
+      "end": 3344,
+      "canonical_type": "PROCEDURE",
+      "entity_owner": "medspacy"
+    }
+  ]
+}

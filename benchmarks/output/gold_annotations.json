@@ -1,0 +1,535 @@
+{
+  "source": "manual review of extracted/content.txt (OCR of scanned PDF)",
+  "page_separator": "\\n\\n\\f\\n\\n",
+  "count": 66,
+  "annotations": [
+    {
+      "entity_type": "POLICY_NUMBER",
+      "entity_value": "HIP-2024-45871239",
+      "start_char": 53,
+      "end_char": 70,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Jane R. Smith",
+      "start_char": 103,
+      "end_char": 116,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "04/18/1982",
+      "start_char": 132,
+      "end_char": 142,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-7890",
+      "start_char": 167,
+      "end_char": 178,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "123 Maple Avenue, Apt 4B",
+      "start_char": 188,
+      "end_char": 212,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Westfield",
+      "start_char": 231,
+      "end_char": 240,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "MI",
+      "start_char": 242,
+      "end_char": 244,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "48185",
+      "start_char": 245,
+      "end_char": 250,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(313) 555-7842",
+      "start_char": 258,
+      "end_char": 272,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "EMAIL",
+      "entity_value": "jsmith@emailexample.com",
+      "start_char": 280,
+      "end_char": 303,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Horizon Technologies Inc.",
+      "start_char": 314,
+      "end_char": 339,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "GROUP_NUMBER",
+      "entity_value": "HTI-24680",
+      "start_char": 354,
+      "end_char": 363,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Robert Smith",
+      "start_char": 428,
+      "end_char": 440,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "09/22/1980",
+      "start_char": 448,
+      "end_char": 458,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-2468",
+      "start_char": 459,
+      "end_char": 470,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Emma Smith",
+      "start_char": 471,
+      "end_char": 481,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "06/12/2012",
+      "start_char": 488,
+      "end_char": 498,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-3579",
+      "start_char": 499,
+      "end_char": 510,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Noah Smith",
+      "start_char": 511,
+      "end_char": 521,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "11/04/2015",
+      "start_char": 528,
+      "end_char": 538,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-1357",
+      "start_char": 539,
+      "end_char": 550,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "06/01/2024",
+      "start_char": 634,
+      "end_char": 644,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "05/31/2025",
+      "start_char": 662,
+      "end_char": 672,
+      "page_number": 1,
+      "resolved": true
+    },
+    {
+      "entity_type": "DISEASE",
+      "entity_value": "Hypertension",
+      "start_char": 2883,
+      "end_char": 2895,
+      "page_number": 3,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "03/15/2019",
+      "start_char": 2907,
+      "end_char": 2917,
+      "page_number": 3,
+      "resolved": true
+    },
+    {
+      "entity_type": "DISEASE",
+      "entity_value": "Type 2 Diabetes",
+      "start_char": 2921,
+      "end_char": 2936,
+      "page_number": 3,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "07/10/2021",
+      "start_char": 2948,
+      "end_char": 2958,
+      "page_number": 3,
+      "resolved": true
+    },
+    {
+      "entity_type": "ALLERGY",
+      "entity_value": "Seasonal allergies",
+      "start_char": 2962,
+      "end_char": 2980,
+      "page_number": 3,
+      "resolved": true
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "start_char": 3879,
+      "end_char": 3908,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "MEDICATION",
+      "entity_value": "Lisinopril",
+      "start_char": 3008,
+      "end_char": 3018,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "10mg",
+      "start_char": 3019,
+      "end_char": 3023,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "MEDICATION",
+      "entity_value": "Metformin",
+      "start_char": 3032,
+      "end_char": 3041,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "500mg",
+      "start_char": 3042,
+      "end_char": 3047,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "MEDICATION",
+      "entity_value": "Cetirizine",
+      "start_char": 3062,
+      "end_char": 3072,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "10mg",
+      "start_char": 3073,
+      "end_char": 3077,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "PROCEDURE",
+      "entity_value": "Colonoscopy",
+      "start_char": 3109,
+      "end_char": 3120,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "10/12/2023",
+      "start_char": 3122,
+      "end_char": 3132,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "PROCEDURE",
+      "entity_value": "Right knee arthroscopy",
+      "start_char": 3136,
+      "end_char": 3158,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "02/28/2022",
+      "start_char": 3160,
+      "end_char": 3170,
+      "page_number": 4,
+      "resolved": true
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "P.O. Box 45678",
+      "start_char": 3931,
+      "end_char": 3945,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "start_char": 3946,
+      "end_char": 3958,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "MI",
+      "start_char": 3960,
+      "end_char": 3962,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49501",
+      "start_char": 3963,
+      "end_char": 3968,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-2468",
+      "start_char": 3976,
+      "end_char": 3990,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-3579",
+      "start_char": 3996,
+      "end_char": 4010,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/claims",
+      "start_char": 4019,
+      "end_char": 4054,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "start_char": 4151,
+      "end_char": 4180,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "P.O. Box 87654",
+      "start_char": 4200,
+      "end_char": 4214,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "start_char": 4215,
+      "end_char": 4227,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "MI",
+      "start_char": 4229,
+      "end_char": 4231,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49501",
+      "start_char": 4232,
+      "end_char": 4237,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-9876",
+      "start_char": 4245,
+      "end_char": 4259,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-8765",
+      "start_char": 4265,
+      "end_char": 4279,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/appeals",
+      "start_char": 4288,
+      "end_char": 4324,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "start_char": 4427,
+      "end_char": 4456,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "789 Insurance Avenue",
+      "start_char": 4480,
+      "end_char": 4500,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "Grand Rapids",
+      "start_char": 4501,
+      "end_char": 4513,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "LOCATION",
+      "entity_value": "MI",
+      "start_char": 4515,
+      "end_char": 4517,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49503",
+      "start_char": 4518,
+      "end_char": 4523,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-1234",
+      "start_char": 4542,
+      "end_char": 4556,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com",
+      "start_char": 4566,
+      "end_char": 4594,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/privacy",
+      "start_char": 5008,
+      "end_char": 5044,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-1234",
+      "start_char": 5053,
+      "end_char": 5067,
+      "page_number": 5,
+      "resolved": true
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "start_char": null,
+      "end_char": null,
+      "page_number": 6,
+      "resolved": false
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Michael J. Williams",
+      "start_char": 5753,
+      "end_char": 5772,
+      "page_number": 6,
+      "resolved": true
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "06/01/2024",
+      "start_char": 5779,
+      "end_char": 5789,
+      "page_number": 6,
+      "resolved": true
+    }
+  ]
+}

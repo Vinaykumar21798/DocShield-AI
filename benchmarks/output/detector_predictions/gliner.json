@@ -1,0 +1,52 @@
+{
+  "detector": "gliner",
+  "label": "GLiNER",
+  "mode": "model",
+  "availability_error": null,
+  "input": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "input_length": 5789,
+  "page_number_passed": 1,
+  "elapsed_sec": 6.941,
+  "predictions": [
+    {
+      "entity_type": "PATIENT",
+      "entity_value": "Emma Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.7603846788406372,
+      "start_char": 471,
+      "end_char": 481,
+      "page_number": 1,
+      "detector": "gliner",
+      "metadata": {
+        "model": "GLiNER",
+        "fallback_detector": true
+      },
+      "text": "Emma Smith",
+      "confidence": 0.7603846788406372,
+      "start": 471,
+      "end": 481,
+      "canonical_type": "PATIENT",
+      "entity_owner": "gliner"
+    },
+    {
+      "entity_type": "PATIENT",
+      "entity_value": "Noah Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.7427489757537842,
+      "start_char": 511,
+      "end_char": 521,
+      "page_number": 1,
+      "detector": "gliner",
+      "metadata": {
+        "model": "GLiNER",
+        "fallback_detector": true
+      },
+      "text": "Noah Smith",
+      "confidence": 0.7427489757537842,
+      "start": 511,
+      "end": 521,
+      "canonical_type": "PATIENT",
+      "entity_owner": "gliner"
+    }
+  ]
+}
