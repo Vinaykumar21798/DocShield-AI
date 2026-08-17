@@ -121,3 +121,7 @@ storage/temp/*
 # ==========================================
 node_modules/
 brain/
+
+# OpenCode
+opencode.json
+AGENTS.md
