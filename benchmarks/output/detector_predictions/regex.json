@@ -1,0 +1,832 @@
+{
+  "detector": "regex",
+  "label": "Regex",
+  "mode": "pure_python",
+  "availability_error": null,
+  "input": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "input_length": 5789,
+  "page_number_passed": 1,
+  "elapsed_sec": 0.074,
+  "predictions": [
+    {
+      "entity_type": "INSURANCE_ID",
+      "entity_value": "HIP-2024-45871239",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 53,
+      "end_char": 70,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "HIP-2024-45871239",
+      "confidence": 1.0,
+      "start": 53,
+      "end": 70,
+      "canonical_type": "INSURANCE_ID",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "04/18/1982",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 132,
+      "end_char": 142,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "04/18/1982",
+      "confidence": 1.0,
+      "start": 132,
+      "end": 142,
+      "canonical_type": "DATE_OF_BIRTH",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "123 Maple Avenue, Apt 4B",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 188,
+      "end_char": 212,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "123 Maple Avenue, Apt 4B",
+      "confidence": 1.0,
+      "start": 188,
+      "end": 212,
+      "canonical_type": "ADDRESS",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "48185",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 245,
+      "end_char": 250,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "48185",
+      "confidence": 1.0,
+      "start": 245,
+      "end": 250,
+      "canonical_type": "ZIP_CODE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(313) 555-7842",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 258,
+      "end_char": 272,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(313) 555-7842",
+      "confidence": 1.0,
+      "start": 258,
+      "end": 272,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "EMAIL",
+      "entity_value": "jsmith@emailexample.com",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 280,
+      "end_char": 303,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "jsmith@emailexample.com",
+      "confidence": 1.0,
+      "start": 280,
+      "end": 303,
+      "canonical_type": "EMAIL",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "GROUP_NUMBER",
+      "entity_value": "HTI-24680",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 354,
+      "end_char": 363,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "HTI-24680",
+      "confidence": 1.0,
+      "start": 354,
+      "end": 363,
+      "canonical_type": "GROUP_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "09/22/1980",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 448,
+      "end_char": 458,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "09/22/1980",
+      "confidence": 1.0,
+      "start": 448,
+      "end": 458,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "06/12/2012",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 488,
+      "end_char": 498,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "06/12/2012",
+      "confidence": 0.85,
+      "start": 488,
+      "end": 498,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "11/04/2015",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 528,
+      "end_char": 538,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "11/04/2015",
+      "confidence": 0.85,
+      "start": 528,
+      "end": 538,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "INSURANCE_ID",
+      "entity_value": "XXX-XX-1357",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 539,
+      "end_char": 550,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "XXX-XX-1357",
+      "confidence": 1.0,
+      "start": 539,
+      "end": 550,
+      "canonical_type": "INSURANCE_ID",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "06/01/2024",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 634,
+      "end_char": 644,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "06/01/2024",
+      "confidence": 1.0,
+      "start": 634,
+      "end": 644,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "05/31/2025",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 662,
+      "end_char": 672,
+      "page_number": 1,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "05/31/2025",
+      "confidence": 1.0,
+      "start": 662,
+      "end": 672,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "03/15/2019",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 2907,
+      "end_char": 2917,
+      "page_number": 3,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "03/15/2019",
+      "confidence": 1.0,
+      "start": 2907,
+      "end": 2917,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "07/10/2021",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 2948,
+      "end_char": 2958,
+      "page_number": 3,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "07/10/2021",
+      "confidence": 1.0,
+      "start": 2948,
+      "end": 2958,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "10mg",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3019,
+      "end_char": 3023,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "10mg",
+      "confidence": 1.0,
+      "start": 3019,
+      "end": 3023,
+      "canonical_type": "DOSAGE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "500mg",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3042,
+      "end_char": 3047,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "500mg",
+      "confidence": 1.0,
+      "start": 3042,
+      "end": 3047,
+      "canonical_type": "DOSAGE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DOSAGE",
+      "entity_value": "10mg",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3073,
+      "end_char": 3077,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "10mg",
+      "confidence": 1.0,
+      "start": 3073,
+      "end": 3077,
+      "canonical_type": "DOSAGE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "10/12/2023",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3122,
+      "end_char": 3132,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "10/12/2023",
+      "confidence": 1.0,
+      "start": 3122,
+      "end": 3132,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "02/28/2022",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3160,
+      "end_char": 3170,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "02/28/2022",
+      "confidence": 1.0,
+      "start": 3160,
+      "end": 3170,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3879,
+      "end_char": 3908,
+      "page_number": 4,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 1.0,
+      "start": 3879,
+      "end": 3908,
+      "canonical_type": "INSURANCE_PROVIDER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "PO_BOX",
+      "entity_value": "P.O. Box 45678",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3931,
+      "end_char": 3945,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "P.O. Box 45678",
+      "confidence": 1.0,
+      "start": 3931,
+      "end": 3945,
+      "canonical_type": "PO_BOX",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49501",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "start_char": 3963,
+      "end_char": 3968,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "49501",
+      "confidence": 0.7,
+      "start": 3963,
+      "end": 3968,
+      "canonical_type": "ZIP_CODE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-2468",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3976,
+      "end_char": 3990,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-2468",
+      "confidence": 1.0,
+      "start": 3976,
+      "end": 3990,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-3579",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 3996,
+      "end_char": 4010,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-3579",
+      "confidence": 1.0,
+      "start": 3996,
+      "end": 4010,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/claims",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4019,
+      "end_char": 4054,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "www.healthguardinsurance.com/claims",
+      "confidence": 1.0,
+      "start": 4019,
+      "end": 4054,
+      "canonical_type": "URL",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4151,
+      "end_char": 4180,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 1.0,
+      "start": 4151,
+      "end": 4180,
+      "canonical_type": "INSURANCE_PROVIDER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "PO_BOX",
+      "entity_value": "P.O. Box 87654",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4200,
+      "end_char": 4214,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "P.O. Box 87654",
+      "confidence": 1.0,
+      "start": 4200,
+      "end": 4214,
+      "canonical_type": "PO_BOX",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49501",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "start_char": 4232,
+      "end_char": 4237,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "49501",
+      "confidence": 0.7,
+      "start": 4232,
+      "end": 4237,
+      "canonical_type": "ZIP_CODE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-9876",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4245,
+      "end_char": 4259,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-9876",
+      "confidence": 1.0,
+      "start": 4245,
+      "end": 4259,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-8765",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4265,
+      "end_char": 4279,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-8765",
+      "confidence": 1.0,
+      "start": 4265,
+      "end": 4279,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/appeals",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4288,
+      "end_char": 4324,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "www.healthguardinsurance.com/appeals",
+      "confidence": 1.0,
+      "start": 4288,
+      "end": 4324,
+      "canonical_type": "URL",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4427,
+      "end_char": 4456,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "HealthGuard Insurance Company",
+      "confidence": 1.0,
+      "start": 4427,
+      "end": 4456,
+      "canonical_type": "INSURANCE_PROVIDER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "49503",
+      "privacy_category": "PII",
+      "confidence_score": 0.7,
+      "start_char": 4518,
+      "end_char": 4523,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "49503",
+      "confidence": 0.7,
+      "start": 4518,
+      "end": 4523,
+      "canonical_type": "ZIP_CODE",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-1234",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4542,
+      "end_char": 4556,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-1234",
+      "confidence": 1.0,
+      "start": 4542,
+      "end": 4556,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 4566,
+      "end_char": 4594,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "www.healthguardinsurance.com",
+      "confidence": 1.0,
+      "start": 4566,
+      "end": 4594,
+      "canonical_type": "URL",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "8:00 AM",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4617,
+      "end_char": 4624,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "8:00 AM",
+      "confidence": 0.85,
+      "start": 4617,
+      "end": 4624,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE_TIME",
+      "entity_value": "8:00 PM",
+      "privacy_category": "PII",
+      "confidence_score": 0.85,
+      "start_char": 4627,
+      "end_char": 4634,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "8:00 PM",
+      "confidence": 0.85,
+      "start": 4627,
+      "end": 4634,
+      "canonical_type": "DATE_TIME",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "URL",
+      "entity_value": "www.healthguardinsurance.com/privacy",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 5008,
+      "end_char": 5044,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "www.healthguardinsurance.com/privacy",
+      "confidence": 1.0,
+      "start": 5008,
+      "end": 5044,
+      "canonical_type": "URL",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "US_PHONE_NUMBER",
+      "entity_value": "(800) 555-1234",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 5053,
+      "end_char": 5067,
+      "page_number": 5,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "(800) 555-1234",
+      "confidence": 1.0,
+      "start": 5053,
+      "end": 5067,
+      "canonical_type": "US_PHONE_NUMBER",
+      "entity_owner": "Regex"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "06/01/2024",
+      "privacy_category": "PII",
+      "confidence_score": 1.0,
+      "start_char": 5779,
+      "end_char": 5789,
+      "page_number": 6,
+      "detector": "Regex",
+      "metadata": {
+        "method": "hybrid_regex",
+        "resolved": true
+      },
+      "text": "06/01/2024",
+      "confidence": 1.0,
+      "start": 5779,
+      "end": 5789,
+      "canonical_type": "DATE",
+      "entity_owner": "Regex"
+    }
+  ]
+}

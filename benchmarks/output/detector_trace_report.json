@@ -1,0 +1,2230 @@
+{
+  "summary": {
+    "report_entities_count": 79,
+    "report_detector_field_values": [
+      "MedSpaCy",
+      "Presidio",
+      "Regex"
+    ],
+    "raw_detector_keys": [
+      "gliner",
+      "medspacy",
+      "presidio",
+      "qwen",
+      "regex"
+    ],
+    "attribution_counts": {
+      "detector_origin": 78,
+      "reclass_origin": 1
+    },
+    "suspicious_attribution_counts": {
+      "detector_origin": 29,
+      "reclass_origin": 1
+    },
+    "dropped_raw_predictions_count": 25
+  },
+  "traced": [
+    {
+      "report_entity": {
+        "entity_type": "INSURANCE_ID",
+        "entity_value": "HIP-2024-45871239",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 53,
+        "end_char": 70
+      },
+      "canonical_type": "POLICY_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "INSURANCE_ID",
+        "entity_value": "HIP-2024-45871239",
+        "confidence_score": 1.0,
+        "start_char": 53,
+        "end_char": 70,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Jane R. Smith",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 103,
+        "end_char": 116
+      },
+      "canonical_type": "PERSON",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Jane R. Smith",
+        "confidence_score": 0.85,
+        "start_char": 103,
+        "end_char": 116,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_OF_BIRTH",
+        "entity_value": "04/18/1982",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 132,
+        "end_char": 142
+      },
+      "canonical_type": "DATE_OF_BIRTH",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "DATE_OF_BIRTH",
+        "entity_value": "04/18/1982",
+        "confidence_score": 0.95,
+        "start_char": 132,
+        "end_char": 142,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Social Security",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 143,
+        "end_char": 158
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Social Security",
+        "confidence_score": 0.85,
+        "start_char": 143,
+        "end_char": 158,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ADDRESS",
+        "entity_value": "123 Maple Avenue, Apt 4B",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 188,
+        "end_char": 212
+      },
+      "canonical_type": "ADDRESS",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "ADDRESS",
+        "entity_value": "123 Maple Avenue, Apt 4B",
+        "confidence_score": 0.95,
+        "start_char": 188,
+        "end_char": 212,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Westfield",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 231,
+        "end_char": 240
+      },
+      "canonical_type": "PERSON",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Westfield",
+        "confidence_score": 0.85,
+        "start_char": 231,
+        "end_char": 240,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ZIP_CODE",
+        "entity_value": "48185",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 245,
+        "end_char": 250
+      },
+      "canonical_type": "ZIP_CODE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "ZIP_CODE",
+        "entity_value": "48185",
+        "confidence_score": 0.95,
+        "start_char": 245,
+        "end_char": 250,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(313) 555-7842",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 258,
+        "end_char": 272
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "PHONE_NUMBER",
+        "entity_value": "(313) 555-7842",
+        "confidence_score": 0.95,
+        "start_char": 258,
+        "end_char": 272,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "EMAIL",
+        "entity_value": "jsmith@emailexample.com",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 280,
+        "end_char": 303
+      },
+      "canonical_type": "EMAIL",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "EMAIL",
+        "entity_value": "jsmith@emailexample.com",
+        "confidence_score": 0.95,
+        "start_char": 280,
+        "end_char": 303,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Horizon Technologies Inc.",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 314,
+        "end_char": 339
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Horizon Technologies Inc.",
+        "confidence_score": 0.85,
+        "start_char": 314,
+        "end_char": 339,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "GROUP_NUMBER",
+        "entity_value": "HTI-24680",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 354,
+        "end_char": 363
+      },
+      "canonical_type": "GROUP_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "qwen",
+        "entity_type": "GROUP_NUMBER",
+        "entity_value": "HTI-24680",
+        "confidence_score": 0.95,
+        "start_char": 354,
+        "end_char": 363,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Robert Smith",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 428,
+        "end_char": 440
+      },
+      "canonical_type": "PERSON",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Robert Smith",
+        "confidence_score": 0.85,
+        "start_char": 428,
+        "end_char": 440,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Spouse\t09/22/1980",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 441,
+        "end_char": 458
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Spouse\t09/22/1980",
+        "confidence_score": 0.85,
+        "start_char": 441,
+        "end_char": 458,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Emma Smith",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 471,
+        "end_char": 481
+      },
+      "canonical_type": "PERSON",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "gliner",
+        "entity_type": "PATIENT",
+        "entity_value": "Emma Smith",
+        "confidence_score": 0.7603846788406372,
+        "start_char": 471,
+        "end_char": 481,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/12/2012",
+        "detector_field": "Regex",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 488,
+        "end_char": 498
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/12/2012",
+        "confidence_score": 0.6,
+        "start_char": 488,
+        "end_char": 498,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Noah Smith\tChild",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 511,
+        "end_char": 527
+      },
+      "canonical_type": "PERSON",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Noah Smith\tChild",
+        "confidence_score": 0.85,
+        "start_char": 511,
+        "end_char": 527,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "11/04/2015",
+        "detector_field": "Regex",
+        "confidence_score": 0.85,
+        "page_number": 1,
+        "start_char": 528,
+        "end_char": 538
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "11/04/2015",
+        "confidence_score": 0.6,
+        "start_char": 528,
+        "end_char": 538,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "INSURANCE_ID",
+        "entity_value": "XXX-XX-1357",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 539,
+        "end_char": 550
+      },
+      "canonical_type": "POLICY_NUMBER",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "INSURANCE_ID",
+        "entity_value": "XXX-XX-1357",
+        "confidence_score": 1.0,
+        "start_char": 539,
+        "end_char": 550,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/01/2024",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 634,
+        "end_char": 644
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/01/2024",
+        "confidence_score": 0.95,
+        "start_char": 634,
+        "end_char": 644,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "05/31/2025",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 1,
+        "start_char": 662,
+        "end_char": 672
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "05/31/2025",
+        "confidence_score": 0.95,
+        "start_char": 662,
+        "end_char": 672,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Cancer",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1414,
+        "end_char": 1420
+      },
+      "canonical_type": "PERSON",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Cancer",
+        "confidence_score": 0.85,
+        "start_char": 1414,
+        "end_char": 1420,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Primary",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1503,
+        "end_char": 1512
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Primary",
+        "confidence_score": 0.85,
+        "start_char": 1503,
+        "end_char": 1512,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Urgent",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1553,
+        "end_char": 1561
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Urgent",
+        "confidence_score": 0.85,
+        "start_char": 1553,
+        "end_char": 1561,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1773,
+        "end_char": 1785
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "confidence_score": 0.85,
+        "start_char": 1773,
+        "end_char": 1785,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Diagnostic",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1816,
+        "end_char": 1828
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Diagnostic",
+        "confidence_score": 0.85,
+        "start_char": 1816,
+        "end_char": 1828,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PROCEDURE",
+        "entity_value": "MRI",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1925,
+        "end_char": 1928
+      },
+      "canonical_type": "PROCEDURE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "PROCEDURE",
+        "entity_value": "MRI",
+        "confidence_score": 0.85,
+        "start_char": 1925,
+        "end_char": 1928,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "CT",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1930,
+        "end_char": 1932
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "CT",
+        "confidence_score": 0.85,
+        "start_char": 1930,
+        "end_char": 1932,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "PET",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 1934,
+        "end_char": 1937
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "PET",
+        "confidence_score": 0.85,
+        "start_char": 1934,
+        "end_char": 1937,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 2,
+        "start_char": 2031,
+        "end_char": 2043
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "confidence_score": 0.85,
+        "start_char": 2031,
+        "end_char": 2043,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DISEASE",
+        "entity_value": "Hypertension",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 3,
+        "start_char": 2883,
+        "end_char": 2895
+      },
+      "canonical_type": "DISEASE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "DISEASE",
+        "entity_value": "Hypertension",
+        "confidence_score": 0.85,
+        "start_char": 2883,
+        "end_char": 2895,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "03/15/2019",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 3,
+        "start_char": 2907,
+        "end_char": 2917
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "03/15/2019",
+        "confidence_score": 0.6,
+        "start_char": 2907,
+        "end_char": 2917,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DISEASE",
+        "entity_value": "Diabetes",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 3,
+        "start_char": 2928,
+        "end_char": 2936
+      },
+      "canonical_type": "DISEASE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "DISEASE",
+        "entity_value": "Diabetes",
+        "confidence_score": 0.85,
+        "start_char": 2928,
+        "end_char": 2936,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "07/10/2021",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 3,
+        "start_char": 2948,
+        "end_char": 2958
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "07/10/2021",
+        "confidence_score": 0.6,
+        "start_char": 2948,
+        "end_char": 2958,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "MEDICATION",
+        "entity_value": "Lisinopril",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3008,
+        "end_char": 3018
+      },
+      "canonical_type": "MEDICATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "MEDICATION",
+        "entity_value": "Lisinopril",
+        "confidence_score": 0.85,
+        "start_char": 3008,
+        "end_char": 3018,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DOSAGE",
+        "entity_value": "10mg",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 4,
+        "start_char": 3019,
+        "end_char": 3023
+      },
+      "canonical_type": "DOSAGE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "DOSAGE",
+        "entity_value": "10mg",
+        "confidence_score": 1.0,
+        "start_char": 3019,
+        "end_char": 3023,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "MEDICATION",
+        "entity_value": "Metformin",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3032,
+        "end_char": 3041
+      },
+      "canonical_type": "MEDICATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "MEDICATION",
+        "entity_value": "Metformin",
+        "confidence_score": 0.85,
+        "start_char": 3032,
+        "end_char": 3041,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DOSAGE",
+        "entity_value": "500mg",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 4,
+        "start_char": 3042,
+        "end_char": 3047
+      },
+      "canonical_type": "DOSAGE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "DOSAGE",
+        "entity_value": "500mg",
+        "confidence_score": 1.0,
+        "start_char": 3042,
+        "end_char": 3047,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DOSAGE",
+        "entity_value": "10mg",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 4,
+        "start_char": 3073,
+        "end_char": 3077
+      },
+      "canonical_type": "DOSAGE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "DOSAGE",
+        "entity_value": "10mg",
+        "confidence_score": 1.0,
+        "start_char": 3073,
+        "end_char": 3077,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "10/12/2023",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 4,
+        "start_char": 3122,
+        "end_char": 3132
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "10/12/2023",
+        "confidence_score": 0.6,
+        "start_char": 3122,
+        "end_char": 3132,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "02/28/2022",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3160,
+        "end_char": 3170
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "02/28/2022",
+        "confidence_score": 0.85,
+        "start_char": 3160,
+        "end_char": 3170,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3289,
+        "end_char": 3301
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Outpatient",
+        "confidence_score": 0.85,
+        "start_char": 3289,
+        "end_char": 3301,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Advanced",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3312,
+        "end_char": 3322
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Advanced",
+        "confidence_score": 0.85,
+        "start_char": 3312,
+        "end_char": 3322,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PROCEDURE",
+        "entity_value": "MRI",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3332,
+        "end_char": 3335
+      },
+      "canonical_type": "PROCEDURE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "PROCEDURE",
+        "entity_value": "MRI",
+        "confidence_score": 0.85,
+        "start_char": 3332,
+        "end_char": 3335,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PROCEDURE",
+        "entity_value": "CT scan",
+        "detector_field": "MedSpaCy",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3337,
+        "end_char": 3344
+      },
+      "canonical_type": "PROCEDURE",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "medspacy",
+        "entity_type": "PROCEDURE",
+        "entity_value": "CT scan",
+        "confidence_score": 0.85,
+        "start_char": 3337,
+        "end_char": 3344,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "PET",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3346,
+        "end_char": 3349
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "PET",
+        "confidence_score": 0.85,
+        "start_char": 3346,
+        "end_char": 3349,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Durable",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3356,
+        "end_char": 3365
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Durable",
+        "confidence_score": 0.85,
+        "start_char": 3356,
+        "end_char": 3365,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Home",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3394,
+        "end_char": 3400
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Home",
+        "confidence_score": 0.85,
+        "start_char": 3394,
+        "end_char": 3400,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "EXCLUSIONS",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3483,
+        "end_char": 3493
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "EXCLUSIONS",
+        "confidence_score": 0.85,
+        "start_char": 3483,
+        "end_char": 3493,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Cosmetic",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3538,
+        "end_char": 3548
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Cosmetic",
+        "confidence_score": 0.85,
+        "start_char": 3538,
+        "end_char": 3548,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Services",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3634,
+        "end_char": 3644
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "• Services",
+        "confidence_score": 0.85,
+        "start_char": 3634,
+        "end_char": 3644,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "LOCATION",
+        "entity_value": "the United States",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3662,
+        "end_char": 3679
+      },
+      "canonical_type": "LOCATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "LOCATION",
+        "entity_value": "the United States",
+        "confidence_score": 0.85,
+        "start_char": 3662,
+        "end_char": 3679,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Submit",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 4,
+        "start_char": 3861,
+        "end_char": 3867
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Submit",
+        "confidence_score": 0.85,
+        "start_char": 3861,
+        "end_char": 3867,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "P.O. Box 45678",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 3931,
+        "end_char": 3945
+      },
+      "canonical_type": "PERSON",
+      "suspicious": true,
+      "attribution": "reclass_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "PO_BOX",
+        "entity_value": "P.O. Box 45678",
+        "confidence_score": 1.0,
+        "start_char": 3931,
+        "end_char": 3945,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": false
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 3946,
+        "end_char": 3958
+      },
+      "canonical_type": "LOCATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "confidence_score": 0.85,
+        "start_char": 3946,
+        "end_char": 3958,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49501",
+        "detector_field": "Regex",
+        "confidence_score": 0.7,
+        "page_number": 5,
+        "start_char": 3963,
+        "end_char": 3968
+      },
+      "canonical_type": "ZIP_CODE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49501",
+        "confidence_score": 0.7,
+        "start_char": 3963,
+        "end_char": 3968,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-2468",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 3976,
+        "end_char": 3990
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-2468",
+        "confidence_score": 1.0,
+        "start_char": 3976,
+        "end_char": 3990,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-3579",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 3996,
+        "end_char": 4010
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-3579",
+        "confidence_score": 1.0,
+        "start_char": 3996,
+        "end_char": 4010,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/claims",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4019,
+        "end_char": 4054
+      },
+      "canonical_type": "URL",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/claims",
+        "confidence_score": 1.0,
+        "start_char": 4019,
+        "end_char": 4054,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "APPEALS",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4108,
+        "end_char": 4115
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "APPEALS",
+        "confidence_score": 0.85,
+        "start_char": 4108,
+        "end_char": 4115,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "GRIEVANCES",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4120,
+        "end_char": 4130
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "GRIEVANCES",
+        "confidence_score": 0.85,
+        "start_char": 4120,
+        "end_char": 4130,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "First Level Appeal",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4131,
+        "end_char": 4149
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "First Level Appeal",
+        "confidence_score": 0.85,
+        "start_char": 4131,
+        "end_char": 4149,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ADDRESS",
+        "entity_value": "P.O. Box 87654",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4200,
+        "end_char": 4214
+      },
+      "canonical_type": "ADDRESS",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "PO_BOX",
+        "entity_value": "P.O. Box 87654",
+        "confidence_score": 1.0,
+        "start_char": 4200,
+        "end_char": 4214,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4215,
+        "end_char": 4227
+      },
+      "canonical_type": "LOCATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "confidence_score": 0.85,
+        "start_char": 4215,
+        "end_char": 4227,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49501",
+        "detector_field": "Regex",
+        "confidence_score": 0.7,
+        "page_number": 5,
+        "start_char": 4232,
+        "end_char": 4237
+      },
+      "canonical_type": "ZIP_CODE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49501",
+        "confidence_score": 0.7,
+        "start_char": 4232,
+        "end_char": 4237,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-9876",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4245,
+        "end_char": 4259
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-9876",
+        "confidence_score": 1.0,
+        "start_char": 4245,
+        "end_char": 4259,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-8765",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4265,
+        "end_char": 4279
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-8765",
+        "confidence_score": 1.0,
+        "start_char": 4265,
+        "end_char": 4279,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/appeals",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4288,
+        "end_char": 4324
+      },
+      "canonical_type": "URL",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/appeals",
+        "confidence_score": 1.0,
+        "start_char": 4288,
+        "end_char": 4324,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ADDRESS",
+        "entity_value": "789 Insurance Avenue",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4480,
+        "end_char": 4500
+      },
+      "canonical_type": "ADDRESS",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ADDRESS",
+        "entity_value": "789 Insurance Avenue",
+        "confidence_score": 0.85,
+        "start_char": 4480,
+        "end_char": 4500,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4501,
+        "end_char": 4513
+      },
+      "canonical_type": "LOCATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "LOCATION",
+        "entity_value": "Grand Rapids",
+        "confidence_score": 0.85,
+        "start_char": 4501,
+        "end_char": 4513,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49503",
+        "detector_field": "Regex",
+        "confidence_score": 0.7,
+        "page_number": 5,
+        "start_char": 4518,
+        "end_char": 4523
+      },
+      "canonical_type": "ZIP_CODE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "ZIP_CODE",
+        "entity_value": "49503",
+        "confidence_score": 0.7,
+        "start_char": 4518,
+        "end_char": 4523,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-1234",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4542,
+        "end_char": 4556
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-1234",
+        "confidence_score": 1.0,
+        "start_char": 4542,
+        "end_char": 4556,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 4566,
+        "end_char": 4594
+      },
+      "canonical_type": "URL",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com",
+        "confidence_score": 1.0,
+        "start_char": 4566,
+        "end_char": 4594,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "8:00 AM",
+        "detector_field": "Regex",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4617,
+        "end_char": 4624
+      },
+      "canonical_type": "DATE",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "DATE_TIME",
+        "entity_value": "8:00 AM",
+        "confidence_score": 0.85,
+        "start_char": 4617,
+        "end_char": 4624,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Privacy Practices",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 5,
+        "start_char": 4983,
+        "end_char": 5000
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": true,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "Privacy Practices",
+        "confidence_score": 0.85,
+        "start_char": 4983,
+        "end_char": 5000,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/privacy",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 5008,
+        "end_char": 5044
+      },
+      "canonical_type": "URL",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "URL",
+        "entity_value": "www.healthguardinsurance.com/privacy",
+        "confidence_score": 1.0,
+        "start_char": 5008,
+        "end_char": 5044,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-1234",
+        "detector_field": "Regex",
+        "confidence_score": 1.0,
+        "page_number": 5,
+        "start_char": 5053,
+        "end_char": 5067
+      },
+      "canonical_type": "US_PHONE_NUMBER",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "regex",
+        "entity_type": "US_PHONE_NUMBER",
+        "entity_value": "(800) 555-1234",
+        "confidence_score": 1.0,
+        "start_char": 5053,
+        "end_char": 5067,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "ORGANIZATION",
+        "entity_value": "HealthGuard",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 6,
+        "start_char": 5452,
+        "end_char": 5463
+      },
+      "canonical_type": "ORGANIZATION",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "ORGANIZATION",
+        "entity_value": "HealthGuard",
+        "confidence_score": 0.85,
+        "start_char": 5452,
+        "end_char": 5463,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "PERSON",
+        "entity_value": "Michael J. Williams",
+        "detector_field": "Presidio",
+        "confidence_score": 0.85,
+        "page_number": 6,
+        "start_char": 5753,
+        "end_char": 5772
+      },
+      "canonical_type": "PERSON",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "PERSON",
+        "entity_value": "Michael J. Williams",
+        "confidence_score": 0.85,
+        "start_char": 5753,
+        "end_char": 5772,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    },
+    {
+      "report_entity": {
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/01/2024",
+        "detector_field": "Presidio",
+        "confidence_score": 0.8,
+        "page_number": 6,
+        "start_char": 5779,
+        "end_char": 5789
+      },
+      "canonical_type": "DATE",
+      "suspicious": false,
+      "attribution": "detector_origin",
+      "matched_raw": {
+        "detector": "presidio",
+        "entity_type": "DATE_TIME",
+        "entity_value": "06/01/2024",
+        "confidence_score": 0.95,
+        "start_char": 5779,
+        "end_char": 5789,
+        "overlap_ratio": 1.0,
+        "value_match": true,
+        "type_match": true
+      }
+    }
+  ],
+  "dropped_raw_predictions": [
+    {
+      "detector": "presidio",
+      "entity_type": "DATE_TIME",
+      "entity_value": "Last 4",
+      "confidence_score": 0.85,
+      "page_number": 1,
+      "start_char": 420,
+      "end_char": 426
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PPO",
+      "confidence_score": 0.85,
+      "page_number": 1,
+      "start_char": 613,
+      "end_char": 616
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Substance",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2059,
+      "end_char": 2070
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preferred",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2190,
+      "end_char": 2201
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preferred",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2350,
+      "end_char": 2361
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Eye",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2448,
+      "end_char": 2453
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Contact",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2576,
+      "end_char": 2585
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Preventive",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2652,
+      "end_char": 2664
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Major",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2739,
+      "end_char": 2746
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "• Seasonal",
+      "confidence_score": 0.85,
+      "page_number": 3,
+      "start_char": 2960,
+      "end_char": 2970
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "CT",
+      "confidence_score": 0.85,
+      "page_number": 4,
+      "start_char": 3337,
+      "end_char": 3339
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nClaims Department",
+      "confidence_score": 0.85,
+      "page_number": 4,
+      "start_char": 3879,
+      "end_char": 3926
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nAppeals Department",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4151,
+      "end_char": 4199
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company\nCorporate Headquarters",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4427,
+      "end_char": 4479
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "DATE_TIME",
+      "entity_value": "8:00 AM - 8:00 PM EST",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4617,
+      "end_char": 4638
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4686,
+      "end_char": 4715
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 0.85,
+      "page_number": 4,
+      "start_char": 3879,
+      "end_char": 3908
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4151,
+      "end_char": 4180
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PLAN ADMINISTRATOR\nHealthGuard Insurance Company",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4408,
+      "end_char": 4456
+    },
+    {
+      "detector": "presidio",
+      "entity_type": "ORGANIZATION",
+      "entity_value": "PM EST\n\nIMPORTANT NOTICES\nNOTICE OF PRIVACY PRACTICES\nHealthGuard Insurance Company",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4632,
+      "end_char": 4715
+    },
+    {
+      "detector": "qwen",
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-7890",
+      "confidence_score": 0.95,
+      "page_number": 1,
+      "start_char": 167,
+      "end_char": 178
+    },
+    {
+      "detector": "regex",
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 1.0,
+      "page_number": 4,
+      "start_char": 3879,
+      "end_char": 3908
+    },
+    {
+      "detector": "regex",
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 1.0,
+      "page_number": 5,
+      "start_char": 4151,
+      "end_char": 4180
+    },
+    {
+      "detector": "regex",
+      "entity_type": "INSURANCE_PROVIDER",
+      "entity_value": "HealthGuard Insurance Company",
+      "confidence_score": 1.0,
+      "page_number": 5,
+      "start_char": 4427,
+      "end_char": 4456
+    },
+    {
+      "detector": "regex",
+      "entity_type": "DATE_TIME",
+      "entity_value": "8:00 PM",
+      "confidence_score": 0.85,
+      "page_number": 5,
+      "start_char": 4627,
+      "end_char": 4634
+    }
+  ]
+}

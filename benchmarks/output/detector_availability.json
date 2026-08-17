@@ -1,0 +1,47 @@
+{
+  "document": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "text_length": 5789,
+  "pages": 6,
+  "detectors": {
+    "regex": {
+      "available": true,
+      "mode": "pure_python",
+      "model": "none",
+      "error": null,
+      "label": "Regex",
+      "input_file": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt"
+    },
+    "presidio": {
+      "available": true,
+      "mode": "presidio+spacy",
+      "model": "en_core_web_sm",
+      "error": null,
+      "label": "Presidio",
+      "input_file": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt"
+    },
+    "medspacy": {
+      "available": true,
+      "mode": "medspacy_target_matcher",
+      "model": "medspacy",
+      "error": null,
+      "label": "MedSpaCy",
+      "input_file": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt"
+    },
+    "gliner": {
+      "available": true,
+      "mode": "model",
+      "model": "urchade/gliner_medium-v2.1",
+      "error": null,
+      "label": "GLiNER",
+      "input_file": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt"
+    },
+    "qwen": {
+      "available": true,
+      "mode": "ollama_qwen3_4b",
+      "model": "qwen3:4b",
+      "error": null,
+      "label": "Qwen3:4b",
+      "input_file": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt"
+    }
+  }
+}

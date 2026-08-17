@@ -1,0 +1,432 @@
+{
+  "detector": "qwen",
+  "label": "Qwen3:4b",
+  "mode": "ollama_qwen3_4b",
+  "availability_error": null,
+  "input": "storage/runs/03b21b46-ea02-4d21-9429-331a9ca7456a/documents/3148c6b8-7198-45d1-951f-2a1dbde6e623/extracted/content.txt",
+  "input_length": 5789,
+  "page_number_passed": 1,
+  "elapsed_sec": 327.435,
+  "predictions": [
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Jane R. Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 103,
+      "end_char": 116,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "Jane R. Smith",
+      "confidence": 0.95,
+      "start": 103,
+      "end": 116,
+      "canonical_type": "PERSON",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "04/18/1982",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 132,
+      "end_char": 142,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "04/18/1982",
+      "confidence": 0.95,
+      "start": 132,
+      "end": 142,
+      "canonical_type": "DATE_OF_BIRTH",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "SSN",
+      "entity_value": "XXX-XX-7890",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 167,
+      "end_char": 178,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "XXX-XX-7890",
+      "confidence": 0.95,
+      "start": 167,
+      "end": 178,
+      "canonical_type": "SSN",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "ADDRESS",
+      "entity_value": "123 Maple Avenue, Apt 4B",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 188,
+      "end_char": 212,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "123 Maple Avenue, Apt 4B",
+      "confidence": 0.95,
+      "start": 188,
+      "end": 212,
+      "canonical_type": "ADDRESS",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "ZIP_CODE",
+      "entity_value": "48185",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 245,
+      "end_char": 250,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "48185",
+      "confidence": 0.95,
+      "start": 245,
+      "end": 250,
+      "canonical_type": "ZIP_CODE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "PHONE_NUMBER",
+      "entity_value": "(313) 555-7842",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 258,
+      "end_char": 272,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "(313) 555-7842",
+      "confidence": 0.95,
+      "start": 258,
+      "end": 272,
+      "canonical_type": "PHONE_NUMBER",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "EMAIL",
+      "entity_value": "jsmith@emailexample.com",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 280,
+      "end_char": 303,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "jsmith@emailexample.com",
+      "confidence": 0.95,
+      "start": 280,
+      "end": 303,
+      "canonical_type": "EMAIL",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "ORGANIZATION",
+      "entity_value": "Horizon Technologies Inc.",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 314,
+      "end_char": 339,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "Horizon Technologies Inc.",
+      "confidence": 0.95,
+      "start": 314,
+      "end": 339,
+      "canonical_type": "ORGANIZATION",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "GROUP_NUMBER",
+      "entity_value": "HTI-24680",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 354,
+      "end_char": 363,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "HTI-24680",
+      "confidence": 0.95,
+      "start": 354,
+      "end": 363,
+      "canonical_type": "GROUP_NUMBER",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Robert Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 428,
+      "end_char": 440,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "Robert Smith",
+      "confidence": 0.95,
+      "start": 428,
+      "end": 440,
+      "canonical_type": "PERSON",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Emma Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 471,
+      "end_char": 481,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "Emma Smith",
+      "confidence": 0.95,
+      "start": 471,
+      "end": 481,
+      "canonical_type": "PERSON",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "PERSON",
+      "entity_value": "Noah Smith",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 511,
+      "end_char": 521,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "Noah Smith",
+      "confidence": 0.95,
+      "start": 511,
+      "end": 521,
+      "canonical_type": "PERSON",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "09/22/1980",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 448,
+      "end_char": 458,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "09/22/1980",
+      "confidence": 0.95,
+      "start": 448,
+      "end": 458,
+      "canonical_type": "DATE_OF_BIRTH",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "06/12/2012",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 488,
+      "end_char": 498,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "06/12/2012",
+      "confidence": 0.95,
+      "start": 488,
+      "end": 498,
+      "canonical_type": "DATE_OF_BIRTH",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE_OF_BIRTH",
+      "entity_value": "11/04/2015",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 528,
+      "end_char": 538,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "11/04/2015",
+      "confidence": 0.95,
+      "start": 528,
+      "end": 538,
+      "canonical_type": "DATE_OF_BIRTH",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "06/01/2024",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 634,
+      "end_char": 644,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "06/01/2024",
+      "confidence": 0.95,
+      "start": 634,
+      "end": 644,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "05/31/2025",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 662,
+      "end_char": 672,
+      "page_number": 1,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "05/31/2025",
+      "confidence": 0.95,
+      "start": 662,
+      "end": 672,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "03/15/2019",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 2907,
+      "end_char": 2917,
+      "page_number": 3,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "03/15/2019",
+      "confidence": 0.95,
+      "start": 2907,
+      "end": 2917,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "07/10/2021",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 2948,
+      "end_char": 2958,
+      "page_number": 3,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "07/10/2021",
+      "confidence": 0.95,
+      "start": 2948,
+      "end": 2958,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "10/12/2023",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 3122,
+      "end_char": 3132,
+      "page_number": 4,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "10/12/2023",
+      "confidence": 0.95,
+      "start": 3122,
+      "end": 3132,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    },
+    {
+      "entity_type": "DATE",
+      "entity_value": "02/28/2022",
+      "privacy_category": "PII",
+      "confidence_score": 0.95,
+      "start_char": 3160,
+      "end_char": 3170,
+      "page_number": 4,
+      "detector": "qwen3b",
+      "metadata": {
+        "model": "qwen3:4b",
+        "resolved": true
+      },
+      "text": "02/28/2022",
+      "confidence": 0.95,
+      "start": 3160,
+      "end": 3170,
+      "canonical_type": "DATE",
+      "entity_owner": "qwen3b"
+    }
+  ]
+}
