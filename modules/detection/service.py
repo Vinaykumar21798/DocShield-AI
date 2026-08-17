@@ -180,7 +180,7 @@ class DetectionService:
         "medspacy": 4,
         "gliner": 3,
         "presidio": 2,
-        "qwen3b": 0,
+        "qwen3b": 6,
     }
 
     PII_SAFETY_TYPES = {
@@ -549,9 +549,11 @@ class DetectionService:
             entity.end = entity.end_char
             entity.metadata["context_offset"] = context_offset
     ENTITY_SPECIALIZATIONS = {
-        "PERSON": {"PATIENT", "DOCTOR", "PHYSICIAN", "NURSE", "PROVIDER", "HEALTHCARE_STAFF", "CARDHOLDER_NAME"},
-        "ORGANIZATION": {"HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION", "INSURANCE_PROVIDER"},
-        "LOCATION": {"ADDRESS", "FACILITY_ADDRESS", "CITY", "STATE"},
+        "PERSON": {"PATIENT", "DOCTOR", "PHYSICIAN", "NURSE", "PROVIDER", "HEALTHCARE_STAFF", "CARDHOLDER_NAME", "MEDICATION"},
+        "ORGANIZATION": {"HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION", "INSURANCE_PROVIDER", "ORGANIZATION_CONTACT_INFO", "MEDICATION"},
+        "LOCATION": {"ADDRESS", "CITY_STATE_ZIP", "FACILITY_ADDRESS", "CITY", "STATE", "ZIP_CODE"},
+        "DATE_TIME": {"DATE", "DATE_OF_BIRTH", "DATE_OF_SERVICE", "ADMISSION_DATE", "DISCHARGE_DATE", "DOCUMENT_CREATION_DATE", "COVERAGE_DATE", "DUE_DATE", "VISIT_DATE", "START_DATE"},
+        "PHONE_NUMBER": {"US_PHONE_NUMBER", "CUSTOMER_SERVICE_NUMBER", "ORGANIZATION_CONTACT_INFO"},
     }
 
     @staticmethod
@@ -913,6 +915,7 @@ class DetectionService:
                     page_number,
                     custom_text=context["text"],
                     context_offset=context["start"],
+                    allow_claimed_spans=True,
                     known_entities=context.get("known_entities", []),
                 )
             )
@@ -1089,9 +1092,12 @@ class DetectionService:
                 and entity.entity_type
                 not in {
                     "ADDRESS",
+                    "CITY_STATE_ZIP",
                     "CLINICAL_SECTION",
                     "PHONE_NUMBER",
                     "US_PHONE_NUMBER",
+                    "CUSTOMER_SERVICE_NUMBER",
+                    "ORGANIZATION_CONTACT_INFO",
                 }
             ):
                 logger.info(
@@ -1102,8 +1108,8 @@ class DetectionService:
             filtered_results.append(entity)
         results = filtered_results
 
-        # 2. Contextual Re-classification
-        results = self._contextual_reclassify(state.original_text, results)
+        # 2. Merge multi-line addresses (e.g. Street + City/State/Zip on line 2)
+        results = self._merge_adjacent_address_lines(state.original_text, results)
 
         # 3. Conservative adjacent-name merge for OCR/model fragments such as
         # "David A" + "Wilson" when they belong to one labeled patient field.
@@ -1119,7 +1125,10 @@ class DetectionService:
             page_number,
         )
 
-        # 5. Medication-Dosage Association
+        # 5. Contextual Re-classification (applies to all entities including safety net)
+        results = self._contextual_reclassify(state.original_text, results)
+
+        # 6. Medication-Dosage Association
         self._associate_medication_dosages(results)
         results = self._calibrate_confidence(results, config)
 
@@ -1137,39 +1146,135 @@ class DetectionService:
         )
         return results
 
+    def _merge_adjacent_address_lines(
+        self,
+        text: str,
+        entities: list[DetectionResult],
+    ) -> list[DetectionResult]:
+        address_types = {"ADDRESS", "CITY_STATE_ZIP"}
+        ordered = sorted(
+            entities,
+            key=lambda entity: (
+                entity.page_number,
+                entity.start_char,
+                entity.end_char,
+            ),
+        )
+        merged: list[DetectionResult] = []
+        index = 0
+
+        while index < len(ordered):
+            current = ordered[index].model_copy(deep=True)
+            index += 1
+
+            if current.entity_type in address_types:
+                while index < len(ordered):
+                    following = ordered[index]
+                    if (
+                        current.page_number != following.page_number
+                        or following.entity_type not in address_types
+                        or following.start_char < current.end_char
+                    ):
+                        break
+
+                    gap = text[current.end_char:following.start_char]
+                    if len(gap) <= 60 and ("\n" in gap or "," in gap or " " in gap):
+                        current.end_char = following.end_char
+                        current.entity_value = text[current.start_char:current.end_char].strip()
+                        current.text = current.entity_value
+                        current.entity_type = "ADDRESS"
+                        current.canonical_type = "ADDRESS"
+                        current.confidence_score = max(current.confidence_score, following.confidence_score)
+                        index += 1
+                    else:
+                        break
+
+                after_text = text[current.end_char:min(len(text), current.end_char + 120)]
+                csz_match = re.match(
+                    r"^[ \t]*(?:\r?\n)?[ \t]*(?:City,?[ \t]*State[ \t]*(?:and[ \t]*)?Zip|City/State/Zip|CSZ)?[ \t]*[:\-]?[ \t]*([A-Za-z\s.'-]+,[ \t]*[A-Z]{2}[ \t]+\d{5}(?:-\d{4})?)",
+                    after_text,
+                    re.IGNORECASE,
+                )
+                if csz_match:
+                    match_end = current.end_char + csz_match.end()
+                    current.end_char = match_end
+                    current.entity_value = text[current.start_char:match_end].strip()
+                    current.text = current.entity_value
+                    current.entity_type = "ADDRESS"
+                    current.canonical_type = "ADDRESS"
+
+            merged.append(current)
+
+        return merged
+
     def _contextual_reclassify(self, text: str, entities: list[DetectionResult]) -> list[DetectionResult]:
         for entity in entities:
-            # Get surrounding text window (e.g., 40 characters)
-            start = max(0, entity.start_char - 40)
-            end = min(len(text), entity.end_char + 40)
+            start = max(0, entity.start_char - 80)
+            end = min(len(text), entity.end_char + 80)
             context = text[start:end].lower()
+            line_prefix = text[start:entity.start_char].split("\n")[-1].lower()
 
+            # 1. Insurance & Claim ID reclassifications
             if entity.entity_type in {"INSURANCE_ID", "POLICY_NUMBER"}:
-                if "member" in context:
+                if "member" in line_prefix or "member" in context:
                     entity.entity_type = "MEMBER_ID"
-                elif "group" in context:
+                elif "group" in line_prefix or "group" in context:
                     entity.entity_type = "GROUP_NUMBER"
-                elif "eob" in context:
+                elif "eob" in line_prefix or "eob" in context:
                     entity.entity_type = "EOB_NUMBER"
 
-            if entity.entity_type == "PHONE_NUMBER" and "npi" in context:
-                # If it is valid Luhn NPI, reclassify
-                if BaseDetector.is_valid_npi(entity.entity_value):
+            # 2. Phone Numbers: Contextual customer service vs patient personal phone
+            if entity.entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER"}:
+                if "npi" in context and BaseDetector.is_valid_npi(entity.entity_value):
                     entity.entity_type = "NPI_NUMBER"
+                elif any(kw in line_prefix for kw in ["customer service", "support", "help desk", "inquiries", "contact us", "response line", "hotline", "office phone", "claims phone"]):
+                    entity.entity_type = "ORGANIZATION_CONTACT_INFO"
+                else:
+                    entity.entity_type = "PHONE_NUMBER"
 
+            # 3. Dates: Contextual reclassification
+            if entity.entity_type in {"DATE", "DATE_TIME"}:
+                if any(kw in line_prefix for kw in ["eob date", "statement date", "print date", "created on", "invoice date", "generated on", "issue date"]):
+                    entity.entity_type = "DOCUMENT_CREATION_DATE"
+                elif any(kw in line_prefix for kw in ["date of birth", "dob", "birth date", "born"]):
+                    entity.entity_type = "DATE_OF_BIRTH"
+                elif any(kw in line_prefix for kw in ["date(s) of service", "service date", "admission date", "discharge date", "visit date", "date of service", "dos"]):
+                    entity.entity_type = "DATE_OF_SERVICE"
+                elif any(kw in line_prefix for kw in ["coverage date", "effective date", "enrollment date", "termination date"]):
+                    entity.entity_type = "COVERAGE_DATE"
+                elif any(kw in line_prefix for kw in ["due date", "payment due"]):
+                    entity.entity_type = "DUE_DATE"
+
+            # 4. Medication misclassified as PERSON or ORGANIZATION
+            if entity.entity_type in {"PERSON", "ORGANIZATION"}:
+                val_lower = entity.entity_value.lower()
+                MED_NAMES = {
+                    "aspirin", "atorvastatin", "metformin", "lisinopril", "amoxicillin", "omeprazole", "gabapentin",
+                    "levothyroxine", "ozempic", "metoprolol", "losartan", "hydrochlorothiazide", "simvastatin",
+                    "sertraline", "prednisone", "doxycycline", "ciprofloxacin", "clopidogrel", "eliquis", "xarelto",
+                    "januvia", "farxiga", "jardiance", "humira", "keytruda", "dupixent", "adderall", "vyvanse",
+                    "warfarin", "tramadol", "albuterol", "montelukast", "brilinta", "lipitor", "zocor", "synthroid",
+                    "crestor", "align", "dicyclomine", "probiotic", "insulin", "ibuprofen", "paracetamol", "acetaminophen",
+                }
+                if any(med in val_lower for med in MED_NAMES):
+                    entity.entity_type = "MEDICATION"
+                elif re.search(r"\b\d+\s*(?:mg|mcg|ml|g|tablets?|capsules?)\b", context) and any(kw in context for kw in ["rx", "take", "daily", "dispense", "oral", "dose", "tablet", "capsule", "medication", "prescribed"]):
+                    entity.entity_type = "MEDICATION"
+
+            # 5. Patient name contextual reclassification
             if entity.entity_type == "PERSON":
-                preceding = text[max(0, entity.start_char - 240):entity.start_char]
+                preceding_240 = text[max(0, entity.start_char - 240):entity.start_char]
                 has_name_label = bool(
                     re.search(
-                        r"(?:^|\n)[ \t]*[ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢*\-]?[ \t]*Name[ \t]*[:\-][ \t]*$",
-                        preceding,
+                        r"(?:^|\n)[ \t]*[\*•\-]?[ \t]*Name[ \t]*[:\-][ \t]*$",
+                        preceding_240,
                         re.IGNORECASE,
                     )
                 )
-                patient_section = preceding.lower().rfind("patient information")
+                patient_section = preceding_240.lower().rfind("patient information")
                 next_section = max(
-                    preceding.lower().rfind("appointment details"),
-                    preceding.lower().rfind("medical history"),
+                    preceding_240.lower().rfind("appointment details"),
+                    preceding_240.lower().rfind("medical history"),
                 )
                 if has_name_label and patient_section > next_section:
                     entity.entity_type = "PATIENT"

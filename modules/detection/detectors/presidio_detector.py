@@ -303,9 +303,27 @@ class PresidioDetector(BaseDetector):
                     continue
 
             # If spaCy falsely tags a disease/medication term as PERSON/ORG/LOCATION, skip it so MedSpaCy handles it
-            DISEASE_KEYWORDS = {"hyperlipidemia", "hypercholesterolemia", "diabetes", "hypertension", "celiac", "thyroid", "anemia", "heart disease", "gerd", "reflux", "ibs"}
-            if current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"} and any(disease in value_lower for disease in DISEASE_KEYWORDS):
-                continue
+            MEDICATION_KEYWORDS = {
+                "aspirin", "atorvastatin", "metformin", "lisinopril", "amoxicillin", "omeprazole", "gabapentin",
+                "levothyroxine", "ozempic", "metoprolol", "losartan", "hydrochlorothiazide", "simvastatin",
+                "sertraline", "prednisone", "doxycycline", "ciprofloxacin", "clopidogrel", "eliquis", "xarelto",
+                "januvia", "farxiga", "jardiance", "humira", "keytruda", "dupixent", "adderall", "vyvanse",
+                "warfarin", "tramadol", "albuterol", "montelukast", "brilinta", "lipitor", "zocor", "synthroid",
+                "crestor", "align", "dicyclomine", "probiotic", "insulin", "ibuprofen", "paracetamol", "acetaminophen",
+                "advil", "tylenol", "motrin", "zofran", "ondansetron", "pantoprazole", "escitalopram", "lexapro",
+                "zoloft", "prozac", "fluoxetine", "amiodarone", "digoxin", "heparin", "enoxaparin", "lovenox",
+            }
+            DISEASE_KEYWORDS = {
+                "hyperlipidemia", "hypercholesterolemia", "diabetes", "hypertension", "celiac", "thyroid", "anemia",
+                "heart disease", "gerd", "reflux", "ibs", "asthma", "pneumonia", "bronchitis", "covid", "infarction",
+                "ischemia", "arrhythmia", "fibrillation", "carcinoma", "lymphoma", "leukemia", "sepsis", "stroke",
+            }
+            if current_entity_type in {"PERSON", "ORGANIZATION", "LOCATION"}:
+                if any(med in value_lower for med in MEDICATION_KEYWORDS) or any(dis in value_lower for dis in DISEASE_KEYWORDS):
+                    continue
+                surrounding = text[max(0, start_char - 30):min(len(text), end_char + 30)].lower()
+                if re.search(r"\b\d+\s*(?:mg|mcg|ml|g|tablets?|capsules?)\b", surrounding) and any(kw in surrounding for kw in ["take", "rx", "daily", "dispense", "oral", "dose", "tablet", "capsule", "medication", "prescribed"]):
+                    continue
 
             # PERSON entities should never span multiple lines or include credentials.
             if current_entity_type == "PERSON":

@@ -47,6 +47,7 @@ class EntityMapper:
         # ADDRESS
         # ==========================
         "ADDRESS": "ADDRESS",
+        "CITY_STATE_ZIP": "ADDRESS",
         "LOCATION": "LOCATION",
         "CITY": "CITY",
         "STATE": "STATE",
@@ -66,7 +67,10 @@ class EntityMapper:
         "PHONE": "PHONE_NUMBER",
         "PHONE NUMBER": "PHONE_NUMBER",
         "PHONE_NUMBER": "PHONE_NUMBER",
+        "US_PHONE_NUMBER": "PHONE_NUMBER",
         "MOBILE": "PHONE_NUMBER",
+        "CUSTOMER_SERVICE_NUMBER": "CUSTOMER_SERVICE_NUMBER",
+        "ORGANIZATION_CONTACT_INFO": "ORGANIZATION_CONTACT_INFO",
 
         "URL": "URL",
         "IP_ADDRESS": "IP_ADDRESS",
@@ -94,6 +98,10 @@ class EntityMapper:
         "BANK ACCOUNT": "BANK_ACCOUNT_NUMBER",
         "BANK_ACCOUNT": "BANK_ACCOUNT_NUMBER",
         "BANK ACCOUNT NUMBER": "BANK_ACCOUNT_NUMBER",
+        "FINANCIAL_AMOUNT": "FINANCIAL_AMOUNT",
+        "AMOUNT": "FINANCIAL_AMOUNT",
+        "COST_SHARING_AMOUNT": "COST_SHARING_AMOUNT",
+        "PREMIUM_AMOUNT": "PREMIUM_AMOUNT",
 
         "IFSC": "IFSC_CODE",
 
@@ -115,6 +123,10 @@ class EntityMapper:
         "DATE_TIME": "DATE_TIME",
         "DATE_RANGE": "DATE_RANGE",
         "VISIT_DATE": "VISIT_DATE",
+        "DATE_OF_SERVICE": "DATE_OF_SERVICE",
+        "DOCUMENT_CREATION_DATE": "DOCUMENT_CREATION_DATE",
+        "COVERAGE_DATE": "COVERAGE_DATE",
+        "DUE_DATE": "DUE_DATE",
         "TIME": "TIME",
         "AGE": "AGE",
 
@@ -291,6 +303,16 @@ class PrivacyMapper:
         "INVOICE_NUMBER": "PII",
         "START_DATE": "PII",
         "SALARY": "PII",
+        "FINANCIAL_AMOUNT": "PII",
+        "AMOUNT": "PII",
+        "COST_SHARING_AMOUNT": "PII",
+        "PREMIUM_AMOUNT": "PII",
+        "CUSTOMER_SERVICE_NUMBER": "PII",
+        "ORGANIZATION_CONTACT_INFO": "PII",
+        "DOCUMENT_CREATION_DATE": "PII",
+        "DATE_OF_SERVICE": "PHI",
+        "COVERAGE_DATE": "PHI",
+        "DUE_DATE": "PII",
 
         # ==========================
         # PHI

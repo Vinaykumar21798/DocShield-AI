@@ -202,6 +202,14 @@ class RegexDetector(BaseDetector):
         "VITAL_SIGN":
             r"\b\d{2,3}/\d{2,3}\s*(?:mmHg)?\b",
 
+        "CITY_STATE_ZIP":
+            r"(?im)\b(?:City,?[ \t]*State[ \t]*(?:and[ \t]*)?Zip|City/State/Zip|CSZ)[ \t]*[:\-][ \t]*([A-Za-z\s.'-]+,[ \t]*[A-Z]{2}[ \t]+\d{5}(?:-\d{4})?)\b"
+            r"|\b([A-Z][a-zA-Z\s.'-]+,[ \t]*[A-Z]{2}[ \t]+\d{5}(?:-\d{4})?)\b",
+
+        "FINANCIAL_AMOUNT":
+            r"(?im)\b(?:Total(?:[ \t]+(?:Amount|Due|Paid|Billed|Claimed))?|Amount(?:[ \t]+(?:Due|Paid|Billed|Claimed))?|Billed[ \t]+Amount|Copay|Coinsurance|Deductible|Premium(?:[ \t]+Due)?|Monthly[ \t]+Premium|Gross[ \t]+Salary|Net[ \t]+Pay|Account[ \t]+Balance|Payment[ \t]+Amount)[ \t]*[:\-][ \t]*(\$?[ \t]*\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b"
+            r"|(?:\$|USD\s*|EUR\s*|INR\s*|Rs\.?\s*)\s*\d{1,3}(?:,\d{3})*(?:\.\d{2})\b",
+
         "DOSAGE":
             r"\b\d+(?:\.\d+)?\s*(?:mg|mcg|ml|g)\b",
     }
@@ -232,11 +240,13 @@ class RegexDetector(BaseDetector):
         "INSURANCE_PROVIDER": 89,
         "PROVIDER": 88,
         "ADDRESS": 82,
+        "CITY_STATE_ZIP": 82,
         "PO_BOX": 82,
         "DIAGNOSIS": 82,
         "MEDICATION": 82,
         "PROCEDURE": 82,
         "PAN_NUMBER": 80,
+        "FINANCIAL_AMOUNT": 78,
         "TAX_ID": 90,
         "NPI_NUMBER": 90,
         "MEMBER_ID": 90,
@@ -322,6 +332,8 @@ class RegexDetector(BaseDetector):
     }
     GROUP_VALUE_ENTITIES = {
         "ADDRESS",
+        "CITY_STATE_ZIP",
+        "FINANCIAL_AMOUNT",
         "BANK_ACCOUNT",
         "DATE",
         "DATE_RANGE",
