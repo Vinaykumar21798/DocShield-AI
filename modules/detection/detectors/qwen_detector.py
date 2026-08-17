@@ -1,9 +1,11 @@
+import csv
+import io
 import json
 import logging
 import os
 import re
 import time
-from typing import List, Literal
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
@@ -13,12 +15,90 @@ from modules.detection.taxonomy import TaxonomyService
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Taxonomy fallback defaults (used only if TaxonomyService.get_target_entities
+# returns nothing for the given document_type). Sourced from the
+# Global_PII_PHI_Entity_Taxonomy workbook's Implementation_Shortlist sheet:
+# 67 Must Have entities (36 Critical / 21 High / 10 Medium) and 40 Nice to
+# Have entities. Kept as the single source of truth here so a missing
+# TaxonomyService config never silently narrows coverage.
+# ---------------------------------------------------------------------------
+DEFAULT_MUST_HAVE = [
+    # Critical
+    "API_KEY", "ACCESS_TOKEN", "PASSWORD", "AADHAAR_NUMBER", "CPF", "CURP",
+    "EMIRATES_ID", "FIN", "IQAMA_NATIONAL_ID", "MBI", "MY_NUMBER", "NIN",
+    "NINO", "NRIC", "PAN_INDIA", "RESIDENT_REGISTRATION_NUMBER", "SIN", "SSN",
+    "DRIVER_LICENSE_NUMBER", "PASSPORT_NUMBER", "PAN_PCI", "CVV_CVC_CID_CVN",
+    "FULL_TRACK_DATA", "PIN_PIN_BLOCK", "BIOMETRIC",
+    "FACIAL_RECOGNITION_TEMPLATE", "FINGERPRINT", "VOICEPRINT", "GENETIC_DATA",
+    "DIAGNOSIS", "HEALTH_DATA", "HEALTH_PLAN_BENEFICIARY_NUMBER", "MRN",
+    "NPI", "PATIENT_ID",
+    # High
+    "BANK_ACCOUNT_NUMBER", "CARDHOLDER_NAME", "EXPIRATION_DATE",
+    "DATE_OF_BIRTH", "FULL_NAME", "EMAIL_ADDRESS", "PHONE_NUMBER",
+    "HOME_ADDRESS", "GPS_COORDINATES", "GEOLOCATION", "DEVICE_ID", "IMEI",
+    "IP_ADDRESS", "EMPLOYEE_ID", "SOCIAL_SECURITY_TAX_ID",
+    "HEALTH_INSURANCE_ID", "LAB_RESULT", "MEDICAL_CONDITION", "MEDICATION",
+    "PROCEDURE", "TREATMENT",
+    # Medium
+    "ACCOUNT_ID", "AGE", "CUSTOMER_ID", "FIRST_NAME", "LAST_NAME",
+    "LICENSE_PLATE", "PHOTO", "POSTAL_CODE", "SIGNATURE", "WORK_EMAIL",
+]
+
+DEFAULT_NICE_TO_HAVE = [
+    "CNPJ", "ADMISSION_DATE", "DATE_OF_SERVICE", "DISCHARGE_DATE", "IBAN",
+    "IMSI", "MAC_ADDRESS", "PLACE_OF_BIRTH", "ROUTING_NUMBER", "SWIFT_BIC",
+    "SALARY", "SERVICE_CODE", "SORT_CODE", "STUDENT_ID", "URL",
+    "VEHICLE_REGISTRATION", "ADVERTISING_ID", "BROWSER_FINGERPRINT", "CITY",
+    "COOKIE_ID", "COUNTRY", "EMAIL_DOMAIN", "EMPLOYER_NAME", "FAX_NUMBER",
+    "GENDER_SEX", "JOB_TITLE", "MIDDLE_NAME", "NATIONALITY", "ORDER_ID",
+    "SOCIAL_MEDIA_HANDLE", "TRANSACTION_ID", "USERNAME",
+    "VEHICLE_IDENTIFICATION_NUMBER", "VOICE_RECORDING", "WORK_PHONE",
+    "BROWSER_VERSION", "IP_SUBNET_NETWORK_PREFIX", "LANGUAGE_LOCALE",
+    "OPERATING_SYSTEM", "TIME_ZONE",
+]
+
+# Explicit, bounded noise definition. This replaces the old vague
+# "don't return generic labels/headings/boilerplate" instruction, which left
+# the model free to drop real entities it merely *suspected* were noise.
+DROP_PATTERNS_TEXT = """\
+- Field labels / form headers with no value (e.g. "Name:", "SSN:" with nothing filled in)
+- Placeholder / sample / template values (e.g. "John Doe", "123-45-6789" inside a format
+  example, "user@example.com")
+- Aggregate or de-identified statistics (e.g. "42% of patients reported...", "average age 54")
+- Document/section metadata: page numbers, section titles, document IDs, revision numbers
+- Organizational (non-personal) identifiers: company registration numbers, generic org email
+  aliases (info@company.com, support@company.com)
+- Generic role/title mentions with no bound person (e.g. "the attending physician", "a patient")
+- Publicly published, non-personal addresses (e.g. a hospital's public street address, not a
+  patient's home address)
+- Boilerplate legal/consent text, disclaimers, footers
+- Currency amounts with no personal linkage (e.g. a generic price list total)
+- Common words that only coincidentally match a pattern (e.g. "Bill" as a verb, "May" as a
+  month) -- resolve using context, not literal string matching
+- Empty, null, "N/A", or placeholder values in a structured field, and schema/column-definition
+  rows in a table (the header row itself, not a data row)
+
+IMPORTANT: a DROP pattern is only a default. If the same span is also a real instance of a
+MUST_HAVE or NICE_TO_HAVE entity in context, it must still be extracted. When in doubt between
+DROP and MUST_HAVE, always resolve to MUST_HAVE -- a missed entity is a breach, a dropped noise
+token is not.
+"""
+
+
 class Qwen3BEntity(BaseModel):
     entity_type: str
     entity_value: str
     confidence_score: float
     start_char: int
     end_char: int
+    # Populated by the model only for structured input (JSON/CSV/table
+    # records), e.g. "patients[3].identifiers.mrn" or "row_12.ssn". Left None
+    # for free-text spans. Kept optional so unstructured-mode responses are
+    # unaffected. This is intentionally NOT added to DetectionResult itself --
+    # it is folded into DetectionResult.metadata so the result schema used
+    # across the rest of the pipeline stays unchanged.
+    field_path: Optional[str] = None
 
 
 class Qwen3BResponse(BaseModel):
@@ -28,12 +108,25 @@ class Qwen3BResponse(BaseModel):
 class Qwen3BDetector(BaseDetector):
     """
     Semantic extractor using Qwen3:4b via Ollama.
+
+    Handles both unstructured free text (notes, letters, transcripts) and
+    structured data (JSON / CSV / table rows) arriving as a single serialized
+    `text` string -- input shape is auto-detected per call, per the project's
+    zero-false-negative mandate: a missed entity is treated as a breach event,
+    a false positive is treated as a minor, acceptable cost.
     """
 
     MODEL_NAME = "qwen3:4b"
     TEMPERATURE = 0.10
     TOP_P = 0.90
     KEEP_ALIVE = "5m"
+
+    # Soft output-budget ceiling only -- NOT a "stop looking for entities"
+    # instruction. Sized to roughly match NUM_PREDICT so the model doesn't
+    # get cut off mid-JSON on a very dense input. Raise this (and NUM_PREDICT)
+    # together if you regularly see truncated responses in the logs.
+    SOFT_RESULT_CEILING = 25
+    NUM_PREDICT = 768
 
     def __init__(self):
         super().__init__()
@@ -46,11 +139,12 @@ class Qwen3BDetector(BaseDetector):
         try:
             from ollama import Client
 
-            self.client = Client(host=ollama_host)
-        except ImportError:
+            self.client = Client(host=ollama_host, timeout=180.0)
+        except (ImportError, Exception):
             logger.warning(
-                "Ollama package is not installed. Qwen3:4b detection will be skipped."
+                "Ollama package is not installed or unavailable. Qwen3:4b detection will be skipped."
             )
+
     @property
     def name(self) -> str:
         return "qwen3b"
@@ -100,7 +194,6 @@ class Qwen3BDetector(BaseDetector):
         match = min(matches, key=lambda item: abs(item.start() - preferred_start))
         return match.start(), match.end()
 
-
     @staticmethod
     def _format_known_entities(known_entities: list[dict]) -> str:
         if not known_entities:
@@ -108,15 +201,158 @@ class Qwen3BDetector(BaseDetector):
 
         lines = []
         for entity in known_entities:
+            field_path = entity.get("field_path")
+            location = (
+                f"field '{field_path}'"
+                if field_path
+                else f"chars {entity.get('start_char')}-{entity.get('end_char')}"
+            )
             lines.append(
-                "- {entity_type} at chars {start_char}-{end_char} "
+                "- {entity_type} at {location} "
                 "(already detected; do not return)".format(
                     entity_type=entity.get("entity_type", "ENTITY"),
-                    start_char=entity.get("start_char"),
-                    end_char=entity.get("end_char"),
+                    location=location,
                 )
             )
         return "\n".join(lines)
+
+    @staticmethod
+    def _detect_input_mode(text: str) -> Literal["structured", "unstructured"]:
+        """
+        Best-effort classification of the serialized `text` payload so the
+        prompt can apply the right extraction strategy (Section 6a/6b of the
+        detection design). This is a heuristic, not a guarantee -- the prompt
+        itself also tells the model to judge structure directly from the
+        text, so a misclassification here degrades gracefully rather than
+        silently skipping entities.
+        """
+        stripped = text.strip()
+        if not stripped:
+            return "unstructured"
+
+        # JSON object or array
+        if stripped[0] in "{[":
+            try:
+                json.loads(stripped)
+                return "structured"
+            except (ValueError, json.JSONDecodeError):
+                pass
+
+        # CSV / TSV heuristic: multiple lines, consistent delimiter count,
+        # first line looks like a header (no long free-text sentences).
+        lines = [line for line in stripped.splitlines() if line.strip()]
+        if len(lines) >= 2:
+            for delim in (",", "\t", "|"):
+                counts = [line.count(delim) for line in lines[:10]]
+                if counts[0] > 0 and len(set(counts)) == 1:
+                    header_fields = lines[0].split(delim)
+                    if all(len(f.strip()) <= 40 for f in header_fields):
+                        return "structured"
+
+        return "unstructured"
+
+    def _build_prompt(
+        self,
+        text: str,
+        input_mode: Literal["structured", "unstructured"],
+        must_have_str: str,
+        nice_to_have_str: str,
+        known_entities_text: str,
+    ) -> str:
+        structured_guidance = ""
+        if input_mode == "structured":
+            structured_guidance = """
+=== STRUCTURED INPUT MODE ===
+This input is structured data (JSON, CSV/table rows, or key-value records), not prose.
+1. Walk EVERY field/column/key, including nested objects and array elements. Do not stop
+   at the top level or the first few rows/records.
+2. The field name / column header is a STRONG PRIOR for entity_type (e.g. a column named
+   "ssn", "patient_mrn", "email", "dob" maps directly to the matching entity type) -- but
+   you must still inspect the VALUE, not just the key name:
+     a. an empty/null/"N/A"/placeholder value is DROP even under a sensitive-sounding key.
+     b. a generically-named field ("field_12", "value", "notes", "comment", "remarks") may
+        still contain a real MUST_HAVE entity typed as free text -- scan its value like
+        prose, not just as an opaque field.
+3. Do not treat a generic column name as proof the column is safe -- check actual values.
+4. Skip only true header/schema/column-definition rows; every populated data row must be
+   scanned, even if earlier rows were empty.
+5. For arrays of records, process every record independently -- a match in record #1 does
+   not exempt identical-looking fields in record #50.
+6. When you report a structured-mode entity, also set "field_path" to the exact key/column
+   path it came from (dot notation for nesting, [i] for array index), IN ADDITION TO the
+   required start_char/end_char offsets of that value within the raw input text below.
+"""
+
+        return f"""You are a senior PII/PHI redaction and compliance extraction engine operating under a
+ZERO-FALSE-NEGATIVE mandate. Your output feeds a masking pipeline. If you fail to identify a
+real sensitive entity, that entity will be exposed in a data breach, regulatory filing, or
+third-party leak -- this is treated as a critical failure, more costly than over-flagging.
+
+Rules of engagement:
+1. When uncertain whether a span is a real entity or noise, INCLUDE it (lower the
+   confidence_score, but still return it). Never silently drop a plausible entity.
+2. The spans listed under 'Known high-confidence spans' are ALREADY RESOLVED. Do NOT
+   re-identify or return anything overlapping those locations.
+3. Classify strictly against the MUST_HAVE and NICE_TO_HAVE lists below. Anything matching a
+   NO_NEED / DROP pattern must be excluded, UNLESS it is also a real instance of a MUST_HAVE /
+   NICE_TO_HAVE type (see the DROP section for the explicit tie-breaker rule).
+4. Do not invent entities. Every entity_value must be an exact, verbatim substring of the
+   input text below.
+5. This input has been classified as {input_mode.upper()}. Apply the matching strategy
+   (see STRUCTURED INPUT MODE guidance below if applicable).
+{structured_guidance}
+=== PRIORITY 1: MUST_HAVE ENTITIES (Highest Priority - Reliably Extract All, Zero Misses) ===
+{must_have_str}
+
+=== PRIORITY 2: NICE_TO_HAVE ENTITIES (Secondary Priority - Extract When Present) ===
+{nice_to_have_str}
+
+=== NO_NEED / DROP -- Explicit Noise Patterns (do not flag these) ===
+{DROP_PATTERNS_TEXT}
+
+Return EXACTLY this JSON schema, nothing else (no markdown fences, no reasoning):
+{{
+    "results": [
+        {{
+            "entity_type": "SSN",
+            "entity_value": "078-05-1120",
+            "confidence_score": 0.93,
+            "start_char": 15,
+            "end_char": 26,
+            "field_path": null
+        }}
+    ]
+}}
+
+Rules:
+- start_char/end_char are REQUIRED and must be the exact 0-indexed boundaries of
+  entity_value within the raw input text below (this applies even in structured mode, since
+  the input is one serialized text string).
+- field_path is OPTIONAL: set it for structured-mode entities (e.g. "patients[3].mrn"),
+  leave it null for free-text/prose spans.
+- entity_type must be one of the MUST_HAVE or NICE_TO_HAVE codes above (uppercase,
+  underscore-separated).
+- confidence_score in [0.0, 1.0]. Use LOWER confidence for uncertain spans instead of
+  omitting them -- low confidence is never a reason to drop a real entity.
+- Cover the ENTIRE input (all text / all fields / all rows). Do not stop early. Return up to
+  {self.SOFT_RESULT_CEILING} results; if you find more than that in one input, prioritize
+  MUST_HAVE (Critical, then High, then Medium) over NICE_TO_HAVE.
+- DATE values must be real calendar dates.
+- If truly nothing is present, return {{"results": []}} -- this should be rare once
+  known_entities and DROP filtering are applied correctly.
+
+Before finalizing, verify: did I scan the entire input (not just the first portion)? Did I
+check specifically for each MUST_HAVE type plausible for this input/document type? Did I avoid
+dropping any span just because it was low-confidence or resembled a DROP pattern, when a
+MUST_HAVE interpretation was also plausible? Did I avoid overlapping any known high-confidence
+span? Is every entity_value an exact verbatim substring at the stated offsets?
+
+Known high-confidence spans (DO NOT re-extract):
+{known_entities_text}
+
+Input Text:
+{text}
+"""
 
     def detect(
         self,
@@ -132,56 +368,21 @@ class Qwen3BDetector(BaseDetector):
         document_type = context.get("document_type")
 
         target_entities = context.get("target_entities") or TaxonomyService.get_target_entities(document_type)
-        must_have = target_entities.get("MUST_HAVE") or [
-            "PERSON", "PATIENT", "DOCTOR", "SSN", "MRN", "DIAGNOSIS", "DISEASE",
-            "MEDICATION", "EMAIL", "PHONE_NUMBER", "BANK_ACCOUNT_NUMBER",
-            "CREDIT_CARD_NUMBER", "PAN_NUMBER", "AADHAAR_NUMBER", "PASSPORT_NUMBER"
-        ]
-        nice_to_have = target_entities.get("NICE_TO_HAVE") or [
-            "PROCEDURE", "LAB", "LAB_RESULT", "VITAL_SIGN", "ALLERGY", "DATE",
-            "DATE_TIME", "LOCATION", "ADDRESS", "ORGANIZATION", "HOSPITAL",
-            "POLICY_NUMBER", "CLAIM_NUMBER", "NPI_NUMBER"
-        ]
+        must_have = target_entities.get("MUST_HAVE") or DEFAULT_MUST_HAVE
+        nice_to_have = target_entities.get("NICE_TO_HAVE") or DEFAULT_NICE_TO_HAVE
 
         must_have_str = "\n".join(f"- {e}" for e in must_have)
         nice_to_have_str = "\n".join(f"- {e}" for e in nice_to_have)
 
-        prompt = f"""You are a senior clinical and PII/PHI information extraction assistant.
-CRITICAL MANDATE:
-1. The spans listed under 'Known high-confidence spans' are ALREADY RESOLVED. Do NOT re-identify or return any entity overlapping those character ranges.
-2. Focus on discovering all OTHER MUST_HAVE and NICE_TO_HAVE entities in the surrounding text that were missed by earlier detectors.
+        input_mode = self._detect_input_mode(text)
+        prompt = self._build_prompt(
+            text=text,
+            input_mode=input_mode,
+            must_have_str=must_have_str,
+            nice_to_have_str=nice_to_have_str,
+            known_entities_text=known_entities_text,
+        )
 
-=== PRIORITY 1: MUST_HAVE ENTITIES (Highest Priority - Reliably Extract All) ===
-{must_have_str}
-
-=== PRIORITY 2: NICE_TO_HAVE ENTITIES (Secondary Priority - Extract When Present) ===
-{nice_to_have_str}
-
-Return EXACTLY this JSON schema:
-{{
-    "results": [
-        {{
-            "entity_type": "PERSON",
-            "entity_value": "John Doe",
-            "confidence_score": 0.90,
-            "start_char": 15,
-            "end_char": 23
-        }}
-    ]
-}}
-
-Strict ensure start_char and end_char indices represent the exact 0-indexed boundaries in the input text.
-Return at most 18 results. If no real entity values exist, return {{"results": []}}.
-Do not return generic labels, headings, or boilerplate noise (DROP categories).
-DATE values must be real calendar dates.
-Return ONLY valid JSON. No reasoning, no markdown wrappers, no explanation.
-
-Known high-confidence spans (DO NOT re-extract):
-{known_entities_text}
-
-Input Text:
-{text}
-"""
         if self.client is None:
             logger.warning(
                 "Qwen3:4b detection skipped because the `ollama` Python package is not installed."
@@ -198,12 +399,16 @@ Input Text:
                 options={
                     "temperature": self.TEMPERATURE,
                     "top_p": self.TOP_P,
-                    "num_predict": 1536,
+                    "num_predict": self.NUM_PREDICT,
                 },
                 keep_alive=self.KEEP_ALIVE,
             )
             elapsed = time.perf_counter() - start
-            logger.info("Qwen3:4b extraction completed in %.3f sec", elapsed)
+            logger.info(
+                "Qwen3:4b extraction completed in %.3f sec (input_mode=%s)",
+                elapsed,
+                input_mode,
+            )
 
             raw = ""
             if hasattr(response, "message") and hasattr(response.message, "content"):
@@ -266,6 +471,15 @@ Input Text:
                 used_spans.add((start_char, end_char))
 
                 confidence_score = max(0.0, min(1.0, item.confidence_score))
+
+                metadata = {
+                    "model": self.MODEL_NAME,
+                    "resolved": True,
+                    "input_mode": input_mode,
+                }
+                if item.field_path:
+                    metadata["field_path"] = item.field_path
+
                 results.append(
                     DetectionResult(
                         entity_type=item.entity_type.upper(),
@@ -275,10 +489,7 @@ Input Text:
                         end_char=end_char,
                         page_number=page_number,
                         detector=self.name,
-                        metadata={
-                            "model": self.MODEL_NAME,
-                            "resolved": True,
-                        },
+                        metadata=metadata,
                     )
                 )
             return results

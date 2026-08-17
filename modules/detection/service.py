@@ -1071,6 +1071,12 @@ class DetectionService:
             if not TaxonomyService.is_drop(entity.entity_type, document_type)
         ]
 
+        # Exclude low-confidence unvalidated noise (< 0.60)
+        results = [
+            entity for entity in results
+            if entity.confidence_score >= 0.60
+        ]
+
         results = self._calibrate_confidence(results, config)
         results = Deduplicator.deduplicate(results)
         results = self._resolve_overlapping_spans(results)

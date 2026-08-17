@@ -75,6 +75,59 @@ class TaxonomyService:
 
         return None
 
+    _DETECTOR_ENTITY_ALIASES = {
+        "PATIENT": "FULL NAME / PERSON NAME",
+        "PERSON": "FULL NAME / PERSON NAME",
+        "DOCTOR": "TREATING PROVIDER NAME / NPI NUMBER",
+        "PHYSICIAN": "TREATING PROVIDER NAME / NPI NUMBER",
+        "NURSE": "TREATING PROVIDER NAME / NPI NUMBER",
+        "HEALTHCARE_STAFF": "TREATING PROVIDER NAME / NPI NUMBER",
+        "PROVIDER": "TREATING PROVIDER NAME / NPI NUMBER",
+        "DISEASE": "DIAGNOSIS / MEDICAL CONDITION",
+        "DIAGNOSIS": "DIAGNOSIS / MEDICAL CONDITION",
+        "SYMPTOM": "DIAGNOSIS / MEDICAL CONDITION",
+        "PROBLEM": "DIAGNOSIS / MEDICAL CONDITION",
+        "PROCEDURE": "PROCEDURE CODE / DESCRIPTION",
+        "MEDICATION": "MEDICATION / PRESCRIPTION DETAIL",
+        "DOSAGE": "MEDICATION / PRESCRIPTION DETAIL",
+        "ALLERGY": "ALLERGY INFORMATION",
+        "VITAL_SIGN": "LAB TEST RESULT / VALUE",
+        "CLINICAL_MEASUREMENT": "LAB TEST RESULT / VALUE",
+        "LAB_RESULT": "LAB TEST RESULT / VALUE",
+        "LAB": "LAB TEST RESULT / VALUE",
+        "HOSPITAL": "COMPANY / EMPLOYER NAME",
+        "CLINIC": "COMPANY / EMPLOYER NAME",
+        "ORGANIZATION": "COMPANY / EMPLOYER NAME",
+        "LOCATION": "STREET / MAILING ADDRESS",
+        "ADDRESS": "STREET / MAILING ADDRESS",
+        "ZIP_CODE": "GEOGRAPHIC SUBDIVISION SMALLER THAN STATE (ZIP)",
+        "PIN_CODE": "GEOGRAPHIC SUBDIVISION SMALLER THAN STATE (ZIP)",
+        "DATE_OF_BIRTH": "DATE OF BIRTH",
+        "VISIT_DATE": "ADMISSION / DISCHARGE / SERVICE DATE",
+        "START_DATE": "ADMISSION / DISCHARGE / SERVICE DATE",
+        "DATE_TIME": "ADMISSION / DISCHARGE / SERVICE DATE",
+        "DATE": "ADMISSION / DISCHARGE / SERVICE DATE",
+        "SSN": "SOCIAL SECURITY NUMBER (SSN)",
+        "MRN": "MEDICAL RECORD NUMBER (MRN)",
+        "MEDICAL_RECORD_NUMBER": "MEDICAL RECORD NUMBER (MRN)",
+        "MEMBER_ID": "HEALTH PLAN BENEFICIARY/MEMBER NUMBER",
+        "GROUP_NUMBER": "GROUP / POLICY NUMBER",
+        "POLICY_NUMBER": "HEALTH INSURANCE POLICY NUMBER",
+        "CLAIM_NUMBER": "MEDICAL CLAIM NUMBER",
+        "NPI_NUMBER": "TREATING PROVIDER NAME / NPI NUMBER",
+        "NPI": "TREATING PROVIDER NAME / NPI NUMBER",
+        "US_PHONE_NUMBER": "PHONE NUMBER",
+        "PHONE_NUMBER": "PHONE NUMBER",
+        "EMAIL": "EMAIL ADDRESS",
+        "CREDIT_CARD": "PAYMENT CARD NUMBER (PAN)",
+        "BANK_ACCOUNT": "BANK ACCOUNT NUMBER",
+        "TAX_ID": "US TAX ID (EIN / ITIN)",
+        "AADHAAR_NUMBER": "AADHAAR NUMBER (INDIA)",
+        "PAN_NUMBER": "PERMANENT ACCOUNT NUMBER — INCOME TAX (INDIA)",
+        "PASSPORT_NUMBER": "PASSPORT NUMBER",
+        "DRIVING_LICENSE": "DRIVER'S LICENSE NUMBER",
+    }
+
     @classmethod
     def canonicalize(cls, raw_label: str) -> str:
         """
@@ -83,6 +136,8 @@ class TaxonomyService:
         if not raw_label:
             return ""
         cleaned = raw_label.strip().upper()
+        if cleaned in cls._DETECTOR_ENTITY_ALIASES:
+            return cls._DETECTOR_ENTITY_ALIASES[cleaned]
         return CANONICAL_ENTITY_MAPPING.get(cleaned, cleaned)
 
     @classmethod
@@ -99,9 +154,11 @@ class TaxonomyService:
             if canonical in policy_map:
                 return policy_map[canonical]["priority"]
 
-            # Fallback search for partial match
+            # Fallback search for token-boundary or full-word match
+            canonical_tokens = set(re.findall(r"\b[A-Z0-9]+\b", canonical))
             for ent_key, meta in policy_map.items():
-                if canonical == ent_key or canonical in ent_key or ent_key in canonical:
+                ent_tokens = set(re.findall(r"\b[A-Z0-9]+\b", ent_key))
+                if canonical == ent_key or (canonical_tokens and canonical_tokens.issubset(ent_tokens)):
                     return meta["priority"]
 
         # Check global policy

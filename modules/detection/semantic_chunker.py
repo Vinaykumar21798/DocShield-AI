@@ -276,6 +276,20 @@ class SemanticChunker:
         detection.end_char += chunk.start_char
         return detection
 
+    @staticmethod
+    def find_enclosing_chunk(
+        chunks: Sequence[DocumentChunk],
+        start_char: int,
+        end_char: int,
+    ) -> DocumentChunk | None:
+        """
+        Finds the first chunk that fully encloses the given character span.
+        """
+        for chunk in chunks:
+            if chunk.start_char <= start_char and end_char <= chunk.end_char:
+                return chunk
+        return None
+
     def _split_into_semantic_segments(self, text: str) -> list[tuple[int, int]]:
         """
         Identifies boundaries by double newlines, section headings, and sentences.
