@@ -578,9 +578,11 @@
           </td>
           <td><span class="entity-value">${escapeHtml(item.candidate_value || item.entity_value || "-")}</span></td>
           <td><span class="status-pill ${tone}">${escapeHtml(decision)}</span></td>
-          <td>${escapeHtml(confidencePct)}</td>
-          <td><small>${escapeHtml(item.detector || "Qwen3:4b")}</small></td>
-          <td style="max-width: 320px; font-size: 0.85rem; line-height: 1.35; color: var(--text-muted, #475569);">${escapeHtml(item.reasoning || item.reason || "-")}</td>
+          <td><strong>${escapeHtml(confidencePct)}</strong></td>
+          <td><small style="color: #64748b; font-weight: 600;">${escapeHtml(item.detector || "Qwen3:4b")}</small></td>
+          <td>
+            <div class="llm-reason-box">${escapeHtml(item.reasoning || item.reason || "Evaluated by AI")}</div>
+          </td>
         </tr>
       `;
     }).join("");

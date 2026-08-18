@@ -145,21 +145,27 @@
             <h2 id="llmAuditHeading">AI / LLM Candidate Audit</h2>
             <p id="llmAuditSummary">AI-evaluated decisions and reasoning for ambiguous candidates.</p>
           </div>
-          <div class="toolbar tabs">
-            <button class="button ghost compact is-active" id="tabLlmAccepted" type="button">Accepted (<span id="countLlmAccepted">0</span>)</button>
-            <button class="button ghost compact" id="tabLlmRejected" type="button">Rejected (<span id="countLlmRejected">0</span>)</button>
+          <div class="toolbar tabs" role="tablist">
+            <button class="audit-tab-btn is-active" id="tabLlmAccepted" type="button" role="tab">
+              <span>Accepted</span>
+              <span class="badge-count" id="countLlmAccepted">0</span>
+            </button>
+            <button class="audit-tab-btn" id="tabLlmRejected" type="button" role="tab">
+              <span>Rejected</span>
+              <span class="badge-count" id="countLlmRejected">0</span>
+            </button>
           </div>
         </div>
         <div class="table-wrap">
           <table class="reviews-table">
             <thead>
               <tr>
-                <th>Entity</th>
-                <th>Candidate Value</th>
-                <th>Decision</th>
-                <th>Confidence</th>
-                <th>Detector</th>
-                <th>Reasoning</th>
+                <th style="width: 140px;">Entity</th>
+                <th style="width: 180px;">Candidate Value</th>
+                <th style="width: 110px;">Decision</th>
+                <th style="width: 90px;">Confidence</th>
+                <th style="width: 120px;">Detector</th>
+                <th>AI Reasoning</th>
               </tr>
             </thead>
             <tbody id="llmAuditBody">

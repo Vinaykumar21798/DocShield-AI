@@ -83,6 +83,25 @@ class JSONLogFormatter(logging.Formatter):
         return json.dumps(log_entry, default=str)
 
 
+class DetectionAndWorkerOnlyFilter(logging.Filter):
+    """
+    Ensures log files record ONLY events originating from:
+    - modules.detection (all detectors, candidate gate, service, validator, mapper)
+    - redis_queue (worker, job processor, consumer)
+    - orchestration.workflow
+    - core.logger
+    """
+    ALLOWED_PREFIXES = (
+        "modules.detection",
+        "redis_queue",
+        "orchestration",
+        "core.logger",
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return any(record.name.startswith(prefix) for prefix in self.ALLOWED_PREFIXES)
+
+
 def setup_logging(
     log_level: str | int = logging.INFO,
     log_dir: str | Path = "storage/logs",
@@ -96,8 +115,8 @@ def setup_logging(
     Initializes global logging for the entire DocShield-AI pipeline.
     Sets up:
     1. Colorized / contextual Console logging.
-    2. Rotating standard log file (docshield_pipeline.log).
-    3. Rotating structured JSON log file (docshield_structured.jsonl).
+    2. Rotating standard log file (docshield_pipeline.log) filtered strictly for Detection & Worker.
+    3. Rotating structured JSON log file (docshield_structured.jsonl) filtered strictly for Detection & Worker.
     """
     if isinstance(log_level, str):
         log_level = getattr(logging, log_level.upper(), logging.INFO)
@@ -119,7 +138,8 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # 2. File Handlers (Rotating)
+    # 2. File Handlers (Rotating) - Filtered to ONLY Detection Pipeline & Redis Worker
+    detection_worker_filter = DetectionAndWorkerOnlyFilter()
     try:
         log_path = Path(log_dir)
         log_path.mkdir(parents=True, exist_ok=True)
@@ -133,6 +153,7 @@ def setup_logging(
             encoding="utf-8",
         )
         file_handler.setLevel(log_level)
+        file_handler.addFilter(detection_worker_filter)
         file_formatter = PipelineLogFormatter(
             fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
             use_colors=False,
@@ -149,6 +170,7 @@ def setup_logging(
             encoding="utf-8",
         )
         json_handler.setLevel(log_level)
+        json_handler.addFilter(detection_worker_filter)
         json_handler.setFormatter(JSONLogFormatter())
         root_logger.addHandler(json_handler)
 

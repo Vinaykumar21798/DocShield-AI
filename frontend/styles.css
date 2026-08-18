@@ -644,6 +644,81 @@ button:disabled {
   text-align: center;
 }
 
+/* AI / LLM AUDIT PANEL STYLING */
+.llm-audit-panel {
+  grid-area: llm-audit;
+}
+
+.llm-audit-panel .toolbar.tabs {
+  display: inline-flex;
+  align-items: center;
+  background: #eef2f6;
+  border: 1px solid rgba(24, 33, 39, 0.08);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 3px;
+}
+
+.audit-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #475569;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 140ms ease;
+  line-height: 1.2;
+}
+
+.audit-tab-btn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.audit-tab-btn.is-active {
+  background: #ffffff;
+  color: #0f172a;
+  border-color: rgba(24, 33, 39, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.07);
+}
+
+.audit-tab-btn .badge-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  background: rgba(100, 116, 139, 0.14);
+  color: #475569;
+}
+
+.audit-tab-btn.is-active .badge-count {
+  background: var(--brand-orange, #f59923);
+  color: #ffffff;
+}
+
+.llm-reason-box {
+  background: #f8fafc;
+  border-left: 3px solid #cbd5e1;
+  padding: 6px 10px;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.4;
+}
+
 .text-preview {
   min-height: 300px;
   max-height: 520px;
@@ -711,6 +786,7 @@ button:disabled {
       "status"
       "metrics"
       "findings"
+      "llm-audit"
       "preview"
       "artifacts";
   }
