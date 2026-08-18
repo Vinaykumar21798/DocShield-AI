@@ -693,7 +693,26 @@ Return EXACTLY JSON format:
                 confidence_score=0.95,
             )
 
-        # 3. REJECT known benefit / policy / form / terminology noise
+        # 3. REJECT or RECLASSIFY PO Box when falsely detected as EOB or Insurance ID
+        if candidate.entity_type in {"EOB_NUMBER", "INSURANCE_ID", "POLICY_NUMBER", "CLAIM_NUMBER"} and re.match(r"^(?:p\.?o\.?\s*)?box\s+\d+$", val_lower):
+            return CandidateValidationItem(
+                id=1,
+                decision="RECLASSIFY",
+                corrected_type="ADDRESS",
+                reason=f"Candidate '{candidate.entity_value}' refers to a mailing PO Box address, not an {candidate.entity_type}.",
+                confidence_score=0.95,
+            )
+
+        # 4. CONFIRM genuine City, State address components
+        if candidate.entity_type in {"ADDRESS", "LOCATION", "CITY_STATE_ZIP"} and re.match(r"^[a-zA-Z\s.'-]+,\s*[A-Z]{2}(?:\s+\d{5})?$", candidate.entity_value.strip()):
+            return CandidateValidationItem(
+                id=1,
+                decision="CONFIRM",
+                reason=f"Candidate '{candidate.entity_value}' is a valid geographic address/location in the document context.",
+                confidence_score=0.95,
+            )
+
+        # 5. REJECT known benefit / policy / form / terminology noise
         REJECT_TERMS = {
             "mail order", "mail-order", "preauth", "pre-auth", "preauthorization",
             "minimum value", "minimum value standard", "hearing", "hearing aids",

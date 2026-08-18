@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -134,6 +134,36 @@
             </thead>
             <tbody id="reviewsBody">
               <tr><td colspan="6" class="empty-state">No document selected.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel llm-audit-panel" aria-labelledby="llmAuditHeading">
+        <div class="panel-heading inline">
+          <div>
+            <h2 id="llmAuditHeading">AI / LLM Candidate Audit</h2>
+            <p id="llmAuditSummary">AI-evaluated decisions and reasoning for ambiguous candidates.</p>
+          </div>
+          <div class="toolbar tabs">
+            <button class="button ghost compact is-active" id="tabLlmAccepted" type="button">Accepted (<span id="countLlmAccepted">0</span>)</button>
+            <button class="button ghost compact" id="tabLlmRejected" type="button">Rejected (<span id="countLlmRejected">0</span>)</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="reviews-table">
+            <thead>
+              <tr>
+                <th>Entity</th>
+                <th>Candidate Value</th>
+                <th>Decision</th>
+                <th>Confidence</th>
+                <th>Detector</th>
+                <th>Reasoning</th>
+              </tr>
+            </thead>
+            <tbody id="llmAuditBody">
+              <tr><td colspan="6" class="empty-state">No LLM candidate audit data loaded.</td></tr>
             </tbody>
           </table>
         </div>

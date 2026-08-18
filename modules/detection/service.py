@@ -1030,15 +1030,11 @@ class DetectionService:
         route = self.router.route_for_domain(domain)
         detector_getters = self._detector_getters()
 
-        logger.info(
-            "Dynamic detection route selected. document_type=%s domain=%s route=%s "
-            "stop_threshold=%s min_candidate_chars=%s",
-            document_type,
-            domain,
-            "->".join(route),
-            config.stopping_candidate_threshold,
-            config.min_candidate_chars,
-        )
+        logger.info("==================================================")
+        logger.info("DETECTION PIPELINE EXECUTION (Page %d)", page_number)
+        logger.info("Document Type: %s | Domain: %s", document_type or "Unspecified", domain)
+        logger.info("Orchestration Route: %s", " -> ".join(route))
+        logger.info("==================================================")
 
         while True:
             selection = self.router.select_next_detector(
@@ -1055,7 +1051,7 @@ class DetectionService:
 
             if selection.detector is None:
                 logger.info(
-                    "%s Remaining candidates=%s preview=%s",
+                    "Detection Route Finished: %s (Remaining candidates: %d %s)",
                     selection.reason,
                     selection.remaining_candidates["count"],
                     selection.remaining_candidates["preview"],
@@ -1064,7 +1060,7 @@ class DetectionService:
 
             detector = selection.detector
             logger.info(
-                "Executing detector=%s reason=%s remaining_candidates=%s preview=%s",
+                ">>> [DETECTOR RUN: %s] Reason: %s | Unresolved candidates remaining: %d %s",
                 detector.name,
                 selection.reason,
                 selection.remaining_candidates["count"],
@@ -1092,18 +1088,16 @@ class DetectionService:
                 min_chars=config.min_candidate_chars,
             )
             logger.info(
-                "Detector completed. detector=%s entities_found=%d "
-                "total_entities=%d remaining_candidates=%d preview=%s",
+                "--- [DETECTOR FINISHED: %s] Found %d new entity/entities | Total resolved: %d | Candidates left: %d",
                 detector.name,
                 len(new_entities),
                 len(state.resolved_entities),
                 remaining["count"],
-                remaining["preview"],
             )
 
             if len(state.resolved_entities) == before_count and not new_entities:
                 logger.info(
-                    "Detector %s found no new entities; recalculated candidates=%d",
+                    "Detector %s found 0 new entities; candidates remaining=%d",
                     detector.name,
                     remaining["count"],
                 )
@@ -1111,6 +1105,10 @@ class DetectionService:
         # If any pending candidates remain after loop, validate them with Qwen
         bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
         if state.pending_candidates and not bypass_llm:
+            logger.info(
+                ">>> [LLM CANDIDATE VALIDATION] Sending %d low-confidence candidate(s) to Qwen3:4b for contextual validation...",
+                len(state.pending_candidates),
+            )
             self._execute_qwen_candidate_validation(
                 detector=self.qwen3b,
                 state=state,
@@ -1578,15 +1576,24 @@ class DetectionService:
             line_prefix = text[start:entity.start_char].split("\n")[-1].lower()
 
             # 1. Insurance, SSN & Claim ID reclassifications
-            if entity.entity_type in {"INSURANCE_ID", "POLICY_NUMBER"}:
+            if entity.entity_type in {"INSURANCE_ID", "POLICY_NUMBER", "EOB_NUMBER", "CLAIM_NUMBER"}:
                 if re.match(r"^(?:[Xx*]{3}[-\s]?[Xx*]{2}[-\s]?\d{4}|\d{3}[-\s]?[Xx*]{2}[-\s]?\d{4})$", entity.entity_value):
                     entity.entity_type = "SSN"
+                    entity.canonical_type = "SSN"
+                elif re.match(r"(?i)^(?:P\.?O\.?\s*)?Box\s+\d+$", entity.entity_value.strip()):
+                    entity.entity_type = "ADDRESS"
+                    entity.canonical_type = "ADDRESS"
+                    entity.confidence_score = 0.95
                 elif "member" in line_prefix or "member" in context:
                     entity.entity_type = "MEMBER_ID"
                 elif "group" in line_prefix or "group" in context:
                     entity.entity_type = "GROUP_NUMBER"
                 elif "eob" in line_prefix or "eob" in context:
                     entity.entity_type = "EOB_NUMBER"
+
+            if entity.entity_type in {"ADDRESS", "LOCATION", "CITY_STATE_ZIP"}:
+                if re.match(r"^[A-Za-z\s.'-]+,\s*[A-Z]{2}(?:\s+\d{5})?$", entity.entity_value.strip()):
+                    entity.confidence_score = max(entity.confidence_score, 0.95)
 
             if entity.entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER", "ORGANIZATION_CONTACT_INFO"}:
                 if any(kw in line_prefix for kw in ["patient", "home", "mobile", "cell", "personal"]):

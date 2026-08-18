@@ -30,6 +30,12 @@
     reviewsHead: document.getElementById("reviewsHead"),
     reviewsBody: document.getElementById("reviewsBody"),
     toggleValuesBtn: document.getElementById("toggleValuesBtn"),
+    llmAuditSummary: document.getElementById("llmAuditSummary"),
+    llmAuditBody: document.getElementById("llmAuditBody"),
+    tabLlmAccepted: document.getElementById("tabLlmAccepted"),
+    tabLlmRejected: document.getElementById("tabLlmRejected"),
+    countLlmAccepted: document.getElementById("countLlmAccepted"),
+    countLlmRejected: document.getElementById("countLlmRejected"),
     textMeta: document.getElementById("textMeta"),
     textPreview: document.getElementById("textPreview"),
     copyTextBtn: document.getElementById("copyTextBtn"),
@@ -49,9 +55,11 @@
       entities: [],
       reports: [],
       redactions: [],
+      llmAudit: { accepted: [], rejected: [] },
     },
     revealValues: false,
     activeReviewFilter: "all",
+    activeLlmTab: "accepted",
     pollTimer: null,
   };
 
@@ -522,6 +530,62 @@
       `;
     }).join("");
   }
+
+  function renderLlmAudit(auditData) {
+    state.dashboard.llmAudit = auditData || { accepted: [], rejected: [] };
+    const acceptedList = (state.dashboard.llmAudit.accepted || []);
+    const rejectedList = (state.dashboard.llmAudit.rejected || []);
+
+    if (els.countLlmAccepted) els.countLlmAccepted.textContent = acceptedList.length;
+    if (els.countLlmRejected) els.countLlmRejected.textContent = rejectedList.length;
+
+    if (els.tabLlmAccepted) {
+      els.tabLlmAccepted.classList.toggle("is-active", state.activeLlmTab === "accepted");
+    }
+    if (els.tabLlmRejected) {
+      els.tabLlmRejected.classList.toggle("is-active", state.activeLlmTab === "rejected");
+    }
+
+    const currentItems = state.activeLlmTab === "accepted" ? acceptedList : rejectedList;
+
+    if (els.llmAuditSummary) {
+      els.llmAuditSummary.textContent = `${acceptedList.length} candidate(s) accepted, ${rejectedList.length} candidate(s) rejected by AI.`;
+    }
+
+    if (!els.llmAuditBody) return;
+
+    if (!currentItems.length) {
+      els.llmAuditBody.innerHTML = `<tr><td colspan="6" class="empty-state">No ${state.activeLlmTab} LLM candidates for this document.</td></tr>`;
+      return;
+    }
+
+    els.llmAuditBody.innerHTML = currentItems.map((item) => {
+      const decision = String(item.decision || "UNKNOWN").toUpperCase();
+      let tone = "neutral";
+      if (decision === "CONFIRM" || decision === "ACCEPT") tone = "success";
+      else if (decision === "RECLASSIFY") tone = "warning";
+      else if (decision === "REJECT") tone = "danger";
+
+      const confidencePct = item.confidence != null ? `${Math.round(item.confidence * 100)}%` : "-";
+
+      return `
+        <tr>
+          <td>
+            <span class="entity-type">
+              <strong>${escapeHtml(item.entity_type || item.original_type || "Entity")}</strong>
+              ${item.original_type && item.original_type !== item.entity_type ? `<small>orig: ${escapeHtml(item.original_type)}</small>` : ""}
+            </span>
+          </td>
+          <td><span class="entity-value">${escapeHtml(item.candidate_value || item.entity_value || "-")}</span></td>
+          <td><span class="status-pill ${tone}">${escapeHtml(decision)}</span></td>
+          <td>${escapeHtml(confidencePct)}</td>
+          <td><small>${escapeHtml(item.detector || "Qwen3:4b")}</small></td>
+          <td style="max-width: 320px; font-size: 0.85rem; line-height: 1.35; color: var(--text-muted, #475569);">${escapeHtml(item.reasoning || item.reason || "-")}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
   function renderText(textPayload) {
     state.dashboard.text = textPayload || null;
     if (!textPayload || !textPayload.extracted_text) {
@@ -703,11 +767,25 @@
     const reviews = requests[2].status === "fulfilled" ? requests[2].value : [];
     const reports = requests[3].status === "fulfilled" ? requests[3].value : [];
     const redactions = requests[4].status === "fulfilled" ? requests[4].value : [];
+
+    let llmAudit = { accepted: [], rejected: [] };
+    if (reports && reports.length > 0) {
+      try {
+        const reportDetail = await apiFetch(`/reports/${encodeURIComponent(reports[0].report_id)}`);
+        if (reportDetail && reportDetail.payload && reportDetail.payload.llm_candidate_audit) {
+          llmAudit = reportDetail.payload.llm_candidate_audit;
+        }
+      } catch (err) {
+        // payload load optional
+      }
+    }
+
     renderStatus(status);
     renderText(text);
     renderReviews(reviews, entities);
     renderMetrics(reviews, reports, redactions, entities);
     renderArtifacts(reports, redactions);
+    renderLlmAudit(llmAudit);
     updateWorkflow(status, reviews, reports, redactions);
 
     if (status && status.has_extracted_text) {
@@ -742,6 +820,19 @@
     els.healthBtn.addEventListener("click", checkHealth);
     els.uploadForm.addEventListener("submit", uploadDocuments);
     els.fileInput.addEventListener("change", renderFiles);
+
+    if (els.tabLlmAccepted) {
+      els.tabLlmAccepted.addEventListener("click", () => {
+        state.activeLlmTab = "accepted";
+        renderLlmAudit(state.dashboard.llmAudit);
+      });
+    }
+    if (els.tabLlmRejected) {
+      els.tabLlmRejected.addEventListener("click", () => {
+        state.activeLlmTab = "rejected";
+        renderLlmAudit(state.dashboard.llmAudit);
+      });
+    }
 
     ["dragenter", "dragover"].forEach((eventName) => {
       els.dropZone.addEventListener(eventName, (event) => {

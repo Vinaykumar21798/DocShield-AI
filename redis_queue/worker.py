@@ -25,7 +25,7 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 logger = logging.getLogger(__name__)
 
 
-from core.logger import pipeline_stage_context, stage_timer
+from core.logger import pipeline_stage_context, setup_logging, stage_timer
 
 
 class Worker:
@@ -44,6 +44,7 @@ class Worker:
         max_retries: Optional[int] = None,
         job_repository: ProcessingJobRepository = processing_job_repository,
     ):
+        setup_logging(log_level="DEBUG" if settings.debug else "INFO")
         self.consumer = consumer or RedisConsumer(redis_client)
         self.producer = producer or RedisProducer(redis_client)
         self.session_factory = session_factory
@@ -56,7 +57,10 @@ class Worker:
         self.job_repository = job_repository
 
     def start(self):
-        logger.info("Worker started. Waiting for jobs.")
+        logger.info("==================================================")
+        logger.info("DocShield-AI Redis Worker Started")
+        logger.info("Waiting for incoming document processing jobs...")
+        logger.info("==================================================")
 
         while True:
             try:
@@ -66,11 +70,11 @@ class Worker:
                 continue
 
             except KeyboardInterrupt:
-                logger.info("Worker stopped.")
+                logger.info("Worker stopped by user.")
                 break
 
             except Exception:
-                logger.exception("Worker loop failed.")
+                logger.exception("Worker loop encountered an unexpected error.")
 
     def process_next_job(self) -> bool:
         """
@@ -171,10 +175,6 @@ class Worker:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format=LOG_FORMAT,
-    )
-
+    setup_logging(log_level="DEBUG" if settings.debug else "INFO")
     worker = Worker()
     worker.start()

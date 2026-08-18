@@ -156,7 +156,21 @@ def setup_logging(
         root_logger.warning("Could not initialize file log handlers at %s: %s", log_dir, exc)
 
     # Suppress verbose third-party loggers
-    for noisy in ("urllib3", "httpx", "httpcore", "sentence_transformers", "transformers", "torch", "passlib"):
+    for noisy in (
+        "urllib3",
+        "httpx",
+        "httpcore",
+        "sentence_transformers",
+        "transformers",
+        "torch",
+        "passlib",
+        "python_multipart",
+        "python_multipart.multipart",
+        "multipart",
+        "multipart.multipart",
+        "watchfiles",
+        "asyncio",
+    ):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 

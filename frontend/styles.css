@@ -198,6 +198,7 @@ button:disabled {
     "upload status"
     "recent metrics"
     "findings findings"
+    "llm-audit llm-audit"
     "preview artifacts";
   gap: 18px;
 }
@@ -215,6 +216,7 @@ button:disabled {
 .status-panel { grid-area: status; }
 .metrics-panel { grid-area: metrics; }
 .findings-panel { grid-area: findings; }
+.llm-audit-panel { grid-area: llm-audit; }
 .preview-panel { grid-area: preview; }
 .artifacts-panel { grid-area: artifacts; }
 
