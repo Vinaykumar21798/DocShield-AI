@@ -25,6 +25,9 @@ LOG_FORMAT = "%(asctime)s %(levelname)s [%(name)s] %(message)s"
 logger = logging.getLogger(__name__)
 
 
+from core.logger import pipeline_stage_context, stage_timer
+
+
 class Worker:
     """
     Background worker that continuously processes Redis jobs.
@@ -84,24 +87,27 @@ class Worker:
 
     def process_job(self, job: DocumentJob) -> None:
         db = self.session_factory()
+        job_id_str = str(getattr(job, "job_id", "") or getattr(job, "id", ""))
+        doc_id_str = str(job.document_id)
 
-        try:
-            # Log run context if available
-            if job.run_id:
-                logger.info("Processing document_id=%s within run_id=%s", job.document_id, job.run_id)
+        with pipeline_stage_context(stage="REDIS_WORKER", document_id=doc_id_str, job_id=job_id_str):
+            with stage_timer("JOB_EXECUTION"):
+                try:
+                    if job.run_id:
+                        logger.info("Processing document_id=%s within run_id=%s", job.document_id, job.run_id)
 
-            workflow = self.workflow_factory(db)
-            workflow.execute(str(job.document_id))
+                    workflow = self.workflow_factory(db)
+                    workflow.execute(str(job.document_id))
 
-        except Exception:
-            logger.exception(
-                "Worker failed to process document_id=%s",
-                job.document_id,
-            )
-            self._schedule_retry_if_available(db, job)
+                except Exception:
+                    logger.exception(
+                        "Worker failed to process document_id=%s",
+                        job.document_id,
+                    )
+                    self._schedule_retry_if_available(db, job)
 
-        finally:
-            db.close()
+                finally:
+                    db.close()
 
     def _schedule_retry_if_available(
         self,

@@ -485,6 +485,13 @@ class DetectionService:
 
             if pending_low:
                 state.add_pending_candidates(pending_low)
+                bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
+                if bypass_llm:
+                    state.add_entities(
+                        pending_low,
+                        detector_name=detector.name,
+                        mask_confidence_threshold=high_conf_threshold,
+                    )
                 logger.info(
                     "%s queued %d low-confidence candidate(s) for Qwen contextual validation",
                     detector.name,
@@ -654,6 +661,70 @@ class DetectionService:
             entity.start = entity.start_char
             entity.end = entity.end_char
             entity.metadata["context_offset"] = context_offset
+
+    def _run_qwen_detector(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        page_number: int,
+        candidate_summary: dict,
+        config: DynamicDetectionConfig,
+    ) -> list[DetectionResult]:
+        known_entities = [
+            {
+                "entity_type": entity.entity_type,
+                "start_char": entity.start_char,
+                "end_char": entity.end_char,
+                "original_start_char": entity.start_char,
+                "original_end_char": entity.end_char,
+                "confidence_score": entity.confidence_score,
+                "detector": entity.detector,
+            }
+            for entity in state.resolved_entities
+        ]
+
+        text_to_run = state.original_text
+        offset = 0
+        if candidate_summary.get("candidates") and len(state.original_text) > 400:
+            first_c = candidate_summary["candidates"][0]
+            c_start = first_c.get("start", 0)
+            c_end = first_c.get("end", len(state.original_text))
+            w_start = max(0, c_start - 200)
+            w_end = min(len(state.original_text), c_end + 200)
+            while w_start > 0 and state.original_text[w_start - 1] != "\n":
+                w_start -= 1
+            while w_end < len(state.original_text) and state.original_text[w_end] != "\n":
+                w_end += 1
+            if (w_end - w_start) < len(state.original_text):
+                text_to_run = state.original_text[w_start:w_end]
+                offset = w_start
+
+        self._attach_orchestration_context(
+            detector,
+            state,
+            remaining_text=text_to_run,
+            candidate_summary=candidate_summary,
+            context_offset=offset,
+            known_entities=known_entities,
+        )
+
+        start_time = time.perf_counter()
+        raw_results = detector.detect(text_to_run, page_number=page_number)
+        duration = time.perf_counter() - start_time
+        state.log_time(detector.name, duration)
+
+        if offset > 0:
+            self._offset_entities(raw_results, offset)
+
+        accepted = []
+        for entity in raw_results:
+            if not self._is_valid_entity(entity, len(state.original_text)):
+                continue
+            if state.is_span_unmasked(entity.start_char, entity.end_char, min_confidence=0.80):
+                accepted.append(entity)
+
+        state.add_entities(accepted, detector_name=detector.name)
+        return accepted
     ENTITY_SPECIALIZATIONS = {
         "PERSON": {"PATIENT", "DOCTOR", "PHYSICIAN", "NURSE", "PROVIDER", "HEALTHCARE_STAFF", "CARDHOLDER_NAME", "MEDICATION"},
         "ORGANIZATION": {"HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION", "INSURANCE_PROVIDER", "ORGANIZATION_CONTACT_INFO", "MEDICATION"},
@@ -873,6 +944,9 @@ class DetectionService:
 
             self._log_pipeline_summary(state, results, document_type)
 
+            self.last_pipeline_state = state
+            self.last_llm_candidate_audit = state.llm_candidate_audit
+
             return results
 
         except Exception as exc:
@@ -976,7 +1050,7 @@ class DetectionService:
                 ),
                 min_candidate_chars=config.min_candidate_chars,
                 continuation_confidence_threshold=config.high_confidence_threshold,
-                exhaust_route=True,
+                exhaust_route=False,
             )
 
             if selection.detector is None:
@@ -996,9 +1070,8 @@ class DetectionService:
                 selection.remaining_candidates["count"],
                 selection.remaining_candidates["preview"],
             )
-
             before_count = len(state.resolved_entities)
-            if detector.name.lower() == "qwen3b":
+            if detector.name.lower() in {"qwen3b", "qwen3:4b", "qwen"}:
                 new_entities = self._run_qwen_detector(
                     detector,
                     state,
@@ -1036,7 +1109,8 @@ class DetectionService:
                 )
 
         # If any pending candidates remain after loop, validate them with Qwen
-        if state.pending_candidates and not config.bypass_llm:
+        bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
+        if state.pending_candidates and not bypass_llm:
             self._execute_qwen_candidate_validation(
                 detector=self.qwen3b,
                 state=state,
@@ -1076,6 +1150,19 @@ class DetectionService:
                 else:
                     state.pipeline_metrics["llm_confirmed"] += 1
 
+                state.record_llm_candidate(
+                    candidate_value=match.entity_value,
+                    entity_type=match.entity_type,
+                    original_type=cand.entity_type,
+                    decision=decision,
+                    confidence=match.confidence_score,
+                    reasoning=reason,
+                    start_char=match.start_char,
+                    end_char=match.end_char,
+                    detector=getattr(detector, "name", "Qwen3:4b"),
+                    page_number=match.page_number,
+                )
+
                 logger.info(
                     "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=%s final_type=%r reason=%r",
                     cand.entity_value,
@@ -1087,11 +1174,24 @@ class DetectionService:
                 )
             else:
                 state.pipeline_metrics["llm_rejected"] += 1
+                rejection_reason = cand.metadata.get("qwen_reason", "Contextual noise or non-PII/PHI")
+                state.record_llm_candidate(
+                    candidate_value=cand.entity_value,
+                    entity_type=cand.entity_type,
+                    decision="REJECT",
+                    confidence=cand.confidence_score,
+                    reasoning=rejection_reason,
+                    start_char=cand.start_char,
+                    end_char=cand.end_char,
+                    detector=getattr(detector, "name", "Qwen3:4b"),
+                    page_number=cand.page_number,
+                )
                 logger.info(
-                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=REJECT reason='Contextual noise or non-PII/PHI'",
+                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=REJECT reason=%r",
                     cand.entity_value,
                     cand.entity_type,
                     cand.confidence_score,
+                    rejection_reason,
                 )
 
         state.add_entities(
@@ -1148,6 +1248,18 @@ class DetectionService:
                 allow_claimed_spans=True,
                 known_entities=context.get("known_entities", []),
             )
+            for item in discovered:
+                state.record_llm_candidate(
+                    candidate_value=item.entity_value,
+                    entity_type=item.entity_type,
+                    decision="ACCEPT",
+                    confidence=item.confidence_score,
+                    reasoning=item.metadata.get("qwen_reason", "Discovered during LLM residual context extraction"),
+                    start_char=item.start_char,
+                    end_char=item.end_char,
+                    detector=item.detector,
+                    page_number=item.page_number,
+                )
             collected.extend(discovered)
             logger.info(
                 "QwenResidualDetection: chunk_span=%d-%d known_entities=%d new_entities_found=%d",
@@ -1434,7 +1546,7 @@ class DetectionService:
                         current.text = current.entity_value
                         current.entity_type = "ADDRESS"
                         current.canonical_type = "ADDRESS"
-                        current.confidence_score = max(current.confidence_score, following.confidence_score)
+                        current.confidence_score = 1.0
                         index += 1
                     else:
                         break
@@ -1452,6 +1564,7 @@ class DetectionService:
                     current.text = current.entity_value
                     current.entity_type = "ADDRESS"
                     current.canonical_type = "ADDRESS"
+                    current.confidence_score = 1.0
 
             merged.append(current)
 
@@ -1464,28 +1577,34 @@ class DetectionService:
             context = text[start:end].lower()
             line_prefix = text[start:entity.start_char].split("\n")[-1].lower()
 
-            # 1. Insurance & Claim ID reclassifications
+            # 1. Insurance, SSN & Claim ID reclassifications
             if entity.entity_type in {"INSURANCE_ID", "POLICY_NUMBER"}:
-                if "member" in line_prefix or "member" in context:
+                if re.match(r"^(?:[Xx*]{3}[-\s]?[Xx*]{2}[-\s]?\d{4}|\d{3}[-\s]?[Xx*]{2}[-\s]?\d{4})$", entity.entity_value):
+                    entity.entity_type = "SSN"
+                elif "member" in line_prefix or "member" in context:
                     entity.entity_type = "MEMBER_ID"
                 elif "group" in line_prefix or "group" in context:
                     entity.entity_type = "GROUP_NUMBER"
                 elif "eob" in line_prefix or "eob" in context:
                     entity.entity_type = "EOB_NUMBER"
 
-            if entity.entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER"}:
-                if "npi" in context and BaseDetector.is_valid_npi(entity.entity_value):
-                    entity.entity_type = "NPI_NUMBER"
-                elif any(kw in line_prefix for kw in ["customer service", "support", "help desk", "inquiries", "contact us", "response line", "hotline", "office phone", "claims phone"]):
-                    entity.entity_type = "ORGANIZATION_CONTACT_INFO"
-                elif "patient" in line_prefix:
+            if entity.entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER", "ORGANIZATION_CONTACT_INFO"}:
+                if any(kw in line_prefix for kw in ["patient", "home", "mobile", "cell", "personal"]):
                     entity.entity_type = "PHONE_NUMBER"
+                elif any(kw in line_prefix for kw in ["customer service", "support", "help desk", "inquiries", "contact us", "response line", "hotline", "office phone", "claims phone", "claims", "appeals", "toll-free", "toll free"]):
+                    entity.entity_type = "ORGANIZATION_CONTACT_INFO"
+                elif "patient" in context:
+                    entity.entity_type = "PHONE_NUMBER"
+                elif any(kw in context for kw in ["customer service", "support", "help desk", "inquiries", "contact us", "claims", "appeals"]):
+                    entity.entity_type = "ORGANIZATION_CONTACT_INFO"
+                elif re.match(r"^\+?1?[-. \t]?\(?(?:800|888|877|866|855|844|833)\)?[-. \t]?\d{3}[-. \t]?\d{4}$", entity.entity_value) and not any(kw in line_prefix for kw in ["patient", "home"]):
+                    entity.entity_type = "ORGANIZATION_CONTACT_INFO"
 
             # 3. Dates: Contextual reclassification
             if entity.entity_type in {"DATE", "DATE_TIME"}:
                 if any(kw in line_prefix for kw in ["eob date", "statement date", "print date", "created on", "invoice date", "generated on", "issue date"]):
                     entity.entity_type = "DOCUMENT_CREATION_DATE"
-                elif any(kw in line_prefix for kw in ["date of birth", "dob", "birth date", "born"]):
+                elif any(kw in line_prefix for kw in ["date of birth", "dob", "birth date", "born", "dependent", "child", "spouse", "beneficiary"]):
                     entity.entity_type = "DATE_OF_BIRTH"
                 elif any(kw in line_prefix for kw in ["date(s) of service", "service date", "admission date", "discharge date", "visit date", "date of service", "dos"]):
                     entity.entity_type = "DATE_OF_SERVICE"
@@ -1494,21 +1613,25 @@ class DetectionService:
                 elif any(kw in line_prefix for kw in ["due date", "payment due"]):
                     entity.entity_type = "DUE_DATE"
 
-            # 4. Medication misclassified as PERSON or ORGANIZATION
+            # 4. Disease / Medication misclassified as PERSON or ORGANIZATION
             if entity.entity_type in {"PERSON", "ORGANIZATION"}:
                 val_lower = entity.entity_value.lower()
-                MED_NAMES = {
-                    "aspirin", "atorvastatin", "metformin", "lisinopril", "amoxicillin", "omeprazole", "gabapentin",
-                    "levothyroxine", "ozempic", "metoprolol", "losartan", "hydrochlorothiazide", "simvastatin",
-                    "sertraline", "prednisone", "doxycycline", "ciprofloxacin", "clopidogrel", "eliquis", "xarelto",
-                    "januvia", "farxiga", "jardiance", "humira", "keytruda", "dupixent", "adderall", "vyvanse",
-                    "warfarin", "tramadol", "albuterol", "montelukast", "brilinta", "lipitor", "zocor", "synthroid",
-                    "crestor", "align", "dicyclomine", "probiotic", "insulin", "ibuprofen", "paracetamol", "acetaminophen",
-                }
-                if any(med in val_lower for med in MED_NAMES):
-                    entity.entity_type = "MEDICATION"
-                elif re.search(r"\b\d+\s*(?:mg|mcg|ml|g|tablets?|capsules?)\b", context) and any(kw in context for kw in ["rx", "take", "daily", "dispense", "oral", "dose", "tablet", "capsule", "medication", "prescribed"]):
-                    entity.entity_type = "MEDICATION"
+                CLINICAL_DISEASES = {"cancer", "diabetes", "hypertension", "asthma", "arthritis", "depression", "anxiety", "copd", "leukemia", "lymphoma"}
+                if val_lower in CLINICAL_DISEASES:
+                    entity.entity_type = "DISEASE"
+                else:
+                    MED_NAMES = {
+                        "aspirin", "atorvastatin", "metformin", "lisinopril", "amoxicillin", "omeprazole", "gabapentin",
+                        "levothyroxine", "ozempic", "metoprolol", "losartan", "hydrochlorothiazide", "simvastatin",
+                        "sertraline", "prednisone", "doxycycline", "ciprofloxacin", "clopidogrel", "eliquis", "xarelto",
+                        "januvia", "farxiga", "jardiance", "humira", "keytruda", "dupixent", "adderall", "vyvanse",
+                        "warfarin", "tramadol", "albuterol", "montelukast", "brilinta", "lipitor", "zocor", "synthroid",
+                        "crestor", "align", "dicyclomine", "probiotic", "insulin", "ibuprofen", "paracetamol", "acetaminophen",
+                    }
+                    if any(med in val_lower for med in MED_NAMES):
+                        entity.entity_type = "MEDICATION"
+                    elif re.search(r"\b\d+\s*(?:mg|mcg|ml|g|tablets?|capsules?)\b", context) and any(kw in context for kw in ["rx", "take", "daily", "dispense", "oral", "dose", "tablet", "capsule", "medication", "prescribed"]):
+                        entity.entity_type = "MEDICATION"
 
             # 5. Patient name contextual reclassification
             if entity.entity_type == "PERSON":

@@ -824,6 +824,7 @@ class DocumentProcessingWorkflow:
             "pending_reviews": len(pending_reviews),
             "redacted_file_path": state.redacted_file_path,
             "detectors_used": detectors_used,
+            "llm_candidate_audit": getattr(self.detection_service, "last_llm_candidate_audit", {"accepted": [], "rejected": []}),
             "entities": [
                 {
                     "entity_id": entity.id,

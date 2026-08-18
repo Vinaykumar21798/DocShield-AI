@@ -105,7 +105,8 @@ class RegexDetector(BaseDetector):
             r"\b\d{6}\b",
 
         "SSN":
-            r"(?im)\b(?:SSN|Social Security Number|Social Security #|Social Security)[ \t]*[:\-]?[ \t]*(\d{9})\b|\b\d{3}[-\s]\d{2}[-\s]\d{4}\b",
+            r"(?im)\b(?:SSN|Social Security Number|Social Security #|Social Security)[ \t]*[:\-]?[ \t]*((?:\d{3}|[Xx*]{3})[-\s]?(?:\d{2}|[Xx*]{2})[-\s]?\d{4}|\d{9})\b"
+            r"|\b(?:\d{3}|[Xx*]{3})[-\s](?:\d{2}|[Xx*]{2})[-\s]\d{4}\b",
 
         "PERSON":
             rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?({LABELED_NAME_PATTERN})[ \t]*$)"
@@ -130,7 +131,7 @@ class RegexDetector(BaseDetector):
             rf"\b(?:Visit Date|Service Date|Date of Service|Collection Date|Admission Date|Discharge Date)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
 
         "DOCTOR":
-            rf"(?im)\b(?:Doctor|Physician|Consultant)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$"
+            rf"(?im)\b(?:Doctor|Physician|Consultant|Attending Clinician|Clinician)[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})[ \t]*$"
             rf"|\bDr\.?[ \t]+{LABELED_NAME_PATTERN}\b",
 
         "PROVIDER":
@@ -223,8 +224,8 @@ class RegexDetector(BaseDetector):
             r"\b\d{2,3}/\d{2,3}\s*(?:mmHg)?\b",
 
         "CITY_STATE_ZIP":
-            r"(?im)\b(?:City,?[ \t]*State[ \t]*(?:and[ \t]*)?Zip|City/State/Zip|CSZ)[ \t]*[:\-][ \t]*([A-Za-z\s.'-]+,[ \t]*[A-Z]{2}[ \t]+\d{5}(?:-\d{4})?)\b"
-            r"|\b([A-Z][a-zA-Z\s.'-]+,[ \t]*[A-Z]{2}[ \t]+\d{5}(?:-\d{4})?)\b",
+            r"(?im)\b(?:City,?[ \t]*State[ \t]*(?:and[ \t]*)?Zip|City/State/Zip|CSZ)[ \t]*[:\-][ \t]*([A-Za-z\s.'-]+,[ \t]*[A-Z]{2})(?=[ \t]+\d{5})\b"
+            r"|\b([A-Z][a-zA-Z\s.'-]+,[ \t]*[A-Z]{2})(?=[ \t]+\d{5})\b",
 
         "FINANCIAL_AMOUNT":
             r"(?im)\b(?:Total(?:[ \t]+(?:Amount|Due|Paid|Billed|Claimed))?|Amount(?:[ \t]+(?:Due|Paid|Billed|Claimed))?|Billed[ \t]+Amount|Copay|Coinsurance|Deductible|Premium(?:[ \t]+Due)?|Monthly[ \t]+Premium|Gross[ \t]+Salary|Net[ \t]+Pay|Account[ \t]+Balance|Payment[ \t]+Amount)[ \t]*[:\-][ \t]*(\$?[ \t]*\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b"
@@ -387,6 +388,7 @@ class RegexDetector(BaseDetector):
         "EOB_NUMBER",
         "MEMBER_ID",
         "GROUP_NUMBER",
+        "SSN",
         "TAX_ID",
     }
     LABELED_NAME_PLACEHOLDERS = {

@@ -273,6 +273,12 @@ class EntityValidator:
         if entity_type in cls.DATE_TYPES:
             if cls.is_currency(value):
                 return None
+            if entity_type == "DATE_TIME" and re.match(r"^\d{1,2}:\d{2}(?:\s*[APap][Mm])?$", value):
+                preceding = source_text[max(0, candidate.start_char - 80):candidate.start_char].lower()
+                following = source_text[candidate.end_char:min(len(source_text), candidate.end_char + 80)].lower()
+                context_str = preceding + " " + value.lower() + " " + following
+                if any(kw in context_str for kw in ["hours", "mon-fri", "monday", "friday", "saturday", "sunday", "am -", "pm -", "customer service", "open", "available"]):
+                    return None
             if cls.is_icd10(value):
                 entity_type = "ICD10_CODE"
                 structurally_validated = True

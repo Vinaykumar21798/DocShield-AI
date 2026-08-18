@@ -160,19 +160,37 @@ class CandidateQualityGate:
                 confidence_score=candidate.confidence_score,
             )
 
-        # 7. Check if candidate is a single generic role word with no personal linkage
+        # 7. Check if candidate is a single generic role/form word with no personal linkage
         if candidate.entity_type == "PERSON":
             words = val_raw.split()
-            if len(words) == 1 and val_lower in {"patient", "doctor", "physician", "provider", "nurse", "member", "subscriber", "admin", "preauth", "hearing", "vision", "dental", "generic", "specialty"}:
+            if len(words) == 1 and val_lower in {
+                "patient", "doctor", "physician", "provider", "nurse", "member", "subscriber",
+                "admin", "preauth", "hearing", "vision", "dental", "generic", "specialty",
+                "child", "spouse", "dependent", "parent", "mother", "father", "son", "daughter",
+                "employee", "beneficiary", "prescription", "limitations", "coverage", "copay",
+                "coinsurance", "deductible", "relationship", "gender", "status",
+            }:
                 return QualityGateDecision(
                     decision="PRE_LLM_REJECT",
-                    reason=f"Single generic role/benefit word '{val_raw}' has no bound individual identity",
+                    reason=f"Single generic role/form word '{val_raw}' has no bound individual identity",
                     semantic_score=round(semantic_score, 3),
                     structural_score=0.85,
                     confidence_score=candidate.confidence_score,
                 )
 
-        # 8. Check 'Hearing' in 'Hearing aids' context
+        # 8. Check boilerplate country/geographic locations
+        if candidate.entity_type == "LOCATION" and val_lower in {
+            "the united states", "united states", "united states of america", "usa", "north america",
+        }:
+            return QualityGateDecision(
+                decision="PRE_LLM_REJECT",
+                reason=f"Candidate '{val_raw}' is a boilerplate country region, not an individual location",
+                semantic_score=round(semantic_score, 3),
+                structural_score=0.90,
+                confidence_score=candidate.confidence_score,
+            )
+
+        # 9. Check 'Hearing' in 'Hearing aids' context
         if "hearing" in val_lower and ("hearing aid" in context_text.lower() or "benefit" in context_text.lower()):
             return QualityGateDecision(
                 decision="PRE_LLM_REJECT",

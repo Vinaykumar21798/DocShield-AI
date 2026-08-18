@@ -146,6 +146,10 @@ class PipelineState:
     detection_history: list[dict] = field(default_factory=list)
     confidence_summary: dict[str, int] = field(default_factory=dict)
     routing_audit: list[dict] = field(default_factory=list)
+    llm_candidate_audit: dict[str, list[dict]] = field(default_factory=lambda: {
+        "accepted": [],
+        "rejected": [],
+    })
     pipeline_metrics: dict[str, Any] = field(default_factory=lambda: {
         "total_detector_candidates": 0,
         "high_confidence_locked": 0,
@@ -158,6 +162,49 @@ class PipelineState:
         "llm_residual_entities": 0,
         "detector_breakdown": {},
     })
+
+    @property
+    def current_text(self) -> str:
+        """Returns the current text where high-confidence resolved entities are masked."""
+        if not self.resolved_entities:
+            return self.original_text
+        chars = list(self.original_text)
+        for entity in self.resolved_entities:
+            if entity.confidence_score >= 0.80:
+                for idx in range(max(0, entity.start_char), min(len(chars), entity.end_char)):
+                    chars[idx] = " "
+        return "".join(chars)
+
+    def record_llm_candidate(
+        self,
+        candidate_value: str,
+        entity_type: str,
+        decision: str,
+        confidence: float,
+        reasoning: str,
+        start_char: int,
+        end_char: int,
+        detector: str = "Qwen3:4b",
+        original_type: str | None = None,
+        page_number: int = 1,
+    ) -> None:
+        """Records an LLM validation/discovery candidate decision with explicit reasoning for UI display."""
+        entry = {
+            "entity_value": candidate_value,
+            "entity_type": entity_type,
+            "original_type": original_type or entity_type,
+            "decision": decision,
+            "confidence": round(float(confidence), 3),
+            "reasoning": reasoning,
+            "start_char": start_char,
+            "end_char": end_char,
+            "detector": detector,
+            "page_number": page_number,
+        }
+        if decision in {"CONFIRM", "RECLASSIFY", "ACCEPT"}:
+            self.llm_candidate_audit["accepted"].append(entry)
+        else:
+            self.llm_candidate_audit["rejected"].append(entry)
 
     def log_candidate_routing(
         self,
@@ -220,7 +267,16 @@ class PipelineState:
             self.detection_history.append({"step": detector_name, "count": 0})
             return
 
-        self.resolved_entities.extend(entities)
+        for new_entity in entities:
+            self.resolved_entities = [
+                e for e in self.resolved_entities
+                if not (
+                    e.page_number == new_entity.page_number
+                    and max(e.start_char, new_entity.start_char) < min(e.end_char, new_entity.end_char)
+                    and e.confidence_score <= new_entity.confidence_score
+                )
+            ]
+            self.resolved_entities.append(new_entity)
 
         if detector_name not in self.executed_detectors:
             self.executed_detectors.append(detector_name)
