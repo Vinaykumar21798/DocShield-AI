@@ -185,6 +185,8 @@ class TaxonomyService:
     @classmethod
     def is_drop(cls, entity_type: str, doc_type: str | None = None) -> bool:
         """Returns True if the entity is marked as DROP (noise/excluded)."""
+        if not doc_type:
+            return False
         return cls.get_priority(entity_type, doc_type) == "DROP"
 
     @classmethod

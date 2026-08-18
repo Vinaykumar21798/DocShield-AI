@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from modules.detection.confidence import ConfidenceCalculator
+from modules.detection.candidate_quality_gate import CandidateQualityGate
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.detectors.gliner_detector import GLiNERDetector
 from modules.detection.detectors.medspacy_detector import MedSpaCyDetector
@@ -275,6 +276,7 @@ class DetectionService:
 
         self.router = DetectorSelector()
         self.chunker = SemanticChunker()
+        self.quality_gate = CandidateQualityGate()
         self.config = DynamicDetectionConfig.from_env()
         self._current_document_type = None
 
@@ -372,33 +374,114 @@ class DetectionService:
             pending_low: list[DetectionResult] = []
 
             for entity in raw_entities:
+                logger.info(
+                    "Candidate: value=%r entity_type=%r detector=%r confidence=%.3f span=%d-%d",
+                    entity.entity_value,
+                    entity.entity_type,
+                    detector.name,
+                    entity.confidence_score,
+                    entity.start_char,
+                    entity.end_char,
+                )
+
                 if DetectionService._matches_previous_entity(
                     entity,
                     state,
                     high_conf_threshold,
                 ):
-                    continue
-
-                if not allow_claimed_spans and not state.is_span_unmasked(entity.start_char, entity.end_char, min_confidence=0.80):
-                    logger.info(
-                        "Suppressing %s from %s because span %d-%d is already locked by high-confidence entity",
-                        entity.entity_type,
+                    state.log_candidate_routing(
+                        entity,
+                        "DUPLICATE_SUPPRESSED",
+                        "Overlaps previously resolved entity or duplicate candidate",
                         detector.name,
-                        entity.start_char,
-                        entity.end_char,
+                    )
+                    logger.info(
+                        "DuplicateSuppressed: value=%r detector=%r reason='Duplicates previously resolved entity'",
+                        entity.entity_value,
+                        detector.name,
                     )
                     continue
 
-                if entity.confidence_score >= high_conf_threshold or detector.name.lower() == "regex":
+                if not allow_claimed_spans and not state.is_span_unmasked(entity.start_char, entity.end_char, min_confidence=0.80):
+                    state.log_candidate_routing(
+                        entity,
+                        "DUPLICATE_SUPPRESSED",
+                        "High-confidence authoritative span already locked",
+                        detector.name,
+                    )
+                    logger.info(
+                        "DuplicateSuppressed: value=%r detector=%r reason='High-confidence authoritative span already locked'",
+                        entity.entity_value,
+                        detector.name,
+                    )
+                    continue
+
+                if entity.confidence_score >= high_conf_threshold:
                     accepted_high.append(entity)
+                    state.log_candidate_routing(
+                        entity,
+                        "LOCKED",
+                        f"Authoritative high-confidence {detector.name} detection",
+                        detector.name,
+                    )
+                    logger.info(
+                        "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=LOCKED reason='Authoritative high-confidence detection'",
+                        entity.entity_value,
+                        entity.entity_type,
+                        detector.name,
+                        entity.confidence_score,
+                    )
                 else:
-                    pending_low.append(entity)
+                    # Evaluate low-confidence candidate through the Quality Gate
+                    gate_eval = self.quality_gate.evaluate(
+                        entity,
+                        state.original_text,
+                        document_type=getattr(self, "_current_document_type", None),
+                    )
+
+                    state.log_candidate_routing(
+                        entity,
+                        gate_eval.decision,
+                        gate_eval.reason,
+                        detector.name,
+                        semantic_score=gate_eval.semantic_score,
+                        structural_score=gate_eval.structural_score,
+                    )
+
+                    if gate_eval.decision == "PRE_LLM_REJECT":
+                        logger.info(
+                            "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PRE_LLM_REJECT reason=%r",
+                            entity.entity_value,
+                            entity.entity_type,
+                            detector.name,
+                            entity.confidence_score,
+                            gate_eval.semantic_score,
+                            gate_eval.reason,
+                        )
+                    else:
+                        pending_low.append(entity)
+                        logger.info(
+                            "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PENDING_FOR_LLM reason=%r",
+                            entity.entity_value,
+                            entity.entity_type,
+                            detector.name,
+                            entity.confidence_score,
+                            gate_eval.semantic_score,
+                            gate_eval.reason,
+                        )
 
             state.add_entities(
                 accepted_high,
                 detector.name,
                 mask_confidence_threshold=high_conf_threshold,
             )
+
+            # Prune pending candidates that have now been covered by high-confidence entities
+            if accepted_high:
+                state.pending_candidates = [
+                    c for c in state.pending_candidates
+                    if state.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80)
+                ]
 
             if pending_low:
                 state.add_pending_candidates(pending_low)
@@ -409,9 +492,11 @@ class DetectionService:
                 )
 
             logger.info(
-                "%s detected %d high-confidence entities, %d queued for validation",
+                "Detector completed: detector=%s entities_found=%d total_entities=%d remaining_candidates=%d queued_for_validation=%d",
                 detector.name,
                 len(accepted_high),
+                len(state.resolved_entities),
+                len(pending_low),
                 len(pending_low),
             )
             return accepted_high
@@ -648,6 +733,10 @@ class DetectionService:
         mask_confidence_threshold: float | None = None,
         is_specialization: bool = False,
     ) -> bool:
+        # Never downgrade or replace an authoritative high-confidence regex detection unless explicitly specializing
+        if previous.confidence_score >= 0.80 and getattr(previous, "detector", "").lower() == "regex" and not is_specialization:
+            return False
+
         # 1. Higher confidence replacement
         if entity.confidence_score > previous.confidence_score:
             return True
@@ -752,10 +841,6 @@ class DetectionService:
         if not text:
             return []
 
-        text = SemanticChunker.normalize_text(text)
-        if not text:
-            return []
-
         current_stage = "INITIALIZATION"
         config = DynamicDetectionConfig.from_env()
         self.config = config
@@ -786,16 +871,7 @@ class DetectionService:
                 document_type=document_type,
             )
 
-            logger.info(
-                "Detection complete. document_domain=%s route=%s entities=%d "
-                "skipped_detectors=%s telemetry=%s confidence_summary=%s",
-                domain,
-                "->".join(route),
-                len(results),
-                state.skipped_detectors,
-                state.execution_time,
-                state.confidence_summary,
-            )
+            self._log_pipeline_summary(state, results, document_type)
 
             return results
 
@@ -804,6 +880,66 @@ class DetectionService:
             raise DetectionError(
                 f"Detection failed at Stage {current_stage}: {exc}"
             ) from exc
+
+    def _log_pipeline_summary(
+        self,
+        state: PipelineState,
+        results: list[DetectionResult],
+        document_type: str | None,
+    ) -> None:
+        """Logs structured detection and LLM optimization summary telemetry."""
+        m = state.pipeline_metrics
+        det_stats = m.get("detector_breakdown", {})
+
+        logger.info("==================================================")
+        logger.info("DETECTION PIPELINE SUMMARY")
+        logger.info("==================================================")
+        logger.info("document_type=%s", document_type or "Generic / Unspecified")
+        logger.info("total_detector_results=%d", m.get("total_detector_candidates", 0))
+
+        for det_name, s in det_stats.items():
+            logger.info(
+                "  detector=%s: candidates=%d locked=%d suppressed=%d pre_llm_rejected=%d pending=%d",
+                det_name,
+                s.get("candidates", 0),
+                s.get("locked", 0),
+                s.get("duplicates_suppressed", 0),
+                s.get("pre_llm_rejected", 0),
+                s.get("pending_for_llm", 0),
+            )
+
+        logger.info("--------------------------------------------------")
+        logger.info("high_confidence_locked=%d", m.get("high_confidence_locked", 0))
+        logger.info("duplicate_suppressed=%d", m.get("duplicate_suppressed", 0))
+        logger.info("low_confidence_candidates=%d", m.get("pre_llm_rejected", 0) + m.get("sent_to_llm_validation", 0))
+        logger.info("filtered_before_llm=%d", m.get("pre_llm_rejected", 0))
+        logger.info("sent_to_llm_validation=%d", m.get("sent_to_llm_validation", 0))
+        logger.info("llm_confirmed=%d", m.get("llm_confirmed", 0))
+        logger.info("llm_reclassified=%d", m.get("llm_reclassified", 0))
+        logger.info("llm_rejected=%d", m.get("llm_rejected", 0))
+        logger.info("llm_residual_entities=%d", m.get("llm_residual_entities", 0))
+
+        pii_count = sum(1 for e in results if getattr(e, "privacy_category", "") == "PII")
+        phi_count = sum(1 for e in results if getattr(e, "privacy_category", "") == "PHI")
+        logger.info("final_entities=%d (PII=%d, PHI=%d)", len(results), pii_count, phi_count)
+
+        total_low = m.get("pre_llm_rejected", 0) + m.get("sent_to_llm_validation", 0)
+        saved = m.get("pre_llm_rejected", 0)
+        reduction_pct = (saved / total_low * 100.0) if total_low > 0 else 0.0
+
+        logger.info("==================================================")
+        logger.info("QWEN USAGE SUMMARY")
+        logger.info("==================================================")
+        logger.info("validation_candidates=%d", m.get("sent_to_llm_validation", 0))
+        logger.info("residual_detection_chunks=%d", len(getattr(state, "detection_history", [])))
+        logger.info("total_llm_calls=%d", m.get("sent_to_llm_validation", 0))
+        logger.info("validation_rejected=%d", m.get("llm_rejected", 0))
+        logger.info("validation_confirmed=%d", m.get("llm_confirmed", 0))
+        logger.info("validation_reclassified=%d", m.get("llm_reclassified", 0))
+        logger.info("new_entities_discovered=%d", m.get("llm_residual_entities", 0))
+        logger.info("raw_low_confidence_candidates=%d", total_low)
+        logger.info("llm_calls_avoided=%d (reduction=%.1f%%)", saved, reduction_pct)
+        logger.info("==================================================")
 
     def _execute_dynamic_orchestration(
         self,
@@ -900,21 +1036,70 @@ class DetectionService:
                 )
 
         # If any pending candidates remain after loop, validate them with Qwen
-        if state.pending_candidates:
-            all_chunks = self.chunker.chunk_document(state.original_text)
-            validated = self.qwen3b.validate_candidates(
-                state.pending_candidates,
-                all_chunks,
+        if state.pending_candidates and not config.bypass_llm:
+            self._execute_qwen_candidate_validation(
+                detector=self.qwen3b,
+                state=state,
+                config=config,
                 document_type=document_type,
             )
-            state.add_entities(
-                validated,
-                detector_name="Qwen",
-                mask_confidence_threshold=config.high_confidence_threshold,
-            )
-            state.clear_pending_candidates()
 
         return domain, route
+
+    def _execute_qwen_candidate_validation(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        config: DynamicDetectionConfig,
+        document_type: str | None = None,
+    ) -> None:
+        """Executes LLM candidate validation and updates structured telemetry."""
+        if not state.pending_candidates:
+            return
+
+        all_chunks = self.chunker.chunk_document(state.original_text)
+        pending_cands = list(state.pending_candidates)
+        validated = detector.validate_candidates(
+            pending_cands,
+            all_chunks,
+            document_type=document_type,
+        )
+
+        validated_spans = {(e.start_char, e.end_char) for e in validated}
+        for cand in pending_cands:
+            if (cand.start_char, cand.end_char) in validated_spans:
+                match = next(e for e in validated if (e.start_char, e.end_char) == (cand.start_char, cand.end_char))
+                decision = match.metadata.get("qwen_validation", "CONFIRM")
+                reason = match.metadata.get("qwen_reason", "Validated by Qwen")
+                if decision == "RECLASSIFY":
+                    state.pipeline_metrics["llm_reclassified"] += 1
+                else:
+                    state.pipeline_metrics["llm_confirmed"] += 1
+
+                logger.info(
+                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=%s final_type=%r reason=%r",
+                    cand.entity_value,
+                    cand.entity_type,
+                    cand.confidence_score,
+                    decision,
+                    match.entity_type,
+                    reason,
+                )
+            else:
+                state.pipeline_metrics["llm_rejected"] += 1
+                logger.info(
+                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=REJECT reason='Contextual noise or non-PII/PHI'",
+                    cand.entity_value,
+                    cand.entity_type,
+                    cand.confidence_score,
+                )
+
+        state.add_entities(
+            validated,
+            detector_name=getattr(detector, "name", "Qwen3:4b"),
+            mask_confidence_threshold=config.high_confidence_threshold,
+        )
+        state.clear_pending_candidates()
 
     def _run_qwen_detector(
         self,
@@ -926,18 +1111,12 @@ class DetectionService:
     ) -> list[DetectionResult]:
         # 1. Contextual Validation Phase for low-confidence candidates
         if state.pending_candidates:
-            all_chunks = self.chunker.chunk_document(state.original_text)
-            validated = detector.validate_candidates(
-                state.pending_candidates,
-                all_chunks,
+            self._execute_qwen_candidate_validation(
+                detector=detector,
+                state=state,
+                config=config,
                 document_type=getattr(self, "_current_document_type", None),
             )
-            state.add_entities(
-                validated,
-                detector_name="Qwen",
-                mask_confidence_threshold=config.high_confidence_threshold,
-            )
-            state.clear_pending_candidates()
 
         # 2. Residual Entity Discovery Phase
         contexts = self._qwen_contexts(
@@ -960,17 +1139,25 @@ class DetectionService:
         )
         collected: list[DetectionResult] = []
         for context in contexts:
-            collected.extend(
-                self._run_detector(
-                    detector,
-                    state,
-                    page_number,
-                    custom_text=context["text"],
-                    context_offset=context["start"],
-                    allow_claimed_spans=True,
-                    known_entities=context.get("known_entities", []),
-                )
+            discovered = self._run_detector(
+                detector,
+                state,
+                page_number,
+                custom_text=context["text"],
+                context_offset=context["start"],
+                allow_claimed_spans=True,
+                known_entities=context.get("known_entities", []),
             )
+            collected.extend(discovered)
+            logger.info(
+                "QwenResidualDetection: chunk_span=%d-%d known_entities=%d new_entities_found=%d",
+                context["start"],
+                context["end"],
+                len(context.get("known_entities", [])),
+                len(discovered),
+            )
+
+        state.pipeline_metrics["llm_residual_entities"] += len(collected)
         return collected
 
     def _qwen_contexts(
@@ -979,7 +1166,6 @@ class DetectionService:
         remaining_candidates: dict,
         config: DynamicDetectionConfig,
     ) -> list[dict]:
-        all_chunks = self.chunker.chunk_document(state.original_text)
         candidates = remaining_candidates.get("candidates", [])
 
         low_confidence_entities = [
@@ -989,6 +1175,10 @@ class DetectionService:
             and state.is_span_unmasked(entity.start_char, entity.end_char)
         ]
 
+        if candidates:
+            return self._qwen_original_contexts_for_candidates(state, candidates, config)
+
+        all_chunks = self.chunker.chunk_document(state.original_text)
         relevant_chunks = self.chunker.select_relevant_chunks(
             all_chunks,
             candidates=candidates,
@@ -1161,7 +1351,11 @@ class DetectionService:
         results = filtered_results
 
         # 2. Merge multi-line addresses (e.g. Street + City/State/Zip on line 2)
-        results = self._merge_adjacent_address_lines(state.original_text, results)
+        results = self._merge_adjacent_address_lines(
+            state.original_text,
+            results,
+            document_type=document_type,
+        )
 
         # 3. Conservative adjacent-name merge for OCR/model fragments such as
         # "David A" + "Wilson" when they belong to one labeled patient field.
@@ -1202,7 +1396,11 @@ class DetectionService:
         self,
         text: str,
         entities: list[DetectionResult],
+        document_type: str | None = None,
     ) -> list[DetectionResult]:
+        if not document_type:
+            return entities
+
         address_types = {"ADDRESS", "CITY_STATE_ZIP"}
         ordered = sorted(
             entities,
@@ -1275,13 +1473,12 @@ class DetectionService:
                 elif "eob" in line_prefix or "eob" in context:
                     entity.entity_type = "EOB_NUMBER"
 
-            # 2. Phone Numbers: Contextual customer service vs patient personal phone
             if entity.entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER"}:
                 if "npi" in context and BaseDetector.is_valid_npi(entity.entity_value):
                     entity.entity_type = "NPI_NUMBER"
                 elif any(kw in line_prefix for kw in ["customer service", "support", "help desk", "inquiries", "contact us", "response line", "hotline", "office phone", "claims phone"]):
                     entity.entity_type = "ORGANIZATION_CONTACT_INFO"
-                else:
+                elif "patient" in line_prefix:
                     entity.entity_type = "PHONE_NUMBER"
 
             # 3. Dates: Contextual reclassification

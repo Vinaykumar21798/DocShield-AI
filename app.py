@@ -139,6 +139,9 @@ SWAGGER_UI_BULK_UPLOAD_STYLE = """
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    from core.logger import setup_logging
+    setup_logging(log_level="DEBUG" if settings.debug else "INFO")
+
     if settings.startup_validation_enabled:
         from database.session import run_startup_validation
 

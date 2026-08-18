@@ -1,4 +1,4 @@
-﻿import os
+import os
 
 import pytest
 from sqlalchemy import create_engine
@@ -17,6 +17,9 @@ os.environ["STARTUP_VALIDATION_ENABLED"] = "False"
 os.environ["BYPASS_LLM"] = "true"
 os.environ["GLINER_ENABLED"] = "False"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["SENTENCE_TRANSFORMERS_OFFLINE"] = "1"
 
 from core.database import Base  # noqa: E402
 from database import models  # noqa: E402,F401

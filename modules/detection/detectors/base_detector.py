@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from modules.detection.models.detection_result import DetectionResult
 
@@ -40,6 +41,17 @@ class BaseDetector(ABC):
         Can be overridden by subclasses.
         """
         return True
+
+    def validate_candidates(
+        self,
+        candidates: list[DetectionResult],
+        chunks: list[Any],
+        document_type: str | None = None,
+    ) -> list[DetectionResult]:
+        """
+        Validates candidate detections. Overridden by LLM/Validation detectors.
+        """
+        return candidates
 
     def clean_text_of_labels(self, text: str) -> str:
         """

@@ -145,6 +145,63 @@ class PipelineState:
     execution_time: dict[str, float] = field(default_factory=dict)
     detection_history: list[dict] = field(default_factory=list)
     confidence_summary: dict[str, int] = field(default_factory=dict)
+    routing_audit: list[dict] = field(default_factory=list)
+    pipeline_metrics: dict[str, Any] = field(default_factory=lambda: {
+        "total_detector_candidates": 0,
+        "high_confidence_locked": 0,
+        "duplicate_suppressed": 0,
+        "pre_llm_rejected": 0,
+        "sent_to_llm_validation": 0,
+        "llm_confirmed": 0,
+        "llm_reclassified": 0,
+        "llm_rejected": 0,
+        "llm_residual_entities": 0,
+        "detector_breakdown": {},
+    })
+
+    def log_candidate_routing(
+        self,
+        candidate: DetectionResult,
+        decision: str,
+        reason: str,
+        detector_name: str | None = None,
+        semantic_score: float = 0.0,
+        structural_score: float = 0.0,
+    ) -> None:
+        """Logs the lifecycle and routing decision for a candidate detection result."""
+        det = detector_name or getattr(candidate, "detector", "Unknown")
+        audit_entry = {
+            "value": candidate.entity_value,
+            "entity_type": candidate.entity_type,
+            "detector": det,
+            "confidence": round(float(candidate.confidence_score), 3),
+            "span": (candidate.start_char, candidate.end_char),
+            "decision": decision,
+            "reason": reason,
+            "semantic_score": round(float(semantic_score), 3),
+            "structural_score": round(float(structural_score), 3),
+        }
+        self.routing_audit.append(audit_entry)
+
+        # Update metrics
+        self.pipeline_metrics["total_detector_candidates"] += 1
+        det_stats = self.pipeline_metrics["detector_breakdown"].setdefault(
+            det, {"candidates": 0, "locked": 0, "duplicates_suppressed": 0, "pre_llm_rejected": 0, "pending_for_llm": 0}
+        )
+        det_stats["candidates"] += 1
+
+        if decision == "LOCKED":
+            self.pipeline_metrics["high_confidence_locked"] += 1
+            det_stats["locked"] += 1
+        elif decision == "DUPLICATE_SUPPRESSED":
+            self.pipeline_metrics["duplicate_suppressed"] += 1
+            det_stats["duplicates_suppressed"] += 1
+        elif decision == "PRE_LLM_REJECT":
+            self.pipeline_metrics["pre_llm_rejected"] += 1
+            det_stats["pre_llm_rejected"] += 1
+        elif decision == "PENDING_FOR_LLM":
+            self.pipeline_metrics["sent_to_llm_validation"] += 1
+            det_stats["pending_for_llm"] += 1
 
     def add_entities(
         self,

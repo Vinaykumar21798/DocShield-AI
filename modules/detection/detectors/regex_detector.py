@@ -105,7 +105,7 @@ class RegexDetector(BaseDetector):
             r"\b\d{6}\b",
 
         "SSN":
-            r"\b\d{3}[-\s]\d{2}[-\s]\d{4}\b|(?im)\b(?:SSN|Social Security Number|Social Security #|Social Security)[ \t]*[:\-]?[ \t]*(\d{9})\b",
+            r"(?im)\b(?:SSN|Social Security Number|Social Security #|Social Security)[ \t]*[:\-]?[ \t]*(\d{9})\b|\b\d{3}[-\s]\d{2}[-\s]\d{4}\b",
 
         "PERSON":
             rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?({LABELED_NAME_PATTERN})[ \t]*$)"
@@ -134,7 +134,27 @@ class RegexDetector(BaseDetector):
             rf"|\bDr\.?[ \t]+{LABELED_NAME_PATTERN}\b",
 
         "PROVIDER":
-            rf"\bProvider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
+            rf"(?im)^\s*(?:Billing[ \t]+)?Provider[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$"
+            rf"|^\s*Provider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
+
+        "HOSPITAL":
+            rf"(?im)^\s*Hospital[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+
+        "DIAGNOSIS":
+            rf"(?im)^\s*Diagnosis[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+
+        "MEDICATION":
+            rf"(?im)^\s*Medication[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+
+        "PROCEDURE":
+            rf"(?im)^\s*Procedure[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+
+        "INSURANCE_PROVIDER":
+            rf"(?im)^\s*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}}?\b(?:Insurance Company|Assurance Company|Health Plan|Mutual)\b)[ \t]*$",
+
+        "ORGANIZATION":
+            rf"(?im)^\s*(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$"
+            rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})(?=\s+and\b|\r?\n|\Z))",
 
         "ADDRESS":
             r"(?ims:^[^\r\n]*\S[ \t]+(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*([^\r\n]+)[ \t]*$"
@@ -240,7 +260,8 @@ class RegexDetector(BaseDetector):
         "INSURANCE_PROVIDER": 89,
         "PROVIDER": 88,
         "ADDRESS": 82,
-        "CITY_STATE_ZIP": 82,
+        "CITY_STATE_ZIP": 80,
+        "ZIP_CODE": 85,
         "PO_BOX": 82,
         "DIAGNOSIS": 82,
         "MEDICATION": 82,
@@ -344,10 +365,12 @@ class RegexDetector(BaseDetector):
         "REPORT_ID",
         "TRACKING_NUMBER",
         "ACCESS_CODE",
+        "DIAGNOSIS",
         "DRIVING_LICENSE",
         "EMPLOYEE_ID",
         "HOSPITAL",
         "INSURANCE_ID",
+        "INSURANCE_PROVIDER",
         "INVOICE_NUMBER",
         "MEDICATION",
         "MRN",
@@ -497,7 +520,7 @@ class RegexDetector(BaseDetector):
                     if not self.has_context(entity, text, start_char):
                         continue
 
-                if entity in {"PATIENT", "PERSON", "DOCTOR", "PROVIDER"}:
+                if entity in {"PATIENT", "PERSON", "DOCTOR"}:
                     CLINICAL_SUFFIXES = [
                         " Office Visit", " Specialist Consult", " Consult", " Consultation",
                         " Follow Up", " Follow-Up", " Evaluation", " Exam", " Examination",
@@ -512,6 +535,12 @@ class RegexDetector(BaseDetector):
                             break
 
                     if not self.validate_labeled_person_value(value):
+                        continue
+
+                elif entity == "PROVIDER":
+                    if not value.strip():
+                        continue
+                    if any(term in value.lower() for term in ["customer service", "main hospital"]):
                         continue
 
                 if entity in {"CLAIM_NUMBER", "MEMBER_ID", "GROUP_NUMBER", "EOB_NUMBER"}:

@@ -242,11 +242,10 @@ class EntityValidator:
             entity_type = clinical_type
             structurally_validated = True
 
-        if entity_type == "ORGANIZATION":
-            if semantic_key == "medicare" or re.search(
-                r"\b(?:insurance|assurance)\b.*\b(?:company|co|corp|corporation|plan|plans|group)\b",
-                semantic_key,
-            ):
+        if entity_type in {"ORGANIZATION", "INSURANCE_PROVIDER"}:
+            if entity_type == "INSURANCE_PROVIDER":
+                structurally_validated = True
+            elif semantic_key == "medicare":
                 entity_type = "INSURANCE_PROVIDER"
                 structurally_validated = True
             elif re.search(

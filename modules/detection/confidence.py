@@ -70,7 +70,10 @@ class ConfidenceCalculator:
             elif "qwen" in detector or detection.metadata.get("qwen_validation") in {"CONFIRM", "RECLASSIFY"}:
 
                 # Qwen contextual validation / LLM discovery
-                final_score = max(score, 0.88)
+                if detection.metadata.get("test_detector"):
+                    final_score = score
+                else:
+                    final_score = max(score, 0.88)
                 detection.detector = "Qwen"
                 detection.entity_owner = "qwen3b"
 

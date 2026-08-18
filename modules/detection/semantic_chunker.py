@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Sequence
 
+from modules.detection.embedding_service import EmbeddingService
 from modules.detection.models.detection_result import DetectionResult
 
 logger = logging.getLogger(__name__)
@@ -40,17 +41,19 @@ class DocumentChunk:
 
 class SemanticChunker:
     """
-    Semantic chunker designed for PII/PHI document intelligence.
+    Embedding-based semantic chunker designed for PII/PHI document intelligence.
 
-    Splits text along logical semantic boundaries (section headers, paragraphs,
-    and sentences) while preserving global character coordinates, maintaining
-    boundary overlap, and selecting candidate-relevant chunks for LLM processing.
+    Uses sentence-transformers/all-MiniLM-L6-v2 embeddings and cosine similarity
+    between adjacent semantic units (paragraphs, table rows, sentences, section headings)
+    to identify natural semantic boundaries while preserving global character coordinates,
+    boundary overlap, and candidate-relevant chunk selection.
     """
 
     DEFAULT_TARGET_CHUNK_CHARS = 1500
     DEFAULT_MAX_CHUNK_CHARS = 2200
     DEFAULT_MIN_CHUNK_CHARS = 300
     DEFAULT_OVERLAP_CHARS = 100
+    SIMILARITY_BOUNDARY_THRESHOLD = 0.40
 
     def __init__(
         self,
@@ -58,11 +61,19 @@ class SemanticChunker:
         max_chunk_chars: int = DEFAULT_MAX_CHUNK_CHARS,
         min_chunk_chars: int = DEFAULT_MIN_CHUNK_CHARS,
         overlap_chars: int = DEFAULT_OVERLAP_CHARS,
+        embedding_service: EmbeddingService | None = None,
     ):
         self.target_chunk_chars = target_chunk_chars
         self.max_chunk_chars = max_chunk_chars
         self.min_chunk_chars = min_chunk_chars
         self.overlap_chars = overlap_chars
+        self._embedding_service = embedding_service
+
+    @property
+    def embedding_service(self) -> EmbeddingService:
+        if self._embedding_service is None:
+            self._embedding_service = EmbeddingService.get_instance()
+        return self._embedding_service
 
     @staticmethod
     def normalize_text(text: str) -> str:
@@ -106,15 +117,15 @@ class SemanticChunker:
 
     def chunk_document(self, text: str) -> list[DocumentChunk]:
         """
-        Partitions the document text into semantic chunks with exact global offsets.
+        Partitions the document text into semantic chunks using embedding-based
+        adjacent similarity with size guardrails and exact global offsets.
         """
         if not text or not text.strip():
             return []
 
-        # Ensure normalized text
         text = self.normalize_text(text)
 
-        # If document is small enough, return as a single chunk
+        # If document fits in max chunk size, return as a single coherent chunk
         if len(text) <= self.max_chunk_chars:
             return [
                 DocumentChunk(
@@ -125,9 +136,9 @@ class SemanticChunker:
                 )
             ]
 
-        # 1. Identify primary split points (double newlines, section headers, sentences)
-        paragraphs = self._split_into_semantic_segments(text)
-        if not paragraphs:
+        # 1. Split into atomic semantic units (paragraphs, table rows, section blocks, sentences)
+        units = self._split_into_semantic_units(text)
+        if not units:
             return [
                 DocumentChunk(
                     chunk_id=0,
@@ -137,55 +148,84 @@ class SemanticChunker:
                 )
             ]
 
-        # 2. Group segments into target-sized chunks with overlap
+        if len(units) == 1:
+            return [
+                DocumentChunk(
+                    chunk_id=0,
+                    text=text[units[0][0]:units[0][1]],
+                    start_char=units[0][0],
+                    end_char=units[0][1],
+                )
+            ]
+
+        # 2. Compute embeddings for each semantic unit
+        unit_texts = [text[start:end] for start, end in units]
+        unit_embeddings = self.embedding_service.encode(unit_texts)
+
+        # 3. Detect semantic boundary drops via cosine similarity between adjacent units
         chunks: list[DocumentChunk] = []
-        current_segments: list[tuple[int, int]] = []
-        current_len = 0
+        current_units: list[tuple[int, int]] = [units[0]]
+        current_len = units[0][1] - units[0][0]
         chunk_id = 0
 
-        for seg_start, seg_end in paragraphs:
-            seg_len = seg_end - seg_start
-            if current_segments and (current_len + seg_len > self.max_chunk_chars):
+        for i in range(1, len(units)):
+            next_start, next_end = units[i]
+            next_len = next_end - next_start
+
+            # Calculate adjacent cosine similarity
+            sim = 1.0
+            if len(unit_embeddings) > i:
+                sim = self.embedding_service.cosine_similarity(
+                    unit_embeddings[i - 1],
+                    unit_embeddings[i],
+                )
+
+            # Check boundary conditions
+            is_size_overflow = (current_len + next_len > self.max_chunk_chars)
+            is_semantic_shift = (sim < self.SIMILARITY_BOUNDARY_THRESHOLD and current_len >= self.min_chunk_chars)
+            is_target_reached = (current_len >= self.target_chunk_chars and sim < 0.65)
+
+            if is_size_overflow or is_semantic_shift or is_target_reached:
                 # Finalize current chunk
-                chunk_start = current_segments[0][0]
-                chunk_end = current_segments[-1][1]
-                chunk_text = text[chunk_start:chunk_end]
+                c_start = current_units[0][0]
+                c_end = current_units[-1][1]
+                chunk_text = text[c_start:c_end]
 
                 chunks.append(
                     DocumentChunk(
                         chunk_id=chunk_id,
                         text=chunk_text,
-                        start_char=chunk_start,
-                        end_char=chunk_end,
+                        start_char=c_start,
+                        end_char=c_end,
                     )
                 )
                 chunk_id += 1
 
-                # Retain overlap segments
+                # Overlap retention
                 overlap_accum = 0
-                new_segments = []
-                for s_start, s_end in reversed(current_segments):
-                    new_segments.insert(0, (s_start, s_end))
+                new_units = []
+                for s_start, s_end in reversed(current_units):
+                    new_units.insert(0, (s_start, s_end))
                     overlap_accum += (s_end - s_start)
                     if overlap_accum >= self.overlap_chars:
                         break
 
-                current_segments = new_segments
+                current_units = new_units
                 current_len = overlap_accum
 
-            current_segments.append((seg_start, seg_end))
-            current_len += seg_len
+            current_units.append((next_start, next_end))
+            current_len += next_len
 
-        if current_segments:
-            chunk_start = current_segments[0][0]
-            chunk_end = current_segments[-1][1]
-            chunk_text = text[chunk_start:chunk_end]
+        if current_units:
+            c_start = current_units[0][0]
+            c_end = current_units[-1][1]
+            chunk_text = text[c_start:c_end]
             chunks.append(
                 DocumentChunk(
                     chunk_id=chunk_id,
                     text=chunk_text,
-                    start_char=chunk_start,
-                    end_char=chunk_end,
+                    start_char=c_start,
+                    end_char=c_end,
                 )
             )
 
@@ -290,7 +330,7 @@ class SemanticChunker:
                 return chunk
         return None
 
-    def _split_into_semantic_segments(self, text: str) -> list[tuple[int, int]]:
+    def _split_into_semantic_units(self, text: str) -> list[tuple[int, int]]:
         """
         Identifies boundaries by double newlines, section headings, and sentences.
         Returns a list of (start_idx, end_idx) character spans.
@@ -299,7 +339,7 @@ class SemanticChunker:
         pos = 0
         text_len = len(text)
 
-        # Match paragraph breaks (\n\n+) or section headers
+        # Match paragraph breaks (\n\n+), section headers, or sentence ends
         boundary_pattern = re.compile(
             r"(?:\r?\n\s*\r?\n|(?<=\n)(?=[A-Z0-9\s/_\-]{3,40}:)|(?<=[.!?])\s+(?=[A-Z]))"
         )
