@@ -29,6 +29,12 @@ class Document(Base):
 
     file_size = Column(Integer, nullable=False)
 
+    content_hash = Column(
+        String(64),
+        nullable=True,
+        index=True,
+    )
+
     storage_path = Column(
         String(500),
         nullable=False,

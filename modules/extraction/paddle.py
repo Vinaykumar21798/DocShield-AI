@@ -1,5 +1,7 @@
 import os
+import re
 from dataclasses import dataclass
+from html import escape
 from html.parser import HTMLParser
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -760,27 +762,11 @@ class PaddleOCRExtractionService:
         blocks = []
 
         for row_group in row_groups:
-            group_lines = [line for row in row_group for line in row]
-            text = "\n".join(
-                self._format_visual_row(row, page_size[0])
-                for row in row_group
-            ).strip()
-            if not text:
-                continue
-
-            blocks.append(
-                {
-                    "block_type": self._infer_block_type(row_group),
-                    "bbox": self._bbox_to_list(
-                        self._bbox_for_lines(group_lines),
-                    ),
-                    "text": text,
-                    "lines": [
-                        self._line_to_dict(line)
-                        for line in group_lines
-                    ],
-                    "source": "ocr_bounding_boxes",
-                }
+            blocks.extend(
+                self._build_blocks_for_row_group(
+                    row_group,
+                    page_size[0],
+                )
             )
 
         if unpositioned_lines:
@@ -802,6 +788,531 @@ class PaddleOCRExtractionService:
             )
 
         return blocks
+
+    def _build_blocks_for_row_group(
+        self,
+        row_group: List[List[OCRTextLine]],
+        page_width: float,
+    ) -> List[Dict[str, Any]]:
+        blocks = []
+
+        for block_type, rows in self._split_table_segments(row_group):
+            group_lines = [line for row in rows for line in row]
+            if block_type in {"table", "delimited_table"}:
+                if block_type == "delimited_table":
+                    table_block = self._build_delimited_table_block(rows)
+                else:
+                    table_block = self._build_table_block(rows)
+                if table_block is not None:
+                    blocks.append(table_block)
+                    continue
+
+            text = "\n".join(
+                self._format_visual_row(row, page_width)
+                for row in rows
+            ).strip()
+            if not text:
+                continue
+            blocks.append(
+                {
+                    "block_type": "text",
+                    "bbox": self._bbox_to_list(
+                        self._bbox_for_lines(group_lines),
+                    ),
+                    "text": text,
+                    "lines": [
+                        self._line_to_dict(line)
+                        for line in group_lines
+                    ],
+                    "source": "ocr_bounding_boxes",
+                }
+            )
+
+        return blocks
+
+    def _split_table_segments(
+        self,
+        row_group: List[List[OCRTextLine]],
+    ) -> List[Tuple[str, List[List[OCRTextLine]]]]:
+        segments: List[Tuple[str, List[List[OCRTextLine]]]] = []
+        text_start = 0
+        row_index = 0
+
+        while row_index < len(row_group):
+            if self._is_delimited_table_header(row_group[row_index]):
+                candidate_end = row_index + 1
+                while candidate_end < len(row_group):
+                    if self._is_section_heading_row(
+                        row_group[candidate_end],
+                    ):
+                        break
+                    candidate_end += 1
+
+                candidate = row_group[row_index:candidate_end]
+                if self._parse_delimited_table_rows(candidate):
+                    if text_start < row_index:
+                        segments.append(
+                            ("text", row_group[text_start:row_index])
+                        )
+                    segments.append(("delimited_table", candidate))
+                    row_index = candidate_end
+                    text_start = candidate_end
+                    continue
+
+            header = sorted(
+                row_group[row_index],
+                key=lambda line: line.left,
+            )
+            if len(header) < 2:
+                row_index += 1
+                continue
+
+            column_lefts = [line.left for line in header]
+            candidate_end = row_index + 1
+            tolerance = max(
+                self._median_line_height(
+                    [
+                        line
+                        for row in row_group[row_index:]
+                        for line in row
+                    ]
+                ) * 1.5,
+                12.0,
+            )
+
+            while candidate_end < len(row_group):
+                candidate_row = row_group[candidate_end]
+                if self._is_section_heading_row(
+                    candidate_row,
+                    column_lefts,
+                ):
+                    break
+                if not all(
+                    min(abs(line.left - left) for left in column_lefts)
+                    <= tolerance
+                    for line in candidate_row
+                ):
+                    break
+                candidate_end += 1
+
+            candidate = row_group[row_index:candidate_end]
+            if self._infer_block_type(candidate) != "table":
+                row_index += 1
+                continue
+
+            if text_start < row_index:
+                segments.append(
+                    ("text", row_group[text_start:row_index])
+                )
+            segments.append(("table", candidate))
+            row_index = candidate_end
+            text_start = candidate_end
+
+        if text_start < len(row_group):
+            segments.append(("text", row_group[text_start:]))
+
+        return segments
+
+    @staticmethod
+    def _is_delimited_table_header(
+        row: List[OCRTextLine],
+    ) -> bool:
+        if len(row) != 1:
+            return False
+        text = row[0].text.strip()
+        parts = [part.strip() for part in text.split("|")]
+        letters = [character for character in text if character.isalpha()]
+        return (
+            len(parts) >= 3
+            and all(parts)
+            and bool(letters)
+            and text == text.upper()
+        )
+
+    def _is_section_heading_row(
+        self,
+        row: List[OCRTextLine],
+        column_lefts: Optional[List[float]] = None,
+    ) -> bool:
+        if len(row) != 1:
+            return False
+        line = row[0]
+        letters = [
+            character for character in line.text
+            if character.isalpha()
+        ]
+        if not letters or line.text != line.text.upper():
+            return False
+        if column_lefts is None or len(column_lefts) < 2:
+            return "|" not in line.text
+        tolerance = max(line.height * 1.5, 12.0)
+        return (
+            line.left <= column_lefts[0] + tolerance
+            and line.right >= column_lefts[1]
+        )
+
+    def _build_table_block(
+        self,
+        rows: List[List[OCRTextLine]],
+    ) -> Optional[Dict[str, Any]]:
+        if self._infer_block_type(rows) != "table":
+            return None
+
+        header = sorted(rows[0], key=lambda line: line.left)
+        column_lefts = [line.left for line in header]
+        column_count = len(column_lefts)
+        data_by_column: List[List[OCRTextLine]] = [
+            [] for _ in range(column_count)
+        ]
+
+        for row in rows[1:]:
+            for line in sorted(row, key=lambda item: item.left):
+                column_index = min(
+                    range(column_count),
+                    key=lambda index: abs(
+                        line.left - column_lefts[index]
+                    ),
+                )
+                data_by_column[column_index].append(line)
+
+        wrap_gap = max(
+            self._median_line_height(
+                [line for row in rows for line in row]
+            ) * 0.25,
+            4.0,
+        )
+        anchor_column_index = 0
+        if not data_by_column[anchor_column_index]:
+            anchor_column_index = max(
+                range(column_count),
+                key=lambda index: len(data_by_column[index]),
+            )
+        anchor_groups = self._group_cell_fragments(
+            data_by_column[anchor_column_index],
+            wrap_gap,
+        )
+        if not anchor_groups:
+            return None
+
+        anchor_centers = [
+            (
+                min(line.top for line in group)
+                + max(line.bottom for line in group)
+            ) / 2
+            for group in anchor_groups
+        ]
+        table_rows = [[line.text for line in header]]
+        table_rows.extend(
+            [[""] * column_count for _ in anchor_groups]
+        )
+        cells = []
+        cell_lines: Dict[Tuple[int, int], List[OCRTextLine]] = {}
+
+        for column_index, line in enumerate(header):
+            cells.append(
+                self._coordinate_cell(
+                    [line],
+                    row_index=0,
+                    column_index=column_index,
+                )
+            )
+
+        for data_row_index, group in enumerate(anchor_groups):
+            cell_lines[(data_row_index + 1, anchor_column_index)] = list(
+                group
+            )
+
+        for column_index, column_lines in enumerate(data_by_column):
+            if column_index == anchor_column_index:
+                continue
+            for line in column_lines:
+                line_center = (line.top + line.bottom) / 2
+                data_row_index = min(
+                    range(len(anchor_centers)),
+                    key=lambda index: abs(
+                        line_center - anchor_centers[index]
+                    ),
+                )
+                cell_lines.setdefault(
+                    (data_row_index + 1, column_index),
+                    [],
+                ).append(line)
+
+        for (row_index, column_index), fragments in sorted(
+            cell_lines.items(),
+        ):
+            cell = self._coordinate_cell(
+                fragments,
+                row_index=row_index,
+                column_index=column_index,
+            )
+            table_rows[row_index][column_index] = cell["text"]
+            cells.append(cell)
+
+        markdown = self._format_markdown_table(table_rows)
+        html = self._format_html_table(table_rows)
+        group_lines = [line for row in rows for line in row]
+        columns = []
+        for column_index in range(column_count):
+            column_lines = [header[column_index]]
+            column_lines.extend(data_by_column[column_index])
+            columns.append(
+                {
+                    "column_index": column_index,
+                    "bbox": self._bbox_to_list(
+                        self._bbox_for_lines(column_lines)
+                    ),
+                }
+            )
+
+        return {
+            "block_type": "table",
+            "bbox": self._bbox_to_list(
+                self._bbox_for_lines(group_lines),
+            ),
+            "text": markdown,
+            "lines": [
+                self._line_to_dict(line) for line in group_lines
+            ],
+            "source": "ocr_bounding_boxes",
+            "table": {
+                "rows": table_rows,
+                "cells": cells,
+                "columns": columns,
+                "markdown": markdown,
+                "html": html,
+            },
+        }
+
+    @staticmethod
+    def _group_cell_fragments(
+        lines: List[OCRTextLine],
+        wrap_gap: float,
+    ) -> List[List[OCRTextLine]]:
+        groups: List[List[OCRTextLine]] = []
+        for line in sorted(lines, key=lambda item: (item.top, item.left)):
+            if not groups:
+                groups.append([line])
+                continue
+            previous_bottom = max(item.bottom for item in groups[-1])
+            if line.top - previous_bottom <= wrap_gap:
+                groups[-1].append(line)
+            else:
+                groups.append([line])
+        return groups
+
+    def _parse_delimited_table_rows(
+        self,
+        rows: List[List[OCRTextLine]],
+    ) -> List[List[str]]:
+        if not rows or not self._is_delimited_table_header(rows[0]):
+            return []
+        header_line = rows[0][0]
+        header = [
+            self._normalize_text(part)
+            for part in header_line.text.split("|")
+        ]
+        if len(header) != 3 or not all(header):
+            return []
+
+        body_text = self._normalize_text(
+            " ".join(
+                line.text
+                for row in rows[1:]
+                for line in row
+            )
+        )
+        tokens = [
+            self._normalize_text(part)
+            for part in body_text.split("|")
+        ]
+        if len(tokens) < 3:
+            return []
+        if re.match(r"^[-–—_]", tokens[0]):
+            tokens[0] = re.sub(
+                r"^[\s\-–—_I]+",
+                "",
+                tokens[0],
+            )
+
+        data_rows = []
+        question = tokens[0]
+        token_index = 1
+        while question and token_index + 1 < len(tokens):
+            answer = tokens[token_index]
+            matter, next_question = self._split_trailing_question(
+                tokens[token_index + 1]
+            )
+            if not answer or not matter:
+                return []
+            data_rows.append([question, answer, matter])
+            token_index += 2
+            if next_question is None:
+                break
+            question = next_question
+
+        if token_index < len(tokens) and next_question is not None:
+            return []
+        return [header, *data_rows] if data_rows else []
+
+    @staticmethod
+    def _split_trailing_question(
+        text: str,
+    ) -> Tuple[str, Optional[str]]:
+        split_positions = []
+        for match in re.finditer(r"\s+(?=[A-Z])", text):
+            suffix = text[match.end():].strip()
+            if suffix.endswith("?") and suffix.count("?") == 1:
+                split_positions.append(match.start())
+        if not split_positions:
+            return text.strip(), None
+        split_at = split_positions[-1]
+        return text[:split_at].strip(), text[split_at:].strip()
+
+    def _build_delimited_table_block(
+        self,
+        rows: List[List[OCRTextLine]],
+    ) -> Optional[Dict[str, Any]]:
+        table_rows = self._parse_delimited_table_rows(rows)
+        if not table_rows:
+            return None
+
+        header_line = rows[0][0]
+        group_lines = [line for row in rows for line in row]
+        block_bbox = self._bbox_for_lines(group_lines)
+        if block_bbox is None or header_line.bbox is None:
+            return None
+
+        raw_header = header_line.text
+        pipe_positions = [
+            index for index, character in enumerate(raw_header)
+            if character == "|"
+        ]
+        text_length = max(len(raw_header), 1)
+        column_edges = [header_line.left]
+        column_edges.extend(
+            header_line.left
+            + (header_line.right - header_line.left)
+            * ((position + 0.5) / text_length)
+            for position in pipe_positions
+        )
+        column_edges.append(header_line.right)
+
+        data_top = min(
+            line.top for row in rows[1:] for line in row
+        )
+        data_bottom = max(
+            line.bottom for row in rows[1:] for line in row
+        )
+        data_row_count = len(table_rows) - 1
+        data_row_height = (data_bottom - data_top) / data_row_count
+        cells = []
+        for row_index, table_row in enumerate(table_rows):
+            if row_index == 0:
+                row_top = header_line.top
+                row_bottom = header_line.bottom
+            else:
+                row_top = data_top + data_row_height * (row_index - 1)
+                row_bottom = data_top + data_row_height * row_index
+            for column_index, text in enumerate(table_row):
+                cells.append(
+                    {
+                        "text": text,
+                        "row_index": row_index,
+                        "column_index": column_index,
+                        "bbox": self._bbox_to_list(
+                            (
+                                column_edges[column_index],
+                                row_top,
+                                column_edges[column_index + 1],
+                                row_bottom,
+                            )
+                        ),
+                        "rowspan": 1,
+                        "colspan": 1,
+                    }
+                )
+
+        markdown = self._format_markdown_table(table_rows)
+        html = self._format_html_table(table_rows)
+        columns = [
+            {
+                "column_index": column_index,
+                "bbox": self._bbox_to_list(
+                    (
+                        column_edges[column_index],
+                        block_bbox[1],
+                        column_edges[column_index + 1],
+                        block_bbox[3],
+                    )
+                ),
+            }
+            for column_index in range(len(table_rows[0]))
+        ]
+        return {
+            "block_type": "table",
+            "bbox": self._bbox_to_list(block_bbox),
+            "text": markdown,
+            "lines": [
+                self._line_to_dict(line) for line in group_lines
+            ],
+            "source": "ocr_bounding_boxes",
+            "table": {
+                "rows": table_rows,
+                "cells": cells,
+                "columns": columns,
+                "markdown": markdown,
+                "html": html,
+            },
+        }
+
+    def _coordinate_cell(
+        self,
+        lines: List[OCRTextLine],
+        row_index: int,
+        column_index: int,
+    ) -> Dict[str, Any]:
+        ordered_lines = sorted(
+            lines,
+            key=lambda line: (line.top, line.left),
+        )
+        return {
+            "text": " ".join(line.text for line in ordered_lines),
+            "row_index": row_index,
+            "column_index": column_index,
+            "bbox": self._bbox_to_list(
+                self._bbox_for_lines(ordered_lines)
+            ),
+            "rowspan": 1,
+            "colspan": 1,
+        }
+
+    @staticmethod
+    def _format_markdown_table(table_rows: List[List[str]]) -> str:
+        def format_row(row: List[str]) -> str:
+            cells = [cell.replace("|", "\\|").strip() for cell in row]
+            return f"| {' | '.join(cells)} |"
+
+        header = format_row(table_rows[0])
+        separator = "|" + "---|" * len(table_rows[0])
+        data_rows = [format_row(row) for row in table_rows[1:]]
+        return "\n".join([header, separator, *data_rows])
+
+    @staticmethod
+    def _format_html_table(table_rows: List[List[str]]) -> str:
+        header = "".join(
+            f"<th>{escape(cell)}</th>" for cell in table_rows[0]
+        )
+        body = "".join(
+            "<tr>"
+            + "".join(f"<td>{escape(cell)}</td>" for cell in row)
+            + "</tr>"
+            for row in table_rows[1:]
+        )
+        return (
+            f"<table><thead><tr>{header}</tr></thead>"
+            f"<tbody>{body}</tbody></table>"
+        )
 
     def _format_coordinate_text(
         self,
@@ -901,12 +1412,30 @@ class PaddleOCRExtractionService:
         self,
         row_group: List[List[OCRTextLine]],
     ) -> str:
-        multi_fragment_rows = sum(
-            1
-            for row in row_group
-            if len(row) >= 3
+        if len(row_group) < 2 or len(row_group[0]) < 2:
+            return "text"
+
+        header = sorted(row_group[0], key=lambda line: line.left)
+        column_lefts = [line.left for line in header]
+        tolerance = max(
+            self._median_line_height(
+                [line for row in row_group for line in row]
+            ) * 1.5,
+            12.0,
         )
-        if len(row_group) >= 2 and multi_fragment_rows >= 2:
+        matched_columns = {
+            min(
+                range(len(column_lefts)),
+                key=lambda index: abs(
+                    line.left - column_lefts[index]
+                ),
+            )
+            for row in row_group[1:]
+            for line in row
+            if min(abs(line.left - left) for left in column_lefts)
+            <= tolerance
+        }
+        if len(matched_columns) >= 2:
             return "table"
         return "text"
 

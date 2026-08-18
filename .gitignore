@@ -4,11 +4,11 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Compiled Extensions
 *.so
 
+# ==========================================
 # Distribution / Packaging
+# ==========================================
 build/
 dist/
 *.egg-info/
@@ -44,7 +44,7 @@ ENV/
 Thumbs.db
 
 # ==========================================
-# Python Cache
+# Python Cache / Tool Cache
 # ==========================================
 .pytest_cache/
 .mypy_cache/
@@ -76,18 +76,34 @@ htmlcov/
 alembic/versions/__pycache__/
 
 # ==========================================
-# Uploaded Files
+# Storage - Generated / Runtime Data
 # ==========================================
+storage/runs/*
+!storage/runs/.gitkeep
+
 storage/uploads/*
 !storage/uploads/.gitkeep
 
-# OCR Output (Future)
+storage/temp/*
+!storage/temp/.gitkeep
+
 storage/ocr/*
 !storage/ocr/.gitkeep
 
-# Temporary Files
-storage/temp/*
-!storage/temp/.gitkeep
+storage/extracted_text/*
+!storage/extracted_text/.gitkeep
+
+storage/redacted/*
+!storage/redacted/.gitkeep
+
+storage/reports/*
+!storage/reports/.gitkeep
+
+# ==========================================
+# Benchmarks - Generated Outputs
+# ==========================================
+benchmarks/output/*
+!benchmarks/output/.gitkeep
 
 # ==========================================
 # Redis
@@ -106,22 +122,20 @@ docker-compose.override.yml
 .ipynb_checkpoints/
 
 # ==========================================
-# Miscellaneous
+# Node
 # ==========================================
+node_modules/
+
+# ==========================================
+# Scratch / Temporary Development
+# ==========================================
+brain/
 *.tmp
 *.bak
 *.orig
 
-storage/runs/*
-storage/uploads/*
-storage/temp/*
-
 # ==========================================
-# Node / Scratch
-# ==========================================
-node_modules/
-brain/
-
 # OpenCode
+# ==========================================
 opencode.json
 AGENTS.md

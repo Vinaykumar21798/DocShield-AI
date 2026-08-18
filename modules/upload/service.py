@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 from database.models.document import Document
 from database.models.processing_job import ProcessingJob
 from database.models.run import Run
+from database.repositories.document_repository import document_repository
 from database.repositories.run_repository import RunRepository
+from modules.upload.hashing import stream_file_sha256
 from modules.upload.storage import StorageService
 from modules.upload.validator import UploadValidator
 
@@ -33,6 +35,7 @@ class UploadService:
         self.storage = StorageService()
         self.producer = RedisProducer(redis_client)
         self.run_repo = RunRepository(db)
+        self.document_repo = document_repository
 
     async def upload_documents(
         self,
@@ -49,9 +52,17 @@ class UploadService:
         run = self.run_repo.create_run(total_files=len(files))
 
         documents = []
+        duplicate_count = 0
         for file in files:
             document = await self._process_upload(file, run)
             documents.append(document)
+            if getattr(document, "_upload_is_duplicate", False):
+                duplicate_count += 1
+
+        # Duplicates are skipped (no processing job is enqueued), so exclude
+        # them from the run's file count to keep run status accounting correct.
+        if duplicate_count:
+            run.total_files = max(0, run.total_files - duplicate_count)
 
         self.db.commit()
         self.db.refresh(run)
@@ -74,6 +85,22 @@ class UploadService:
         # Validate
         file_content = await self.validator.validate(file)
 
+        # Compute a streaming SHA-256 of the original file content (before any
+        # OCR/extraction) to detect duplicate uploads.
+        file.file.seek(0)
+        content_hash = stream_file_sha256(file.file)
+
+        # Duplicate detection: if an identical document already exists, return
+        # the existing document/run reference and skip all downstream work
+        # (no new artifact, no processing job, no OCR/detection).
+        existing = self.document_repo.get_document_by_content_hash(
+            self.db,
+            content_hash,
+        )
+        if existing is not None:
+            setattr(existing, "_upload_is_duplicate", True)
+            return existing
+
         # Generate Document ID first to use in storage path
         import uuid
         doc_id = str(uuid.uuid4())
@@ -93,6 +120,7 @@ class UploadService:
             stored_filename=stored_filename,
             file_type=file.content_type,
             file_size=len(file_content),
+            content_hash=content_hash,
             storage_path=file_path,
             status=DOCUMENT_STATUS_PENDING,
             run_id=run.id,

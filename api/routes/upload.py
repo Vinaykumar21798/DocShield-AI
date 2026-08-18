@@ -41,6 +41,9 @@ async def upload_document(
             "document_id": documents[0].id,
             "filename": documents[0].filename,
             "status": documents[0].status,
+            "is_duplicate": getattr(
+                documents[0], "_upload_is_duplicate", False
+            ),
         },
     }
 
@@ -89,6 +92,9 @@ async def upload_documents(
                 "document_id": document.id,
                 "filename": document.filename,
                 "status": document.status,
+                "is_duplicate": getattr(
+                    document, "_upload_is_duplicate", False
+                ),
             }
             for document in documents
         ],

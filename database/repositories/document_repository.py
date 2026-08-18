@@ -36,6 +36,19 @@ class DocumentRepository(BaseRepository[Document]):
             .first()
         )
 
+    def get_document_by_content_hash(
+        self,
+        db: Session,
+        content_hash: str,
+    ) -> Optional[Document]:
+        if content_hash is None:
+            return None
+        return (
+            db.query(Document)
+            .filter(Document.content_hash == content_hash)
+            .first()
+        )
+
     def get_document_by_stored_filename(
         self,
         db: Session,
