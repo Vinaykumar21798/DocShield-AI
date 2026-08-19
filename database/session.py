@@ -90,6 +90,8 @@ def run_startup_validation() -> None:
             "reviews",
             "redactions",
             "reports",
+            "users",
+            "auth_sessions",
         ]
 
         missing_tables = [
@@ -102,6 +104,7 @@ def run_startup_validation() -> None:
             )
 
         from database.models import (  # noqa: WPS433
+            AuthSession,
             ConfidenceScore,
             Document,
             Entity,
@@ -110,6 +113,7 @@ def run_startup_validation() -> None:
             Redaction,
             Report,
             Review,
+            User,
         )
 
         models_to_check = [
@@ -121,6 +125,8 @@ def run_startup_validation() -> None:
             Review,
             Redaction,
             Report,
+            User,
+            AuthSession,
         ]
 
         missing_columns = []

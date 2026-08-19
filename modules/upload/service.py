@@ -29,8 +29,9 @@ class UploadService:
 
     MAX_FILES = 100
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, owner_id: str = None):
         self.db = db
+        self.owner_id = owner_id
         self.validator = UploadValidator()
         self.storage = StorageService()
         self.producer = RedisProducer(redis_client)
@@ -124,6 +125,8 @@ class UploadService:
             storage_path=file_path,
             status=DOCUMENT_STATUS_PENDING,
             run_id=run.id,
+            owner_id=self.owner_id,
+            uploaded_by=self.owner_id,
         )
 
         self.db.add(document)

@@ -8,6 +8,8 @@ from .processing_job import ProcessingJob
 from .ocr_result import OCRResult
 from .run import Run
 from .run_sequence import RunSequence
+from .user import User
+from .auth_session import AuthSession
 
 __all__ = [
     "Entity",
@@ -20,4 +22,6 @@ __all__ = [
     "OCRResult",
     "Run",
     "RunSequence",
+    "User",
+    "AuthSession",
 ]

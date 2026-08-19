@@ -1,5 +1,7 @@
 (function () {
   const STORAGE_KEY = "docshield-ui-state-v1";
+  const THEME_KEY = "docshield-ui-theme";
+  const AUTH_KEY = "docshield-ui-auth";
   const POLL_MS = 4000;
 
   const els = {
@@ -42,6 +44,7 @@
     artifactList: document.getElementById("artifactList"),
     toast: document.getElementById("toast"),
     workflowItems: Array.from(document.querySelectorAll(".workflow-item")),
+    themeToggle: document.getElementById("themeToggle"),
   };
 
   const state = {
@@ -84,6 +87,164 @@
     return window.location.origin;
   }
 
+  function getAuth() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(AUTH_KEY) || "null");
+      if (parsed && parsed.token && parsed.user) {
+        return parsed;
+      }
+    } catch (error) {
+      /* ignore corrupt storage */
+    }
+    return null;
+  }
+
+  function setAuth(token, user) {
+    localStorage.setItem(AUTH_KEY, JSON.stringify({ token, user }));
+  }
+
+  function clearAuth() {
+    localStorage.removeItem(AUTH_KEY);
+  }
+
+  function redirectToLogin() {
+    window.location.href = "login.html";
+  }
+
+  function isAuthenticated() {
+    return Boolean(getAuth());
+  }
+
+  function currentRole() {
+    const auth = getAuth();
+    return auth && auth.user ? auth.user.role : null;
+  }
+
+  function renderUserChip() {
+    const auth = getAuth();
+    const chip = document.getElementById("userChip");
+    const nameEl = document.getElementById("userName");
+    const roleEl = document.getElementById("userRole");
+    if (!auth || !chip) return;
+    if (nameEl) nameEl.textContent = auth.user.name || auth.user.email;
+    if (roleEl) roleEl.textContent = auth.user.role || "USER";
+    chip.style.display = "flex";
+    document.body.setAttribute("data-role", auth.user.role || "USER");
+  }
+
+  function applyRoleVisibility() {
+    const role = currentRole();
+    if (!role) return;
+    document.body.setAttribute("data-role", role);
+
+    const adminPanel = document.getElementById("adminPanel");
+    if (adminPanel) {
+      adminPanel.classList.toggle("is-visible", role === "ADMIN");
+    }
+    if (role === "ADMIN") {
+      loadAdminPanel();
+    }
+  }
+
+  async function loadAdminPanel() {
+    const adminPanel = document.getElementById("adminPanel");
+    if (!adminPanel) return;
+    adminPanel.classList.add("is-visible");
+
+    try {
+      const stats = await apiFetch("/admin/stats");
+      const grid = document.getElementById("adminStatsGrid");
+      if (grid && stats) {
+        grid.innerHTML = `
+          <div class="admin-stat"><span>Users</span><strong>${escapeHtml(stats.total_users)}</strong></div>
+          <div class="admin-stat"><span>Documents</span><strong>${escapeHtml(stats.total_documents)}</strong></div>
+          <div class="admin-stat"><span>Reports</span><strong>${escapeHtml(stats.total_reports)}</strong></div>
+          <div class="admin-stat"><span>Entities</span><strong>${escapeHtml(stats.total_entities)}</strong></div>
+          <div class="admin-stat"><span>Redactions</span><strong>${escapeHtml(stats.total_redactions)}</strong></div>
+          <div class="admin-stat"><span>Pending reviews</span><strong>${escapeHtml(stats.pending_reviews)}</strong></div>
+        `;
+      }
+    } catch (error) {
+      /* stats are optional; ignore load errors */
+    }
+
+    try {
+      const users = await apiFetch("/admin/users");
+      const body = document.getElementById("adminUsersBody");
+      if (body && Array.isArray(users)) {
+        if (!users.length) {
+          body.innerHTML = `<tr><td colspan="5" class="empty-state">No users found.</td></tr>`;
+          return;
+        }
+        body.innerHTML = users.map((user) => `
+          <tr data-user-id="${escapeHtml(user.id)}">
+            <td>${escapeHtml(user.name)}</td>
+            <td>${escapeHtml(user.email)}</td>
+            <td>
+              <select class="admin-role-select" data-role-select>
+                <option value="USER" ${user.role === "USER" ? "selected" : ""}>USER</option>
+                <option value="REVIEWER" ${user.role === "REVIEWER" ? "selected" : ""}>REVIEWER</option>
+                <option value="ADMIN" ${user.role === "ADMIN" ? "selected" : ""}>ADMIN</option>
+              </select>
+            </td>
+            <td><span class="status-pill ${user.is_active ? "success" : "danger"}">${user.is_active ? "Active" : "Inactive"}</span></td>
+            <td>
+              <button class="button secondary compact" type="button" data-activate-user>${user.is_active ? "Deactivate" : "Activate"}</button>
+            </td>
+          </tr>
+        `).join("");
+
+        body.querySelectorAll("[data-role-select]").forEach((select) => {
+          select.addEventListener("change", async () => {
+            const row = select.closest("tr[data-user-id]");
+            try {
+              await apiFetch(`/admin/users/${encodeURIComponent(row.dataset.userId)}/role`, {
+                method: "PATCH",
+                body: { role: select.value },
+              });
+              showToast("User role updated.");
+            } catch (error) {
+              showToast(`Role update failed: ${error.message}`, true);
+            }
+          });
+        });
+
+        body.querySelectorAll("[data-activate-user]").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const row = button.closest("tr[data-user-id]");
+            const wasActive = button.textContent.trim() === "Deactivate";
+            try {
+              await apiFetch(`/admin/users/${encodeURIComponent(row.dataset.userId)}/active`, {
+                method: "PATCH",
+                body: { is_active: !wasActive },
+              });
+              showToast("User status updated.");
+              loadAdminPanel();
+            } catch (error) {
+              showToast(`Status update failed: ${error.message}`, true);
+            }
+          });
+        });
+      }
+    } catch (error) {
+      const body = document.getElementById("adminUsersBody");
+      if (body) {
+        body.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(error.message || "Failed to load users.")}</td></tr>`;
+      }
+    }
+  }
+
+  async function logout() {
+    try {
+      await apiFetch("/auth/logout", { method: "POST" });
+    } catch (error) {
+      /* best-effort server-side invalidation */
+    } finally {
+      clearAuth();
+      redirectToLogin();
+    }
+  }
+
   function readStoredState() {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
@@ -112,6 +273,44 @@
     );
   }
 
+  function savedTheme() {
+    try {
+      return localStorage.getItem(THEME_KEY);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function preferredTheme() {
+    const saved = savedTheme();
+    if (saved === "dark" || saved === "light") {
+      return saved;
+    }
+    if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+      return "dark";
+    }
+    return "light";
+  }
+
+  function applyTheme(theme) {
+    const resolved = theme === "dark" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", resolved);
+    try {
+      localStorage.setItem(THEME_KEY, resolved);
+    } catch (error) {
+      /* ignore storage failures */
+    }
+    if (els.themeToggle) {
+      els.themeToggle.setAttribute("aria-pressed", resolved === "dark" ? "true" : "false");
+      els.themeToggle.setAttribute("aria-label", resolved === "dark" ? "Switch to light mode" : "Switch to dark mode");
+    }
+  }
+
+  function toggleTheme() {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    applyTheme(next);
+  }
+
   function normalizeBase(value) {
     return (value || "").trim().replace(/\/+$/, "");
   }
@@ -119,6 +318,10 @@
   async function apiFetch(path, options) {
     const requestOptions = options || {};
     const headers = new Headers(requestOptions.headers || {});
+    const auth = getAuth();
+    if (auth && auth.token) {
+      headers.set("Authorization", `Bearer ${auth.token}`);
+    }
     const init = Object.assign({}, requestOptions, { headers });
 
     if (init.body && !(init.body instanceof FormData) && typeof init.body !== "string") {
@@ -139,9 +342,17 @@
           // Keep the HTTP status detail.
         }
       }
+      if (response.status === 401) {
+        clearAuth();
+        redirectToLogin();
+      }
       const error = new Error(detail);
       error.status = response.status;
       throw error;
+    }
+
+    if (response.status === 204) {
+      return null;
     }
 
     const contentType = response.headers.get("content-type") || "";
@@ -806,7 +1017,6 @@
       await apiFetch(`/reviews/${encodeURIComponent(reviewId)}`, {
         method: "PATCH",
         body: {
-          reviewer: "PoC Reviewer",
           review_status: decision,
           review_comment: `Marked ${decision.toLowerCase()} from the PoC UI.`,
         },
@@ -819,6 +1029,13 @@
   }
 
   function bindEvents() {
+    if (els.themeToggle) {
+      els.themeToggle.addEventListener("click", toggleTheme);
+    }
+    const logoutBtn = document.getElementById("logoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", logout);
+    }
     els.healthBtn.addEventListener("click", checkHealth);
     els.uploadForm.addEventListener("submit", uploadDocuments);
     els.fileInput.addEventListener("change", renderFiles);
@@ -1427,7 +1644,6 @@
 
     try {
       const payload = {
-        reviewer: "UI Auditor",
         review_status: decision,
         review_comment: `Reviewed in workspace. Decision: ${decision}`
       };
@@ -1459,7 +1675,13 @@
   }
 
   function init() {
+    if (!isAuthenticated()) {
+      redirectToLogin();
+      return;
+    }
+
     readStoredState();
+    applyTheme(preferredTheme());
     state.apiBase = normalizeBase(state.apiBase) || defaultApiBase();
     els.apiBase.value = state.apiBase;
     els.documentIdInput.value = state.activeDocumentId;
@@ -1471,9 +1693,28 @@
     renderMetrics([], [], [], []);
     renderArtifacts([], []);
     bindEvents();
+    renderUserChip();
+    applyRoleVisibility();
     checkHealth();
+    validateSession();
     if (state.activeDocumentId) {
       loadDashboard(state.activeDocumentId, { quiet: true });
+    }
+  }
+
+  async function validateSession() {
+    try {
+      const user = await apiFetch("/auth/me");
+      if (user) {
+        const auth = getAuth();
+        if (auth) {
+          setAuth(auth.token, user);
+          renderUserChip();
+          applyRoleVisibility();
+        }
+      }
+    } catch (error) {
+      /* apiFetch already redirected on 401 */
     }
   }
 

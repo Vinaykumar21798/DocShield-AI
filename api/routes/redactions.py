@@ -1,12 +1,16 @@
 from typing import List
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
-from api.dependencies import DatabaseSession
+from api.dependencies import (
+    DatabaseSession,
+    require_document_access,
+    require_roles,
+)
 from api.routes.artifacts import resolve_artifact_path
 from api.schemas.redaction import RedactionResponse
-from database.models import Redaction
+from database.models import Document, Redaction, User
 from modules.upload.storage import StorageService
 
 router = APIRouter(tags=["Redactions"])
@@ -33,7 +37,17 @@ def _serialize_redaction(redaction: Redaction) -> RedactionResponse:
 def list_document_redactions(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> List[RedactionResponse]:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    require_document_access(db, current_user, document)
+
     redactions = (
         db.query(Redaction)
         .filter(Redaction.document_id == document_id)
@@ -52,6 +66,7 @@ def list_document_redactions(
 def download_redacted_file(
     redaction_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> FileResponse:
     redaction = (
         db.query(Redaction)
@@ -63,6 +78,15 @@ def download_redacted_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Redaction not found: {redaction_id}",
         )
+
+    document = db.query(Document).filter(Document.id == redaction.document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {redaction.document_id}",
+        )
+
+    require_document_access(db, current_user, document)
 
     artifact_path = resolve_artifact_path(
         redaction.redacted_file_path,

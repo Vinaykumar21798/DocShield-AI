@@ -46,6 +46,16 @@ class Settings(BaseSettings):
         alias="PADDLEOCR_LAYOUT_ANALYSIS_ENABLED",
     )
 
+    auth_token_ttl_hours: int = Field(
+        24,
+        alias="AUTH_TOKEN_TTL_HOURS",
+    )
+
+    auth_pbkdf2_iterations: int = Field(
+        600000,
+        alias="AUTH_PBKDF2_ITERATIONS",
+    )
+
     upload_dir: str = Field(..., alias="UPLOAD_DIR")
     storage_dir: str = Field("storage", alias="STORAGE_DIR")
     max_file_size_mb: int = Field(..., alias="MAX_FILE_SIZE_MB")

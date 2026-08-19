@@ -1,13 +1,17 @@
 import json
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 
-from api.dependencies import DatabaseSession
+from api.dependencies import (
+    DatabaseSession,
+    require_document_access,
+    require_roles,
+)
 from api.routes.artifacts import resolve_artifact_path
 from api.schemas.report import ReportDetailResponse, ReportResponse
-from database.models import Report
+from database.models import Document, Report, User
 from modules.upload.storage import StorageService
 
 router = APIRouter(tags=["Reports"])
@@ -63,7 +67,17 @@ def _load_report_payload(report: Report) -> Optional[Dict[str, Any]]:
 def list_document_reports(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> List[ReportResponse]:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    require_document_access(db, current_user, document)
+
     reports = (
         db.query(Report)
         .filter(Report.document_id == document_id)
@@ -83,6 +97,7 @@ def get_report(
     report_id: str,
     include_payload: bool = True,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> ReportDetailResponse:
     report = db.query(Report).filter(Report.id == report_id).first()
     if report is None:
@@ -90,6 +105,15 @@ def get_report(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report not found: {report_id}",
         )
+
+    document = db.query(Document).filter(Document.id == report.document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {report.document_id}",
+        )
+
+    require_document_access(db, current_user, document)
 
     payload = _load_report_payload(report) if include_payload else None
     return _serialize_report(report, payload=payload)
@@ -104,6 +128,7 @@ def get_report(
 def download_report_file(
     report_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> FileResponse:
     report = db.query(Report).filter(Report.id == report_id).first()
     if report is None:
@@ -111,6 +136,15 @@ def download_report_file(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Report not found: {report_id}",
         )
+
+    document = db.query(Document).filter(Document.id == report.document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {report.document_id}",
+        )
+
+    require_document_access(db, current_user, document)
 
     artifact_path = resolve_artifact_path(
         report.report_path,

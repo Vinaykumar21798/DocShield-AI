@@ -9,7 +9,8 @@
 <body>
   <header class="app-header">
     <a class="brand" href="/ui/" aria-label="DocShield-AI home">
-      <img class="brand-logo" src="./datafactz_logo.png" alt="DataFactZ">
+      <img class="brand-logo brand-logo-light" src="./datafactz_logo.png" alt="DataFactZ">
+      <img class="brand-logo brand-logo-dark" src="./datafactz_logo_white.png" alt="DataFactZ">
       <span class="brand-copy">
         <strong>DocShield-AI</strong>
         <span>PII/PHI document intelligence PoC</span>
@@ -22,6 +23,29 @@
       </label>
       <button class="button ghost" id="healthBtn" type="button">Check API</button>
       <span class="status-pill neutral" id="healthBadge">Not checked</span>
+      <div class="user-chip" id="userChip" style="display: none;">
+        <span class="user-chip-info">
+          <span class="user-chip-name" id="userName">-</span>
+          <span class="user-chip-role" id="userRole">USER</span>
+        </span>
+        <button class="button ghost compact logout-btn" id="logoutBtn" type="button">Logout</button>
+      </div>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
     </div>
   </header>
 
@@ -195,6 +219,47 @@
         </div>
         <div class="artifact-list" id="artifactList">
           <div class="empty-state">No artifacts loaded.</div>
+        </div>
+      </section>
+
+      <section class="panel admin-panel" id="adminPanel" aria-labelledby="adminHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="adminHeading">Admin</h2>
+            <p>System statistics and user management.</p>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <h3>System statistics</h3>
+          <div class="admin-stats-grid" id="adminStatsGrid">
+            <div class="admin-stat"><span>Users</span><strong>-</strong></div>
+            <div class="admin-stat"><span>Documents</span><strong>-</strong></div>
+            <div class="admin-stat"><span>Reports</span><strong>-</strong></div>
+            <div class="admin-stat"><span>Entities</span><strong>-</strong></div>
+            <div class="admin-stat"><span>Redactions</span><strong>-</strong></div>
+            <div class="admin-stat"><span>Pending reviews</span><strong>-</strong></div>
+          </div>
+        </div>
+
+        <div class="admin-section">
+          <h3>Users</h3>
+          <div class="table-wrap">
+            <table class="admin-users-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersBody">
+                <tr><td colspan="5" class="empty-state">Loading users...</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </section>
     </section>

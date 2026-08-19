@@ -55,6 +55,13 @@ class Document(Base):
 
     uploaded_by = Column(String(100))
 
+    owner_id = Column(
+        String(36),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -98,5 +105,10 @@ class Document(Base):
 
     run = relationship(
         "Run",
+        back_populates="documents",
+    )
+
+    owner = relationship(
+        "User",
         back_populates="documents",
     )

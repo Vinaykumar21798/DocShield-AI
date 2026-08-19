@@ -16,6 +16,25 @@ class FakeRedisProducer:
         return True
 
 
+def signup_user(client, name="e2e reviewer", role="REVIEWER"):
+    response = client.post(
+        "/auth/signup",
+        json={
+            "name": name,
+            "email": f"{name.replace(' ', '.').lower()}@example.com",
+            "password": "super-secret-password",
+            "role": role,
+        },
+    )
+    assert response.status_code == 201
+    payload = response.json()
+    return payload["access_token"], payload["user"]
+
+
+def auth_headers(token):
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_upload_process_and_read_extracted_text_e2e(
     db_session,
     tmp_path,
@@ -38,8 +57,12 @@ def test_upload_process_and_read_extracted_text_e2e(
 
     try:
         with TestClient(app) as client:
+            token, user = signup_user(client)
+            headers = auth_headers(token)
+
             upload_response = client.post(
                 "/upload/",
+                headers=headers,
                 files={
                     "file": (
                         "invoice.txt",
@@ -62,8 +85,8 @@ def test_upload_process_and_read_extracted_text_e2e(
 
             DocumentProcessingWorkflow(db_session).execute(document_id)
 
-            status_response = client.get(f"/documents/{document_id}/status")
-            text_response = client.get(f"/documents/{document_id}/text")
+            status_response = client.get(f"/documents/{document_id}/status", headers=headers)
+            text_response = client.get(f"/documents/{document_id}/text", headers=headers)
 
             assert status_response.status_code == 200
             assert text_response.status_code == 200
@@ -84,7 +107,7 @@ def test_upload_process_and_read_extracted_text_e2e(
                 encoding="utf-8"
             ) == text_response.json()["extracted_text"]
 
-            entities_response = client.get(f"/documents/{document_id}/entities")
+            entities_response = client.get(f"/documents/{document_id}/entities", headers=headers)
             assert entities_response.status_code == 200
             entities = entities_response.json()
             assert any(
@@ -93,7 +116,7 @@ def test_upload_process_and_read_extracted_text_e2e(
                 for entity in entities
             )
 
-            reviews_response = client.get(f"/documents/{document_id}/reviews")
+            reviews_response = client.get(f"/documents/{document_id}/reviews", headers=headers)
             assert reviews_response.status_code == 200
             reviews = reviews_response.json()
             assert reviews
@@ -105,8 +128,8 @@ def test_upload_process_and_read_extracted_text_e2e(
 
             decision_response = client.patch(
                 f"/reviews/{pending_review['review_id']}",
+                headers=headers,
                 json={
-                    "reviewer": "integration-reviewer",
                     "review_status": "APPROVED",
                     "review_comment": "Confirmed by API integration test.",
                     "final_confidence": 0.91,
@@ -115,25 +138,27 @@ def test_upload_process_and_read_extracted_text_e2e(
             assert decision_response.status_code == 200
             decision = decision_response.json()
             assert decision["review_status"] == "APPROVED"
-            assert decision["reviewer"] == "integration-reviewer"
+            assert decision["reviewer"] == user["name"]
             assert decision["entity"]["is_review_required"] is False
             assert decision["entity"]["final_confidence"] == 0.91
 
             redactions_response = client.get(
-                f"/documents/{document_id}/redactions"
+                f"/documents/{document_id}/redactions",
+                headers=headers,
             )
             assert redactions_response.status_code == 200
             redactions = redactions_response.json()
             assert len(redactions) == 1
 
             redaction_file_response = client.get(
-                f"/redactions/{redactions[0]['redaction_id']}/file"
+                f"/redactions/{redactions[0]['redaction_id']}/file",
+                headers=headers,
             )
             assert redaction_file_response.status_code == 200
             assert "[REDACTED_EMAIL]" in redaction_file_response.text
             assert "jane.patient@example.com" not in redaction_file_response.text
 
-            reports_response = client.get(f"/documents/{document_id}/reports")
+            reports_response = client.get(f"/documents/{document_id}/reports", headers=headers)
             assert reports_response.status_code == 200
             reports = reports_response.json()
             assert len(reports) == 1
@@ -141,7 +166,7 @@ def test_upload_process_and_read_extracted_text_e2e(
             assert reports[0]["redaction_completion"] is True
             assert reports[0]["review_completion"] is True
 
-            report_response = client.get(f"/reports/{reports[0]['report_id']}")
+            report_response = client.get(f"/reports/{reports[0]['report_id']}", headers=headers)
             assert report_response.status_code == 200
             report = report_response.json()
             assert report["payload"]["document_id"] == document_id
@@ -153,7 +178,8 @@ def test_upload_process_and_read_extracted_text_e2e(
             )
 
             report_file_response = client.get(
-                f"/reports/{reports[0]['report_id']}/file"
+                f"/reports/{reports[0]['report_id']}/file",
+                headers=headers,
             )
             assert report_file_response.status_code == 200
             assert report_file_response.json()["document_id"] == document_id
@@ -188,8 +214,12 @@ def test_upload_accepts_docx_mime_type(
 
     try:
         with TestClient(app) as client:
+            token, _ = signup_user(client)
+            headers = auth_headers(token)
+
             upload_response = client.post(
                 "/upload/",
+                headers=headers,
                 files={
                     "file": (
                         "document.docx",

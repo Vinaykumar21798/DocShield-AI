@@ -2,14 +2,19 @@ from typing import List, Optional
 from datetime import datetime
 from pydantic import BaseModel
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
-from api.dependencies import DatabaseSession
+from api.dependencies import (
+    DatabaseSession,
+    is_document_accessible,
+    require_roles,
+    require_document_access,
+)
 from api.schemas.document_status import DocumentStatusResponse
 from api.schemas.entity import EntityResponse
 from api.schemas.extracted_text import ExtractedTextResponse
 from api.schemas.run import RunResponse, RunProgress
-from database.models import Document, Entity, Run
+from database.models import Document, Entity, Run, User
 from database.repositories.run_repository import RunRepository
 from modules.extraction.service import (
     DocumentNotFoundError,
@@ -21,6 +26,16 @@ router = APIRouter(
     prefix="/documents",
     tags=["Documents"],
 )
+
+
+def _get_document_or_404(db, document_id: str) -> Document:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+    return document
 
 
 def _serialize_entity(entity: Entity) -> EntityResponse:
@@ -54,6 +69,7 @@ def _serialize_entity(entity: Entity) -> EntityResponse:
 def get_run_progress(
     run_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> RunResponse:
     run_repo = RunRepository(db)
     run = run_repo.get_by_run_id(run_id)
@@ -65,7 +81,14 @@ def get_run_progress(
         )
     
     documents = db.query(Document).filter(Document.run_id == run.id).all()
-    
+
+    if current_user.role == "USER":
+        documents = [
+            doc
+            for doc in documents
+            if is_document_accessible(db, current_user, doc)
+        ]
+
     return RunResponse(
         run_id=run.run_id,
         status=run.status,
@@ -98,7 +121,11 @@ def get_run_progress(
 def get_document_status(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> DocumentStatusResponse:
+    document = _get_document_or_404(db, document_id)
+    require_document_access(db, current_user, document)
+
     extraction_service = ExtractionService(db)
 
     try:
@@ -121,6 +148,7 @@ def get_document_status(
 def list_document_entities(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("REVIEWER", "ADMIN")),
 ) -> List[EntityResponse]:
     document = db.query(Document).filter(Document.id == document_id).first()
     if document is None:
@@ -128,6 +156,8 @@ def list_document_entities(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Document not found: {document_id}",
         )
+
+    require_document_access(db, current_user, document)
 
     entities = (
         db.query(Entity)
@@ -157,7 +187,11 @@ def list_document_entities(
 def get_extracted_text(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ) -> ExtractedTextResponse:
+    document = _get_document_or_404(db, document_id)
+    require_document_access(db, current_user, document)
+
     extraction_service = ExtractionService(db)
 
     try:

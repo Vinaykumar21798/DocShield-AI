@@ -1,8 +1,9 @@
 from typing import Annotated, List
 
-from fastapi import APIRouter, File, UploadFile, status
+from fastapi import APIRouter, Depends, File, UploadFile, status
 
-from api.dependencies import DatabaseSession
+from api.dependencies import DatabaseSession, require_roles
+from database.models import User
 from modules.upload.service import UploadService
 
 router = APIRouter(
@@ -24,12 +25,13 @@ router = APIRouter(
 async def upload_document(
     file: UploadFile = File(...),
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ):
     """
     Upload a single document.
     """
 
-    upload_service = UploadService(db)
+    upload_service = UploadService(db, owner_id=current_user.id)
 
     run, documents = await upload_service.upload_single_document(file)
 
@@ -73,12 +75,13 @@ async def upload_documents(
         ),
     ],
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("USER", "REVIEWER", "ADMIN")),
 ):
     """
     Upload multiple documents.
     """
 
-    upload_service = UploadService(db)
+    upload_service = UploadService(db, owner_id=current_user.id)
 
     run, documents = await upload_service.upload_documents(files)
 

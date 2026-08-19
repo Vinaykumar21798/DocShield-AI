@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign Up - DocShield-AI PoC</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="auth-page">
+  <header class="app-header">
+    <a class="brand" href="index.html" aria-label="DocShield-AI home">
+      <img class="brand-logo brand-logo-light" src="./datafactz_logo.png" alt="DataFactZ">
+      <img class="brand-logo brand-logo-dark" src="./datafactz_logo_white.png" alt="DataFactZ">
+      <span class="brand-copy">
+        <strong>DocShield-AI</strong>
+        <span>PII/PHI document intelligence PoC</span>
+      </span>
+    </a>
+    <div class="header-controls">
+      <label class="api-field" for="apiBase">
+        <span>API</span>
+        <input id="apiBase" name="apiBase" type="url" autocomplete="off">
+      </label>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
+        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <main class="auth-main">
+    <section class="auth-card" aria-labelledby="signupHeading">
+      <h1 id="signupHeading">Create an account</h1>
+      <p class="auth-subtitle">Roles are selectable for this PoC. Pick the one you want.</p>
+
+      <form id="signupForm" class="auth-form" novalidate>
+        <div class="auth-error" id="signupError" role="alert" style="display: none;"></div>
+
+        <label class="field">
+          <span>Full name</span>
+          <input id="signupName" name="name" type="text" autocomplete="name" placeholder="Jane Doe" required>
+        </label>
+
+        <label class="field">
+          <span>Email</span>
+          <input id="signupEmail" name="email" type="email" autocomplete="email" placeholder="you@example.com" required>
+        </label>
+
+        <label class="field">
+          <span>Password</span>
+          <div class="password-wrap">
+            <input id="signupPassword" name="password" type="password" autocomplete="new-password" placeholder="At least 8 characters" required>
+            <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" aria-controls="signupPassword">
+              <svg class="eye-icon eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg class="eye-icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Confirm password</span>
+          <div class="password-wrap">
+            <input id="signupConfirm" name="confirm" type="password" autocomplete="new-password" placeholder="Repeat your password" required>
+            <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false" aria-controls="signupConfirm">
+              <svg class="eye-icon eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+              </svg>
+              <svg class="eye-icon eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                <line x1="1" y1="1" x2="23" y2="23"></line>
+              </svg>
+            </button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span>Role</span>
+          <select id="signupRole" name="role">
+            <option value="USER">User</option>
+            <option value="REVIEWER">Reviewer</option>
+            <option value="ADMIN">Admin (Super User)</option>
+          </select>
+        </label>
+
+        <button class="button primary full-width" type="submit">Create Account</button>
+      </form>
+
+      <p class="auth-footer">
+        Already have an account? <a href="login.html">Login</a>
+      </p>
+    </section>
+  </main>
+
+  <script src="./auth.js"></script>
+</body>
+</html>

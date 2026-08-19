@@ -36,7 +36,7 @@ class ReviewResponse(BaseModel):
 
 
 class ReviewDecisionRequest(BaseModel):
-    reviewer: str = Field(..., min_length=1, max_length=255)
+    reviewer: Optional[str] = Field(default=None, min_length=1, max_length=255)
     review_status: str = Field(..., min_length=1, max_length=50)
     review_comment: Optional[str] = None
     entity_type: Optional[str] = None

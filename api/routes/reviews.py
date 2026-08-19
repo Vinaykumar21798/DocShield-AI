@@ -1,17 +1,17 @@
 ﻿from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import joinedload
 
-from api.dependencies import DatabaseSession
+from api.dependencies import DatabaseSession, require_roles, require_document_access
 from api.schemas.review import (
     ReviewDecisionRequest,
     ReviewDecisionResponse,
     ReviewEntityResponse,
     ReviewResponse,
 )
-from database.models import Entity, Report, Review
+from database.models import Document, Entity, Report, Review, User
 
 router = APIRouter(tags=["Reviews"])
 
@@ -81,7 +81,17 @@ def _update_report_review_completion(db, document_id: str) -> None:
 def list_document_reviews(
     document_id: str,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("REVIEWER", "ADMIN")),
 ) -> List[ReviewResponse]:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document not found: {document_id}",
+        )
+
+    require_document_access(db, current_user, document)
+
     reviews = (
         db.query(Review)
         .join(Entity, Review.entity_id == Entity.id)
@@ -103,6 +113,7 @@ def submit_review_decision(
     review_id: str,
     payload: ReviewDecisionRequest,
     db: DatabaseSession = None,
+    current_user: User = Depends(require_roles("REVIEWER", "ADMIN")),
 ) -> ReviewDecisionResponse:
     review = (
         db.query(Review)
@@ -119,7 +130,7 @@ def submit_review_decision(
     entity = review.entity
     review_status = _normalize_status(payload.review_status)
 
-    review.reviewer = payload.reviewer.strip()
+    review.reviewer = current_user.name
     review.review_status = review_status
     review.review_comment = payload.review_comment
     review.reviewed_at = datetime.now(timezone.utc)
