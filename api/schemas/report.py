@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,6 +19,9 @@ class ReportResponse(BaseModel):
     total_phi: int = 0
     review_completion: bool = False
     redaction_completion: bool = False
+    llm_candidate_audit: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    llm_candidate_accepted_count: int = 0
+    llm_candidate_rejected_count: int = 0
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

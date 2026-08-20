@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <header class="app-header">
+  <header class="app-header authenticated-header">
     <a class="brand" href="/ui/" aria-label="DocShield-AI home">
       <img class="brand-logo brand-logo-light" src="./datafactz_logo.png" alt="DataFactZ">
       <img class="brand-logo brand-logo-dark" src="./datafactz_logo_white.png" alt="DataFactZ">
@@ -17,35 +17,55 @@
       </span>
     </a>
     <div class="header-controls">
-      <label class="api-field" for="apiBase">
-        <span>API</span>
-        <input id="apiBase" name="apiBase" type="url" autocomplete="off">
-      </label>
-      <button class="button ghost" id="healthBtn" type="button">Check API</button>
-      <span class="status-pill neutral" id="healthBadge">Not checked</span>
-      <div class="user-chip" id="userChip" style="display: none;">
-        <span class="user-chip-info">
-          <span class="user-chip-name" id="userName">-</span>
-          <span class="user-chip-role" id="userRole">USER</span>
-        </span>
-        <button class="button ghost compact logout-btn" id="logoutBtn" type="button">Logout</button>
+      <div class="header-menu api-menu">
+        <button class="api-menu-trigger" id="apiMenuTrigger" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="apiMenu">
+          <span>API</span>
+          <span class="menu-chevron" aria-hidden="true">▾</span>
+        </button>
+        <div class="header-dropdown api-dropdown" id="apiMenu" role="group" aria-label="API settings" hidden>
+          <label class="api-field" for="apiBase">
+            <span>API URL</span>
+            <input id="apiBase" name="apiBase" type="url" autocomplete="off">
+          </label>
+          <div class="api-dropdown-actions">
+            <button class="button ghost" id="healthBtn" type="button">Check API</button>
+            <span class="status-pill neutral" id="healthBadge">Not checked</span>
+          </div>
+        </div>
       </div>
       <button class="theme-toggle" id="themeToggle" type="button" aria-label="Toggle dark mode">
-        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="5"></circle>
-          <line x1="12" y1="1" x2="12" y2="3"></line>
-          <line x1="12" y1="21" x2="12" y2="23"></line>
-          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-          <line x1="1" y1="12" x2="3" y2="12"></line>
-          <line x1="21" y1="12" x2="23" y2="12"></line>
-          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-        </svg>
-        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-        </svg>
+        <span class="theme-option theme-option-light" aria-hidden="true">
+          <svg class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"></circle>
+            <line x1="12" y1="2" x2="12" y2="4"></line>
+            <line x1="12" y1="20" x2="12" y2="22"></line>
+            <line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line>
+            <line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line>
+            <line x1="2" y1="12" x2="4" y2="12"></line>
+            <line x1="20" y1="12" x2="22" y2="12"></line>
+            <line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line>
+            <line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>
+          </svg>
+        </span>
+        <span class="theme-option theme-option-dark" aria-hidden="true">
+          <svg class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.5 14.1A8.2 8.2 0 0 1 9.9 3.5 8.5 8.5 0 1 0 20.5 14.1z"></path>
+          </svg>
+        </span>
       </button>
+      <div class="header-menu user-chip" id="userChip" style="display: none;">
+        <button class="profile-avatar" id="profileMenuTrigger" type="button" aria-label="Open profile menu" aria-haspopup="true" aria-expanded="false" aria-controls="profileMenu">
+          <span id="userInitials" aria-hidden="true">--</span>
+        </button>
+        <div class="header-dropdown profile-dropdown" id="profileMenu" hidden>
+          <div class="profile-summary">
+            <strong class="user-chip-name" id="userName">-</strong>
+            <span class="user-chip-role" id="userRole">USER</span>
+          </div>
+          <div class="profile-divider" role="separator"></div>
+          <button class="profile-signout" id="logoutBtn" type="button">Sign out</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -63,19 +83,41 @@
       </div>
     </section>
 
+    <section class="page-title reviewer-page-title reviewer-only" aria-labelledby="reviewerPageHeading">
+      <div>
+        <h1 id="reviewerPageHeading">Document Review Workspace</h1>
+        <p>Review detected PII/PHI findings, validate AI decisions, and approve or reject sensitive entities.</p>
+      </div>
+    </section>
+
     <section class="dashboard-grid" aria-label="DocShield workspace">
+      <section class="panel reviewer-summary-panel reviewer-only" aria-labelledby="reviewerSummaryHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="reviewerSummaryHeading">Review summary</h2>
+            <p>Current findings for the selected document.</p>
+          </div>
+        </div>
+        <div class="reviewer-summary-grid">
+          <div class="reviewer-summary-stat pending"><span>Pending reviews</span><strong id="reviewerMetricPending">0</strong></div>
+          <div class="reviewer-summary-stat"><span>Total findings</span><strong id="reviewerMetricFindings">0</strong></div>
+          <div class="reviewer-summary-stat completed"><span>Completed reviews</span><strong id="reviewerMetricCompleted">0</strong></div>
+        </div>
+      </section>
+
       <section class="panel upload-panel" aria-labelledby="uploadHeading">
         <div class="panel-heading">
           <div>
-            <h2 id="uploadHeading">Upload</h2>
-            <p>PDF, image, DOCX, and TXT documents.</p>
+            <h2 id="uploadHeading">Upload document</h2>
+            <p>Add one or more documents to begin redaction.</p>
           </div>
         </div>
         <form id="uploadForm" class="upload-form">
           <label class="drop-zone" id="dropZone" for="fileInput">
             <span class="drop-icon" aria-hidden="true"></span>
-            <span class="drop-title">Choose files</span>
+            <span class="drop-title">Choose files or drop them here</span>
             <span class="drop-subtitle" id="fileSummary">No files selected</span>
+            <span class="drop-support">Supported: PDF, PNG, JPG/JPEG, TIFF, BMP, DOCX, TXT</span>
             <input id="fileInput" name="files" type="file" multiple>
           </label>
           <div class="file-list" id="fileList" aria-live="polite"></div>
@@ -91,17 +133,39 @@
           </div>
           <button class="button ghost compact" id="clearRecentBtn" type="button">Clear</button>
         </div>
-        <div class="document-list" id="documentList"></div>
+        <div class="recent-documents-scroll" id="documentList">
+          <table class="user-documents-table">
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Status</th>
+                <th>Entities</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="documentListBody">
+              <tr><td colspan="4" class="empty-state">Loading documents...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel status-panel" aria-labelledby="statusHeading">
         <div class="panel-heading inline">
           <div>
-            <h2 id="statusHeading">Document status</h2>
+            <h2 id="statusHeading"><span class="non-reviewer-only">Current document</span><span class="reviewer-only">Review context</span></h2>
             <p id="activeFilename">Select or upload a document.</p>
           </div>
           <span class="status-pill neutral" id="processingBadge">Idle</span>
         </div>
+        <dl class="reviewer-context-details reviewer-only" id="reviewerContextDetails">
+          <div><dt>Document</dt><dd id="reviewerContextName">-</dd></div>
+          <div><dt>Owner</dt><dd id="reviewerContextOwner">-</dd></div>
+          <div><dt>Status</dt><dd id="reviewerContextStatus">-</dd></div>
+          <div><dt>Document ID</dt><dd id="reviewerContextId">-</dd></div>
+          <div><dt>Processing</dt><dd id="reviewerContextProcessing">-</dd></div>
+          <div><dt>OCR</dt><dd id="reviewerContextOcr">-</dd></div>
+        </dl>
         <div class="document-lookup">
           <label for="documentIdInput">Document ID</label>
           <div class="input-row">
@@ -112,6 +176,7 @@
           <button class="button primary full-width margin-top" id="openReviewBtn" type="button" style="display: none;">Open Review Workspace</button>
         </div>
         <dl class="status-details" id="statusDetails">
+          <div><dt>Document ID</dt><dd>-</dd></div>
           <div><dt>Status</dt><dd>-</dd></div>
           <div><dt>Stage</dt><dd>-</dd></div>
           <div><dt>OCR</dt><dd>-</dd></div>
@@ -127,10 +192,10 @@
           </div>
         </div>
         <div class="metric-grid">
-          <button class="metric is-active" type="button" data-review-filter="all" aria-pressed="true"><span>Total entities</span><strong id="metricEntities">0</strong></button>
-          <button class="metric accent" type="button" data-review-filter="pii" aria-pressed="false"><span>PII</span><strong id="metricPii">0</strong></button>
-          <button class="metric warm" type="button" data-review-filter="phi" aria-pressed="false"><span>PHI</span><strong id="metricPhi">0</strong></button>
-          <button class="metric dark" type="button" data-review-filter="pending" aria-pressed="false"><span>Pending review</span><strong id="metricPending">0</strong></button>
+          <button class="metric is-active" type="button" data-review-filter="all" aria-pressed="true"><span>Total entities</span><strong id="metricEntities">-</strong></button>
+          <button class="metric accent" type="button" data-review-filter="pii" aria-pressed="false"><span>PII</span><strong id="metricPii">-</strong></button>
+          <button class="metric warm" type="button" data-review-filter="phi" aria-pressed="false"><span>PHI</span><strong id="metricPhi">-</strong></button>
+          <button class="metric dark" type="button" data-review-filter="pending" aria-pressed="false"><span>Pending review</span><strong id="metricPending">-</strong></button>
         </div>
       </section>
 
@@ -144,7 +209,7 @@
             <button class="button ghost compact" id="toggleValuesBtn" type="button">Reveal values</button>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap reviewer-queue-scroll">
           <table class="reviews-table">
             <thead id="reviewsHead">
               <tr>
@@ -180,7 +245,7 @@
             </button>
           </div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap llm-audit-scroll">
           <table class="reviews-table">
             <thead>
               <tr>
@@ -194,6 +259,30 @@
             </thead>
             <tbody id="llmAuditBody">
               <tr><td colspan="6" class="empty-state">No LLM candidate audit data loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel reviewer-activity-panel reviewer-only" aria-labelledby="reviewerActivityHeading">
+        <div class="panel-heading">
+          <div>
+            <h2 id="reviewerActivityHeading">Recent review activity</h2>
+            <p>Latest completed decisions for the selected document.</p>
+          </div>
+        </div>
+        <div class="table-wrap reviewer-activity-scroll">
+          <table class="reviews-table reviewer-activity-table">
+            <thead>
+              <tr>
+                <th>Finding</th>
+                <th>Decision</th>
+                <th>Reviewer</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="reviewerActivityBody">
+              <tr><td colspan="4" class="empty-state">No document selected.</td></tr>
             </tbody>
           </table>
         </div>
@@ -222,30 +311,71 @@
         </div>
       </section>
 
-      <section class="panel admin-panel" id="adminPanel" aria-labelledby="adminHeading">
-        <div class="panel-heading">
-          <div>
-            <h2 id="adminHeading">Admin</h2>
-            <p>System statistics and user management.</p>
+      <section class="admin-panel" id="adminPanel" aria-labelledby="adminHeading">
+        <section class="admin-card admin-summary-card">
+          <div class="panel-heading admin-heading">
+            <div>
+              <div class="admin-heading-title">
+                <h2 id="adminHeading">Administration Dashboard</h2>
+                <button class="button ghost compact admin-refresh-button" id="adminRefreshBtn" type="button" title="Refresh dashboard" aria-label="Refresh dashboard"><span aria-hidden="true">&#8635;</span></button>
+              </div>
+              <p>Monitor workspace activity, manage users, and oversee document processing.</p>
+            </div>
           </div>
-        </div>
 
-        <div class="admin-section">
-          <h3>System statistics</h3>
           <div class="admin-stats-grid" id="adminStatsGrid">
-            <div class="admin-stat"><span>Users</span><strong>-</strong></div>
-            <div class="admin-stat"><span>Documents</span><strong>-</strong></div>
-            <div class="admin-stat"><span>Reports</span><strong>-</strong></div>
-            <div class="admin-stat"><span>Entities</span><strong>-</strong></div>
-            <div class="admin-stat"><span>Redactions</span><strong>-</strong></div>
-            <div class="admin-stat"><span>Pending reviews</span><strong>-</strong></div>
+            <div class="admin-stat is-loading"><span>Loading dashboard metrics...</span></div>
           </div>
-        </div>
+        </section>
 
-        <div class="admin-section">
-          <h3>Users</h3>
-          <div class="table-wrap">
-            <table class="admin-users-table">
+        <section class="admin-card admin-table-section">
+          <div class="admin-section-heading">
+            <div>
+              <h3>Recent documents</h3>
+              <p>Latest files processed across the workspace.</p>
+            </div>
+          </div>
+          <div class="table-wrap admin-table-scroll admin-documents-scroll">
+            <table class="admin-data-table">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Owner</th>
+                  <th>Status</th>
+                  <th>Entities</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody id="adminDocumentsBody">
+                <tr><td colspan="5" class="empty-state">Loading documents...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="admin-card admin-table-section">
+          <div class="admin-section-heading admin-users-heading">
+            <div>
+              <h3>User management</h3>
+              <p>Search users and manage access directly.</p>
+            </div>
+            <div class="admin-user-filters" aria-label="User filters">
+              <input id="adminUserSearch" type="search" placeholder="Search name or email" autocomplete="off">
+              <select id="adminRoleFilter" aria-label="Filter by role">
+                <option value="">All roles</option>
+                <option value="USER">User</option>
+                <option value="REVIEWER">Reviewer</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+              <select id="adminStatusFilter" aria-label="Filter by status">
+                <option value="">All statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap admin-table-scroll admin-users-scroll">
+            <table class="admin-users-table admin-data-table">
               <thead>
                 <tr>
                   <th>Name</th>
@@ -260,7 +390,7 @@
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
       </section>
     </section>
   </main>
@@ -355,7 +485,7 @@
         <!-- Sticky Inspector Details -->
         <div class="details-section" id="detailsSection">
           <div class="empty-details" id="emptyDetails">
-             <p>Select an entity card or click Go To to inspect details and take action.</p>
+             <p>Select an entity card to inspect details and take action.</p>
           </div>
           <div class="details-content" id="detailsContent" style="display: none;">
              <h4 id="detailType">-</h4>

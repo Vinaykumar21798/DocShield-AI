@@ -1,4 +1,13 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    JSON,
+    String,
+)
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -37,6 +46,7 @@ class Report(Base):
     total_phi = Column(Integer, default=0)
     review_completion = Column(Boolean, default=False)
     redaction_completion = Column(Boolean, default=False)
+    llm_candidate_audit = Column(JSON, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

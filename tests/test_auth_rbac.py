@@ -322,11 +322,25 @@ def test_admin_can_list_users_and_change_roles(api_client):
 
 def test_admin_stats_endpoint(api_client):
     admin_token, _ = signup_user(api_client, "Stats Admin", role="ADMIN")
-    response = api_client.get("/admin/stats", headers=auth_headers(admin_token))
+    headers = auth_headers(admin_token)
+    upload_response = _upload_file(api_client, headers)
+    assert upload_response.status_code == 201
+
+    response = api_client.get("/admin/stats", headers=headers)
     assert response.status_code == 200
     stats = response.json()
     assert stats["total_users"] >= 1
+    assert stats["total_documents"] >= 1
     assert "ADMIN" in stats["users_by_role"]
+    assert set(stats["processing_overview"]) == {
+        "completed",
+        "pending_review",
+        "failed",
+    }
+    assert set(stats["privacy_summary"]) == {"pii", "phi"}
+    assert 0 <= stats["completion_rate"] <= 100
+    assert stats["recent_documents"][0]["filename"] == "note.txt"
+    assert stats["recent_documents"][0]["owner"] == "Stats Admin"
 
 
 def test_admin_can_deactivate_and_reactivate_user(api_client):

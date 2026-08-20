@@ -6,6 +6,8 @@
 
   const els = {
     apiBase: document.getElementById("apiBase"),
+    apiMenuTrigger: document.getElementById("apiMenuTrigger"),
+    apiMenu: document.getElementById("apiMenu"),
     healthBtn: document.getElementById("healthBtn"),
     healthBadge: document.getElementById("healthBadge"),
     uploadForm: document.getElementById("uploadForm"),
@@ -14,6 +16,7 @@
     fileList: document.getElementById("fileList"),
     dropZone: document.getElementById("dropZone"),
     documentList: document.getElementById("documentList"),
+    documentListBody: document.getElementById("documentListBody"),
     recentCount: document.getElementById("recentCount"),
     clearRecentBtn: document.getElementById("clearRecentBtn"),
     documentIdInput: document.getElementById("documentIdInput"),
@@ -45,6 +48,9 @@
     toast: document.getElementById("toast"),
     workflowItems: Array.from(document.querySelectorAll(".workflow-item")),
     themeToggle: document.getElementById("themeToggle"),
+    profileMenuTrigger: document.getElementById("profileMenuTrigger"),
+    profileMenu: document.getElementById("profileMenu"),
+    userInitials: document.getElementById("userInitials"),
   };
 
   const state = {
@@ -58,11 +64,16 @@
       entities: [],
       reports: [],
       redactions: [],
+      reportDetail: null,
       llmAudit: { accepted: [], rejected: [] },
     },
     revealValues: false,
     activeReviewFilter: "all",
     activeLlmTab: "accepted",
+    admin: { users: [], loading: false },
+    recentDocumentsLoading: false,
+    recentDocumentsError: "",
+    dashboardLoadSequence: 0,
     pollTimer: null,
   };
 
@@ -126,8 +137,19 @@
     const nameEl = document.getElementById("userName");
     const roleEl = document.getElementById("userRole");
     if (!auth || !chip) return;
-    if (nameEl) nameEl.textContent = auth.user.name || auth.user.email;
+    const displayName = auth.user.name || auth.user.email || "User";
+    if (nameEl) nameEl.textContent = displayName;
     if (roleEl) roleEl.textContent = auth.user.role || "USER";
+    if (els.userInitials) {
+      const nameParts = displayName.trim().split(/\s+/).filter(Boolean);
+      const initials = nameParts.length > 1
+        ? `${nameParts[0][0]}${nameParts[nameParts.length - 1][0]}`
+        : displayName.slice(0, 2);
+      els.userInitials.textContent = initials.toUpperCase();
+    }
+    if (els.profileMenuTrigger) {
+      els.profileMenuTrigger.setAttribute("aria-label", `Open profile menu for ${displayName}`);
+    }
     chip.style.display = "flex";
     document.body.setAttribute("data-role", auth.user.role || "USER");
   }
@@ -144,93 +166,169 @@
     if (role === "ADMIN") {
       loadAdminPanel();
     }
+    if (role === "REVIEWER") {
+      state.activeReviewFilter = "all";
+      renderReviews();
+    }
+    els.metricFilters.forEach((button) => {
+      const isUserMetric = role === "USER";
+      button.disabled = isUserMetric;
+      button.setAttribute("aria-disabled", String(isUserMetric));
+    });
+  }
+
+  function renderAdminDocuments(documents) {
+    const body = document.getElementById("adminDocumentsBody");
+    if (!body) return;
+    if (!Array.isArray(documents) || !documents.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-state">No documents have been uploaded yet.</td></tr>`;
+      return;
+    }
+    body.innerHTML = documents.map((documentItem) => `
+      <tr>
+        <td>
+          <strong class="admin-document-name">${escapeHtml(documentItem.filename)}</strong>
+          <small>${escapeHtml(truncate(documentItem.document_id, 18))}</small>
+        </td>
+        <td class="admin-truncate" title="${escapeHtml(documentItem.owner)}">${escapeHtml(documentItem.owner)}</td>
+        <td><span class="status-pill ${statusTone(documentItem.status)}">${escapeHtml(documentItem.status)}</span></td>
+        <td>${escapeHtml(documentItem.entity_count)}</td>
+        <td>${escapeHtml(formatDate(documentItem.created_at))}</td>
+      </tr>
+    `).join("");
+  }
+
+  function renderAdminStats(stats) {
+    const grid = document.getElementById("adminStatsGrid");
+    const metrics = [
+      ["Users", stats.total_users],
+      ["Documents", stats.total_documents],
+      ["Entities", stats.total_entities],
+      ["Pending reviews", stats.pending_reviews],
+    ];
+    if (grid) {
+      grid.innerHTML = metrics.map(([label, value]) => `
+        <article class="admin-stat">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </article>
+      `).join("");
+    }
+
+    renderAdminDocuments(stats.recent_documents || []);
+  }
+
+  function renderAdminUsers() {
+    const body = document.getElementById("adminUsersBody");
+    if (!body) return;
+    const search = String(document.getElementById("adminUserSearch")?.value || "").trim().toLowerCase();
+    const role = String(document.getElementById("adminRoleFilter")?.value || "").toUpperCase();
+    const status = String(document.getElementById("adminStatusFilter")?.value || "");
+    const users = state.admin.users.filter((user) => {
+      const matchesSearch = !search || `${user.name || ""} ${user.email || ""}`.toLowerCase().includes(search);
+      const matchesRole = !role || user.role === role;
+      const matchesStatus = !status || (status === "active" ? user.is_active : !user.is_active);
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+
+    if (!state.admin.users.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-state">No users found.</td></tr>`;
+      return;
+    }
+    if (!users.length) {
+      body.innerHTML = `<tr><td colspan="5" class="empty-state">No users match the selected filters.</td></tr>`;
+      return;
+    }
+
+    body.innerHTML = users.map((user) => `
+      <tr data-user-id="${escapeHtml(user.id)}">
+        <td><strong>${escapeHtml(user.name)}</strong></td>
+        <td class="admin-truncate" title="${escapeHtml(user.email)}">${escapeHtml(user.email)}</td>
+        <td>
+          <select class="admin-role-select" data-role-select aria-label="Role for ${escapeHtml(user.name)}">
+            <option value="USER" ${user.role === "USER" ? "selected" : ""}>USER</option>
+            <option value="REVIEWER" ${user.role === "REVIEWER" ? "selected" : ""}>REVIEWER</option>
+            <option value="ADMIN" ${user.role === "ADMIN" ? "selected" : ""}>ADMIN</option>
+          </select>
+        </td>
+        <td><span class="status-pill ${user.is_active ? "success" : "danger"}">${user.is_active ? "Active" : "Inactive"}</span></td>
+        <td><button class="button secondary compact" type="button" data-activate-user>${user.is_active ? "Deactivate" : "Activate"}</button></td>
+      </tr>
+    `).join("");
+
+    body.querySelectorAll("[data-role-select]").forEach((select) => {
+      select.addEventListener("change", async () => {
+        const row = select.closest("tr[data-user-id]");
+        select.disabled = true;
+        try {
+          await apiFetch(`/admin/users/${encodeURIComponent(row.dataset.userId)}/role`, {
+            method: "PATCH",
+            body: { role: select.value },
+          });
+          showToast("User role updated.");
+          await loadAdminPanel();
+        } catch (error) {
+          showToast(`Role update failed: ${error.message}`, true);
+          renderAdminUsers();
+        }
+      });
+    });
+
+    body.querySelectorAll("[data-activate-user]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        const row = button.closest("tr[data-user-id]");
+        const user = state.admin.users.find((entry) => entry.id === row.dataset.userId);
+        if (!user) return;
+        button.disabled = true;
+        try {
+          await apiFetch(`/admin/users/${encodeURIComponent(user.id)}/active`, {
+            method: "PATCH",
+            body: { is_active: !user.is_active },
+          });
+          showToast(`User ${user.is_active ? "deactivated" : "activated"}.`);
+          await loadAdminPanel();
+        } catch (error) {
+          showToast(`Status update failed: ${error.message}`, true);
+          renderAdminUsers();
+        }
+      });
+    });
   }
 
   async function loadAdminPanel() {
     const adminPanel = document.getElementById("adminPanel");
-    if (!adminPanel) return;
-    adminPanel.classList.add("is-visible");
+    if (!adminPanel || currentRole() !== "ADMIN" || state.admin.loading) return;
+    state.admin.loading = true;
+    const refreshButton = document.getElementById("adminRefreshBtn");
+    if (refreshButton) refreshButton.disabled = true;
+    document.getElementById("adminStatsGrid").innerHTML = `<div class="admin-stat is-loading"><span>Loading dashboard metrics...</span></div>`;
+    document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="5" class="empty-state">Loading documents...</td></tr>`;
+    document.getElementById("adminUsersBody").innerHTML = `<tr><td colspan="5" class="empty-state">Loading users...</td></tr>`;
 
     try {
-      const stats = await apiFetch("/admin/stats");
-      const grid = document.getElementById("adminStatsGrid");
-      if (grid && stats) {
-        grid.innerHTML = `
-          <div class="admin-stat"><span>Users</span><strong>${escapeHtml(stats.total_users)}</strong></div>
-          <div class="admin-stat"><span>Documents</span><strong>${escapeHtml(stats.total_documents)}</strong></div>
-          <div class="admin-stat"><span>Reports</span><strong>${escapeHtml(stats.total_reports)}</strong></div>
-          <div class="admin-stat"><span>Entities</span><strong>${escapeHtml(stats.total_entities)}</strong></div>
-          <div class="admin-stat"><span>Redactions</span><strong>${escapeHtml(stats.total_redactions)}</strong></div>
-          <div class="admin-stat"><span>Pending reviews</span><strong>${escapeHtml(stats.pending_reviews)}</strong></div>
-        `;
-      }
-    } catch (error) {
-      /* stats are optional; ignore load errors */
-    }
+      const [statsResult, usersResult] = await Promise.allSettled([
+        apiFetch("/admin/stats"),
+        apiFetch("/admin/users"),
+      ]);
 
-    try {
-      const users = await apiFetch("/admin/users");
-      const body = document.getElementById("adminUsersBody");
-      if (body && Array.isArray(users)) {
-        if (!users.length) {
-          body.innerHTML = `<tr><td colspan="5" class="empty-state">No users found.</td></tr>`;
-          return;
-        }
-        body.innerHTML = users.map((user) => `
-          <tr data-user-id="${escapeHtml(user.id)}">
-            <td>${escapeHtml(user.name)}</td>
-            <td>${escapeHtml(user.email)}</td>
-            <td>
-              <select class="admin-role-select" data-role-select>
-                <option value="USER" ${user.role === "USER" ? "selected" : ""}>USER</option>
-                <option value="REVIEWER" ${user.role === "REVIEWER" ? "selected" : ""}>REVIEWER</option>
-                <option value="ADMIN" ${user.role === "ADMIN" ? "selected" : ""}>ADMIN</option>
-              </select>
-            </td>
-            <td><span class="status-pill ${user.is_active ? "success" : "danger"}">${user.is_active ? "Active" : "Inactive"}</span></td>
-            <td>
-              <button class="button secondary compact" type="button" data-activate-user>${user.is_active ? "Deactivate" : "Activate"}</button>
-            </td>
-          </tr>
-        `).join("");
-
-        body.querySelectorAll("[data-role-select]").forEach((select) => {
-          select.addEventListener("change", async () => {
-            const row = select.closest("tr[data-user-id]");
-            try {
-              await apiFetch(`/admin/users/${encodeURIComponent(row.dataset.userId)}/role`, {
-                method: "PATCH",
-                body: { role: select.value },
-              });
-              showToast("User role updated.");
-            } catch (error) {
-              showToast(`Role update failed: ${error.message}`, true);
-            }
-          });
-        });
-
-        body.querySelectorAll("[data-activate-user]").forEach((button) => {
-          button.addEventListener("click", async () => {
-            const row = button.closest("tr[data-user-id]");
-            const wasActive = button.textContent.trim() === "Deactivate";
-            try {
-              await apiFetch(`/admin/users/${encodeURIComponent(row.dataset.userId)}/active`, {
-                method: "PATCH",
-                body: { is_active: !wasActive },
-              });
-              showToast("User status updated.");
-              loadAdminPanel();
-            } catch (error) {
-              showToast(`Status update failed: ${error.message}`, true);
-            }
-          });
-        });
+      if (statsResult.status === "fulfilled") {
+        renderAdminStats(statsResult.value);
+      } else {
+        document.getElementById("adminStatsGrid").innerHTML = `<div class="admin-error-state">Dashboard metrics could not be loaded.</div>`;
+        document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="5" class="empty-state">Recent documents could not be loaded.</td></tr>`;
       }
-    } catch (error) {
-      const body = document.getElementById("adminUsersBody");
-      if (body) {
-        body.innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(error.message || "Failed to load users.")}</td></tr>`;
+
+      if (usersResult.status === "fulfilled" && Array.isArray(usersResult.value)) {
+        state.admin.users = usersResult.value;
+        renderAdminUsers();
+      } else {
+        state.admin.users = [];
+        const message = usersResult.status === "rejected" ? usersResult.reason.message : "Failed to load users.";
+        document.getElementById("adminUsersBody").innerHTML = `<tr><td colspan="5" class="empty-state">${escapeHtml(message)}</td></tr>`;
       }
+    } finally {
+      state.admin.loading = false;
+      if (refreshButton) refreshButton.disabled = false;
     }
   }
 
@@ -309,6 +407,30 @@
   function toggleTheme() {
     const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
     applyTheme(next);
+  }
+
+  function setHeaderMenuOpen(trigger, menu, isOpen) {
+    if (!trigger || !menu) return;
+    trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    menu.hidden = !isOpen;
+  }
+
+  function closeHeaderMenus(exceptMenu) {
+    [
+      [els.apiMenuTrigger, els.apiMenu],
+      [els.profileMenuTrigger, els.profileMenu],
+    ].forEach(([trigger, menu]) => {
+      if (menu !== exceptMenu) {
+        setHeaderMenuOpen(trigger, menu, false);
+      }
+    });
+  }
+
+  function toggleHeaderMenu(trigger, menu) {
+    if (!trigger || !menu) return;
+    const willOpen = menu.hidden;
+    closeHeaderMenus(menu);
+    setHeaderMenuOpen(trigger, menu, willOpen);
   }
 
   function normalizeBase(value) {
@@ -448,20 +570,38 @@
       return;
     }
 
-    els.fileList.innerHTML = files.map((file) => `
+    els.fileList.innerHTML = files.map((file, index) => `
       <div class="file-item">
-        <span title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
-        <small>${escapeHtml(formatBytes(file.size))}</small>
+        <div class="file-item-details">
+          <span title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+          <small>${escapeHtml(formatBytes(file.size))}</small>
+        </div>
+        <button class="file-remove-button" type="button" data-file-index="${index}" aria-label="Remove ${escapeHtml(file.name)}" title="Remove file">
+          <span aria-hidden="true">&times;</span>
+        </button>
       </div>
     `).join("");
+  }
+
+  function removeSelectedFile(index) {
+    const files = Array.from(els.fileInput.files || []);
+    if (index < 0 || index >= files.length) return;
+
+    const remainingFiles = new DataTransfer();
+    files.forEach((file, fileIndex) => {
+      if (fileIndex !== index) remainingFiles.items.add(file);
+    });
+    els.fileInput.files = remainingFiles.files;
+    renderFiles();
   }
 
   function upsertDocuments(documents) {
     const incoming = documents.map((document) => ({
       id: document.document_id,
       filename: document.filename || document.document_id,
-      status: document.status || document.document_status || "UPLOADED",
-      uploadedAt: new Date().toISOString(),
+      status: document.status || document.document_status || null,
+      createdAt: document.created_at || null,
+      entityCount: document.total_entities == null ? null : document.total_entities,
     })).filter((document) => document.id);
 
     incoming.forEach((document) => {
@@ -484,6 +624,7 @@
     if (match) {
       match.filename = status.filename || match.filename;
       match.status = status.processing_status || status.document_status || match.status;
+      match.createdAt = status.created_at || match.createdAt || null;
       persistState();
       renderDocumentList();
     }
@@ -501,42 +642,141 @@
   }
 
   function renderEmptyDashboard() {
+    state.dashboard.reportDetail = null;
     renderStatus(null);
     renderText(null);
     renderReviews([], []);
     renderMetrics([], [], [], []);
     renderArtifacts([], []);
+    renderLlmAudit({ accepted: [], rejected: [] });
     renderWorkflow(0);
   }
 
   function renderDocumentList() {
-    els.recentCount.textContent = state.documents.length
-      ? `${state.documents.length} tracked document${state.documents.length === 1 ? "" : "s"}.`
-      : "No tracked documents.";
-
-    if (!state.documents.length) {
-      els.documentList.innerHTML = `<div class="empty-state">Uploaded documents appear here.</div>`;
+    if (state.recentDocumentsLoading) {
+      els.recentCount.textContent = "Refreshing from your workspace...";
+      els.documentListBody.innerHTML = emptyRow("Loading your documents...", 4);
       return;
     }
 
-    els.documentList.innerHTML = state.documents.map((document) => `
-      <button class="document-item ${document.id === state.activeDocumentId ? "is-active" : ""}" type="button" data-document-id="${escapeHtml(document.id)}">
-        <span class="document-main">
-          <strong title="${escapeHtml(document.filename)}">${escapeHtml(document.filename)}</strong>
-          <span class="document-id">${escapeHtml(truncate(document.id, 30))}</span>
-        </span>
-        <span class="status-pill ${statusTone(document.status)}">${escapeHtml(document.status || "Uploaded")}</span>
-      </button>
+    els.recentCount.textContent = state.recentDocumentsError
+      ? state.recentDocumentsError
+      : (state.documents.length
+        ? `${state.documents.length} recent document${state.documents.length === 1 ? "" : "s"}.`
+        : "No recent documents.");
+
+    if (!state.documents.length) {
+      els.documentListBody.innerHTML = emptyRow("Your uploaded documents appear here.", 4);
+      return;
+    }
+
+    els.documentListBody.innerHTML = state.documents.map((document) => `
+      <tr class="${document.id === state.activeDocumentId ? "is-active" : ""}">
+        <td>
+          <button class="document-select" type="button" data-document-id="${escapeHtml(document.id)}">
+            <strong title="${escapeHtml(document.filename)}">${escapeHtml(document.filename)}</strong>
+            <small title="${escapeHtml(document.id)}">${escapeHtml(truncate(document.id, 22))}</small>
+          </button>
+        </td>
+        <td><span class="status-pill ${statusTone(document.status)}">${escapeHtml(document.status || "-")}</span></td>
+        <td>${document.entityCount == null ? "-" : escapeHtml(document.entityCount)}</td>
+        <td>${escapeHtml(formatDate(document.createdAt))}</td>
+      </tr>
     `).join("");
+  }
+
+  async function syncUserDocuments() {
+    if (currentRole() !== "USER" || state.recentDocumentsLoading || !state.documents.length) {
+      return;
+    }
+
+    state.recentDocumentsLoading = true;
+    state.recentDocumentsError = "";
+    renderDocumentList();
+
+    const trackedIds = new Set(state.documents.map((document) => document.id));
+    const results = await Promise.all(state.documents.map(async (document) => {
+      const documentId = encodeURIComponent(document.id);
+      const [statusResult, reportsResult] = await Promise.allSettled([
+        apiFetch(`/documents/${documentId}/status`),
+        apiFetch(`/documents/${documentId}/reports`),
+      ]);
+
+      if (statusResult.status === "rejected") {
+        if (statusResult.reason.status === 403 || statusResult.reason.status === 404) {
+          return null;
+        }
+        return Object.assign({}, document, { syncError: true });
+      }
+
+      const status = statusResult.value;
+      const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
+      const latestReport = Array.isArray(reports) && reports.length ? reports[0] : null;
+      return {
+        id: status.document_id,
+        filename: status.filename || document.filename,
+        status: status.processing_status || status.document_status || document.status,
+        createdAt: status.created_at || null,
+        entityCount: latestReport && latestReport.total_entities != null
+          ? latestReport.total_entities
+          : null,
+        syncError: reportsResult.status === "rejected",
+      };
+    }));
+
+    state.documents = results.filter(Boolean);
+    if (
+      state.activeDocumentId
+      && trackedIds.has(state.activeDocumentId)
+      && !state.documents.some((document) => document.id === state.activeDocumentId)
+    ) {
+      state.activeDocumentId = "";
+      els.documentIdInput.value = "";
+      renderEmptyDashboard();
+    }
+    const failedCount = state.documents.filter((document) => document.syncError).length;
+    state.documents.forEach((document) => delete document.syncError);
+    state.recentDocumentsError = failedCount
+      ? `${failedCount} document${failedCount === 1 ? "" : "s"} could not be fully refreshed.`
+      : "";
+    state.recentDocumentsLoading = false;
+    persistState();
+    renderDocumentList();
+  }
+
+  function renderReviewerContext(status, stateLabel) {
+    const fields = {
+      reviewerContextName: status && status.filename,
+      reviewerContextOwner: status && status.owner,
+      reviewerContextStatus: status && status.document_status,
+      reviewerContextId: status && status.document_id,
+      reviewerContextProcessing: status && (status.processing_status || status.workflow_stage),
+      reviewerContextOcr: status && (
+        status.extraction_method
+        || (status.has_extracted_text ? "Available" : "Pending")
+      ),
+    };
+
+    Object.entries(fields).forEach(([id, value]) => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      const displayValue = id === "reviewerContextId" && value
+        ? value
+        : (stateLabel || value || "-");
+      element.textContent = displayValue;
+      element.title = value || "";
+    });
   }
 
   function renderStatus(status) {
     state.dashboard.status = status || null;
+    renderReviewerContext(status);
 
     if (!status) {
       els.activeFilename.textContent = "Select or upload a document.";
       setBadge(els.processingBadge, "Idle", "neutral");
       els.statusDetails.innerHTML = `
+        <div><dt>Document ID</dt><dd>-</dd></div>
         <div><dt>Status</dt><dd>-</dd></div>
         <div><dt>Stage</dt><dd>-</dd></div>
         <div><dt>OCR</dt><dd>-</dd></div>
@@ -550,6 +790,7 @@
     els.activeFilename.textContent = status.filename || status.document_id;
     setBadge(els.processingBadge, primaryStatus, statusTone(primaryStatus));
     els.statusDetails.innerHTML = `
+      <div><dt>Document ID</dt><dd title="${escapeHtml(status.document_id)}">${escapeHtml(status.document_id || "-")}</dd></div>
       <div><dt>Status</dt><dd>${escapeHtml(status.document_status || "-")}</dd></div>
       <div><dt>Stage</dt><dd>${escapeHtml(status.workflow_stage || status.processing_status || "-")}</dd></div>
       <div><dt>OCR</dt><dd>${status.has_extracted_text ? "Available" : escapeHtml(status.extraction_method || "Pending")}</dd></div>
@@ -646,26 +887,50 @@
     });
   }
 
-  function renderMetrics(reviews, reports, redactions, entities) {
+  function renderMetrics(reviews, reports, redactions, entities, reportDetail) {
     if (Array.isArray(entities)) {
       state.dashboard.entities = entities;
     }
 
     const latestReport = reports[0] || null;
+    const isUserDashboard = currentRole() === "USER";
+    const reportPayload = reportDetail && reportDetail.payload ? reportDetail.payload : null;
     const entityRows = getDisplayEntities();
-    const pendingReviews = reviews.filter((review) => normalizeReviewStatus(review) === "PENDING").length;
-    const piiCount = entityRows.length
-      ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PII").length
-      : (latestReport ? latestReport.total_pii : 0);
-    const phiCount = entityRows.length
-      ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PHI").length
-      : (latestReport ? latestReport.total_phi : 0);
-    const entityCount = entityRows.length || (latestReport ? latestReport.total_entities : 0);
+    const pendingFromReport = reportPayload && Number.isFinite(Number(reportPayload.pending_reviews))
+      ? Number(reportPayload.pending_reviews)
+      : null;
+    const pendingReviews = isUserDashboard
+      ? pendingFromReport
+      : reviews.filter((review) => normalizeReviewStatus(review) === "PENDING").length;
+    const piiCount = isUserDashboard
+      ? (latestReport && latestReport.total_pii != null ? latestReport.total_pii : null)
+      : (entityRows.length
+        ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PII").length
+        : (latestReport ? latestReport.total_pii : 0));
+    const phiCount = isUserDashboard
+      ? (latestReport && latestReport.total_phi != null ? latestReport.total_phi : null)
+      : (entityRows.length
+        ? entityRows.filter((entity) => normalizeCategory(entity.privacy_category) === "PHI").length
+        : (latestReport ? latestReport.total_phi : 0));
+    const entityCount = isUserDashboard
+      ? (latestReport && latestReport.total_entities != null ? latestReport.total_entities : null)
+      : (entityRows.length || (latestReport ? latestReport.total_entities : 0));
 
-    els.metricEntities.textContent = entityCount || 0;
-    els.metricPii.textContent = piiCount || 0;
-    els.metricPhi.textContent = phiCount || 0;
-    els.metricPending.textContent = pendingReviews || 0;
+    const metricValue = (value) => value == null ? "-" : value;
+    els.metricEntities.textContent = metricValue(entityCount);
+    els.metricPii.textContent = metricValue(piiCount);
+    els.metricPhi.textContent = metricValue(phiCount);
+    els.metricPending.textContent = metricValue(pendingReviews);
+
+    const reviewerPending = document.getElementById("reviewerMetricPending");
+    const reviewerFindings = document.getElementById("reviewerMetricFindings");
+    const reviewerCompleted = document.getElementById("reviewerMetricCompleted");
+    const completedReviews = reviews.filter((review) =>
+      COMPLETED_REVIEW_STATUSES.includes(normalizeReviewStatus(review))
+    ).length;
+    if (reviewerPending) reviewerPending.textContent = pendingReviews == null ? "-" : pendingReviews;
+    if (reviewerFindings) reviewerFindings.textContent = entityCount || 0;
+    if (reviewerCompleted) reviewerCompleted.textContent = completedReviews;
 
     if (latestReport) {
       const redactionCount = latestReport.total_redactions || redactions.length || 0;
@@ -677,6 +942,47 @@
     }
   }
 
+  function renderReviewerActivity(reviews) {
+    const body = document.getElementById("reviewerActivityBody");
+    if (!body) return;
+    if (!state.activeDocumentId) {
+      body.innerHTML = emptyRow("No document selected.", 4);
+      return;
+    }
+
+    const completed = (Array.isArray(reviews) ? reviews : [])
+      .filter((review) => COMPLETED_REVIEW_STATUSES.includes(normalizeReviewStatus(review)))
+      .sort((left, right) => {
+        const leftTime = new Date(left.reviewed_at || left.created_at || 0).getTime();
+        const rightTime = new Date(right.reviewed_at || right.created_at || 0).getTime();
+        return rightTime - leftTime;
+      })
+      .slice(0, 8);
+
+    if (!completed.length) {
+      body.innerHTML = emptyRow("No completed review activity for this document.", 4);
+      return;
+    }
+
+    body.innerHTML = completed.map((review) => {
+      const entity = getReviewEntity(review);
+      const status = normalizeReviewStatus(review);
+      return `
+        <tr>
+          <td>
+            <span class="entity-type">
+              <strong>${escapeHtml(entity.entity_type || "Entity")}</strong>
+              <small>${escapeHtml(maskValue(entity.entity_value))}</small>
+            </span>
+          </td>
+          <td><span class="status-pill ${statusTone(status)}">${escapeHtml(status)}</span></td>
+          <td class="reviewer-activity-truncate">${escapeHtml(review.reviewer || "-")}</td>
+          <td>${escapeHtml(formatDate(review.reviewed_at || review.created_at))}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
   function renderReviews(reviews, entities) {
     if (Array.isArray(reviews)) {
       state.dashboard.reviews = reviews;
@@ -686,10 +992,11 @@
     }
 
     const filterLabel = REVIEW_FILTERS[state.activeReviewFilter] || REVIEW_FILTERS.all;
-    const showReviewColumns = state.activeReviewFilter === "pending";
+    const showReviewColumns = currentRole() === "REVIEWER" || state.activeReviewFilter === "pending";
     const colSpan = showReviewColumns ? 6 : 4;
     const rows = getFilteredFindingRows();
     const pending = getPendingReviews().length;
+    renderReviewerActivity(state.dashboard.reviews);
 
     renderReviewHeader(showReviewColumns);
     renderMetricFilterState();
@@ -718,14 +1025,14 @@
       const isComplete = COMPLETED_REVIEW_STATUSES.includes(String(status).toUpperCase());
       const reviewId = review && review.review_id;
       return `
-        <tr>
+        <tr class="${String(status).toUpperCase() === "PENDING" ? "is-review-pending" : ""}">
           <td>
             <span class="entity-type">
               <strong>${escapeHtml(entity.entity_type || "Entity")}</strong>
               <small>${escapeHtml(detector)}</small>
             </span>
           </td>
-          <td><span class="entity-value" title="${state.revealValues ? "" : "Masked"}">${escapeHtml(maskValue(entity.entity_value))}</span></td>
+          <td><span class="entity-value" title="${state.revealValues ? "" : "Masked"}">${escapeHtml(state.revealValues ? entity.entity_value : maskValue(entity.entity_value))}</span></td>
           <td>${escapeHtml(entity.privacy_category || "-")}</td>
           <td>${escapeHtml(confidenceLabel(confidence))}</td>
           ${showReviewColumns ? `
@@ -765,8 +1072,13 @@
 
     if (!els.llmAuditBody) return;
 
+    if (!acceptedList.length && !rejectedList.length) {
+      els.llmAuditBody.innerHTML = `<tr><td colspan="6" class="empty-state">No AI/LLM candidates for this document.</td></tr>`;
+      return;
+    }
+
     if (!currentItems.length) {
-      els.llmAuditBody.innerHTML = `<tr><td colspan="6" class="empty-state">No ${state.activeLlmTab} LLM candidates for this document.</td></tr>`;
+      els.llmAuditBody.innerHTML = `<tr><td colspan="6" class="empty-state">No ${state.activeLlmTab} AI/LLM candidates for this document.</td></tr>`;
       return;
     }
 
@@ -790,13 +1102,25 @@
           <td><span class="entity-value">${escapeHtml(item.candidate_value || item.entity_value || "-")}</span></td>
           <td><span class="status-pill ${tone}">${escapeHtml(decision)}</span></td>
           <td><strong>${escapeHtml(confidencePct)}</strong></td>
-          <td><small style="color: #64748b; font-weight: 600;">${escapeHtml(item.detector || "Qwen3:4b")}</small></td>
+          <td><small style="color: #64748b; font-weight: 600;">${escapeHtml(item.detector || "-")}</small></td>
           <td>
-            <div class="llm-reason-box">${escapeHtml(item.reasoning || item.reason || "Evaluated by AI")}</div>
+            <div class="llm-reason-box">${escapeHtml(item.reasoning || item.reason || "-")}</div>
           </td>
         </tr>
       `;
     }).join("");
+  }
+
+  function renderLlmAuditUnavailable(message) {
+    state.dashboard.llmAudit = { accepted: [], rejected: [] };
+    if (els.countLlmAccepted) els.countLlmAccepted.textContent = 0;
+    if (els.countLlmRejected) els.countLlmRejected.textContent = 0;
+    if (els.llmAuditSummary) {
+      els.llmAuditSummary.textContent = message;
+    }
+    if (els.llmAuditBody) {
+      els.llmAuditBody.innerHTML = `<tr><td colspan="6" class="empty-state">${escapeHtml(message)}</td></tr>`;
+    }
   }
 
   function renderText(textPayload) {
@@ -817,36 +1141,149 @@
     return `${state.apiBase}${path}`;
   }
 
+  function getDownloadFilename(contentDisposition) {
+    const value = String(contentDisposition || "");
+    const encodedMatch = value.match(/filename\*=UTF-8''([^;]+)/i);
+    const quotedMatch = value.match(/filename="([^"]+)"/i);
+    const plainMatch = value.match(/filename=([^;]+)/i);
+    const candidate = encodedMatch
+      ? encodedMatch[1]
+      : (quotedMatch ? quotedMatch[1] : (plainMatch ? plainMatch[1].trim() : ""));
+    if (!candidate) return "";
+
+    let decoded = candidate;
+    try {
+      decoded = decodeURIComponent(candidate);
+    } catch (error) {
+      /* Use the server-provided filename as-is when it is not URI encoded. */
+    }
+    return decoded.split(/[\\/]/).pop() || "";
+  }
+
+  async function getDownloadError(response) {
+    const fallback = `${response.status} ${response.statusText}`.trim();
+    try {
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const payload = await response.json();
+        return payload.detail || payload.message || fallback;
+      }
+      return (await response.text()) || fallback;
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  async function downloadUserArtifact(button) {
+    if (currentRole() !== "USER" || !button) return;
+
+    const artifactId = button.dataset.artifactId;
+    const artifactKind = button.dataset.artifactKind;
+    if (!artifactId || !["redaction", "report"].includes(artifactKind)) {
+      showToast("This artifact is not available for download.", true);
+      return;
+    }
+
+    const path = artifactKind === "redaction"
+      ? `/redactions/${encodeURIComponent(artifactId)}/file`
+      : `/reports/${encodeURIComponent(artifactId)}/file`;
+    const auth = getAuth();
+    if (!auth || !auth.token) {
+      redirectToLogin();
+      return;
+    }
+
+    const originalLabel = button.textContent;
+    button.disabled = true;
+    button.textContent = "Downloading...";
+
+    try {
+      const response = await fetch(artifactUrl(path), {
+        headers: { Authorization: `Bearer ${auth.token}` },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          clearAuth();
+          redirectToLogin();
+        }
+        const error = new Error(await getDownloadError(response));
+        error.status = response.status;
+        throw error;
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const downloadLink = document.createElement("a");
+      const filename = getDownloadFilename(response.headers.get("content-disposition"));
+      downloadLink.href = objectUrl;
+      downloadLink.download = filename;
+      downloadLink.hidden = true;
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+      downloadLink.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      showToast("Artifact download started.");
+    } catch (error) {
+      showToast(`Download failed: ${error.message}`, true);
+    } finally {
+      if (button.isConnected) {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+    }
+  }
+
   function renderArtifacts(reports, redactions) {
     state.dashboard.reports = reports || [];
     state.dashboard.redactions = redactions || [];
 
+    const isUserDashboard = currentRole() === "USER";
+    const visibleRedactions = isUserDashboard
+      ? state.dashboard.redactions.filter((redaction) => (
+        redaction.redaction_id && redaction.redacted_file_path
+      )).slice(0, 1)
+      : state.dashboard.redactions;
+    const visibleReports = isUserDashboard
+      ? state.dashboard.reports.filter((report) => (
+        report.report_id && report.report_path
+      )).slice(0, 1)
+      : state.dashboard.reports;
     const items = [];
-    state.dashboard.redactions.forEach((redaction) => {
+    visibleRedactions.forEach((redaction) => {
       items.push(`
         <div class="artifact-item">
           <span class="artifact-meta">
             <strong>Redacted text</strong>
-            <small>${escapeHtml(redaction.redaction_type || "Text artifact")} &middot; ${escapeHtml(formatDate(redaction.created_at))}</small>
+            ${isUserDashboard ? "" : `<small>${escapeHtml(redaction.redaction_type || "Text artifact")} &middot; ${escapeHtml(formatDate(redaction.created_at))}</small>`}
           </span>
-          <a class="button ghost compact" href="${escapeHtml(artifactUrl(`/redactions/${redaction.redaction_id}/file`))}" target="_blank" rel="noreferrer">Download</a>
+          ${isUserDashboard
+            ? `<button class="button ghost compact" type="button" data-artifact-kind="redaction" data-artifact-id="${escapeHtml(redaction.redaction_id)}">Download</button>`
+            : `<a class="button ghost compact" href="${escapeHtml(artifactUrl(`/redactions/${redaction.redaction_id}/file`))}" target="_blank" rel="noreferrer">Download</a>`}
         </div>
       `);
     });
 
-    state.dashboard.reports.forEach((report) => {
+    visibleReports.forEach((report) => {
       items.push(`
         <div class="artifact-item">
           <span class="artifact-meta">
             <strong>Audit report</strong>
-            <small>${escapeHtml(report.report_type || "JSON report")} &middot; ${escapeHtml(formatDate(report.created_at))}</small>
+            ${isUserDashboard ? "" : `<small>${escapeHtml(report.report_type || "JSON report")} &middot; ${escapeHtml(formatDate(report.created_at))}</small>`}
           </span>
-          <a class="button ghost compact" href="${escapeHtml(artifactUrl(`/reports/${report.report_id}/file`))}" target="_blank" rel="noreferrer">Download</a>
+          ${isUserDashboard
+            ? `<button class="button ghost compact" type="button" data-artifact-kind="report" data-artifact-id="${escapeHtml(report.report_id)}">Download</button>`
+            : `<a class="button ghost compact" href="${escapeHtml(artifactUrl(`/reports/${report.report_id}/file`))}" target="_blank" rel="noreferrer">Download</a>`}
         </div>
       `);
     });
 
     els.artifactList.innerHTML = items.length ? items.join("") : `<div class="empty-state">No artifacts loaded.</div>`;
+    const artifactsPanel = els.artifactList.closest(".artifacts-panel");
+    if (artifactsPanel && isUserDashboard) {
+      artifactsPanel.hidden = !items.length;
+    } else if (artifactsPanel) {
+      artifactsPanel.hidden = false;
+    }
   }
 
   function renderWorkflow(index) {
@@ -946,31 +1383,67 @@
       return;
     }
 
+    const loadSequence = ++state.dashboardLoadSequence;
     state.activeDocumentId = id;
     els.documentIdInput.value = id;
     persistState();
     renderDocumentList();
     setBadge(els.processingBadge, "Loading", "warning");
+    if (currentRole() === "USER") {
+      [els.metricEntities, els.metricPii, els.metricPhi, els.metricPending].forEach((metric) => {
+        metric.textContent = "...";
+      });
+      renderArtifacts([], []);
+    }
+    renderLlmAuditUnavailable("Loading AI candidate audit...");
+    renderReviewerContext({ document_id: id }, "Loading...");
+    ["reviewerMetricPending", "reviewerMetricFindings", "reviewerMetricCompleted"].forEach((metricId) => {
+      const metric = document.getElementById(metricId);
+      if (metric) metric.textContent = "...";
+    });
+    els.reviewSummary.textContent = "Loading review records...";
+    const reviewerActivityBody = document.getElementById("reviewerActivityBody");
+    if (currentRole() === "REVIEWER" && reviewerActivityBody) {
+      reviewerActivityBody.innerHTML = emptyRow("Loading review activity...", 4);
+    }
 
     let status;
     try {
       status = await apiFetch(`/documents/${encodeURIComponent(id)}/status`);
     } catch (error) {
-      if (error.status === 404) {
+      if (loadSequence !== state.dashboardLoadSequence) return;
+      if (error.status === 403 || error.status === 404) {
         removeTrackedDocument(id);
         stopPolling();
       }
       renderEmptyDashboard();
+      renderReviewerContext({ document_id: id }, "Unavailable");
       if (!quiet) {
         showToast(`Status lookup failed: ${error.message}`, true);
       }
       return;
     }
 
+    if (loadSequence !== state.dashboardLoadSequence) return;
+
+    if (currentRole() === "USER" && !state.documents.some((document) => document.id === status.document_id)) {
+      state.documents.unshift({
+        id: status.document_id,
+        filename: status.filename || status.document_id,
+        status: status.processing_status || status.document_status || null,
+        createdAt: status.created_at || null,
+        entityCount: null,
+      });
+      state.documents = state.documents.slice(0, 12);
+      persistState();
+      renderDocumentList();
+    }
+
+    const canLoadReviewData = currentRole() !== "USER";
     const requests = await Promise.allSettled([
       status.has_extracted_text ? apiFetch(`/documents/${encodeURIComponent(id)}/text`) : Promise.resolve(null),
-      apiFetch(`/documents/${encodeURIComponent(id)}/entities`),
-      apiFetch(`/documents/${encodeURIComponent(id)}/reviews`),
+      canLoadReviewData ? apiFetch(`/documents/${encodeURIComponent(id)}/entities`) : Promise.resolve([]),
+      canLoadReviewData ? apiFetch(`/documents/${encodeURIComponent(id)}/reviews`) : Promise.resolve([]),
       apiFetch(`/documents/${encodeURIComponent(id)}/reports`),
       apiFetch(`/documents/${encodeURIComponent(id)}/redactions`),
     ]);
@@ -981,27 +1454,56 @@
     const reports = requests[3].status === "fulfilled" ? requests[3].value : [];
     const redactions = requests[4].status === "fulfilled" ? requests[4].value : [];
 
-    let llmAudit = { accepted: [], rejected: [] };
-    if (reports && reports.length > 0) {
+    if (loadSequence !== state.dashboardLoadSequence) return;
+
+    const latestReport = reports && reports.length ? reports[0] : null;
+    const reportMatchesDocument = !latestReport || latestReport.document_id === id;
+    const llmAudit = latestReport && latestReport.llm_candidate_audit;
+    let reportDetail = null;
+    if (currentRole() === "USER" && latestReport && reportMatchesDocument) {
       try {
-        const reportDetail = await apiFetch(`/reports/${encodeURIComponent(reports[0].report_id)}`);
-        if (reportDetail && reportDetail.payload && reportDetail.payload.llm_candidate_audit) {
-          llmAudit = reportDetail.payload.llm_candidate_audit;
-        }
-      } catch (err) {
-        // payload load optional
+        reportDetail = await apiFetch(`/reports/${encodeURIComponent(latestReport.report_id)}`);
+      } catch (error) {
+        reportDetail = null;
       }
+    }
+
+    if (loadSequence !== state.dashboardLoadSequence) return;
+
+    state.dashboard.reportDetail = reportDetail;
+    const recentDocument = state.documents.find((document) => document.id === id);
+    if (recentDocument) {
+      recentDocument.createdAt = status.created_at || null;
+      recentDocument.entityCount = latestReport && latestReport.total_entities != null
+        ? latestReport.total_entities
+        : null;
     }
 
     renderStatus(status);
     renderText(text);
     renderReviews(reviews, entities);
-    renderMetrics(reviews, reports, redactions, entities);
+    if (requests[2].status === "rejected" && reviewerActivityBody) {
+      reviewerActivityBody.innerHTML = emptyRow("Review activity could not be loaded.", 4);
+    }
+    renderMetrics(reviews, reports, redactions, entities, reportDetail);
+    if (requests[2].status === "rejected") {
+      els.reviewSummary.textContent = "Review records could not be loaded.";
+      const pendingMetric = document.getElementById("reviewerMetricPending");
+      const completedMetric = document.getElementById("reviewerMetricCompleted");
+      if (pendingMetric) pendingMetric.textContent = "-";
+      if (completedMetric) completedMetric.textContent = "-";
+    }
     renderArtifacts(reports, redactions);
-    renderLlmAudit(llmAudit);
+    if (requests[3].status === "rejected" || !reportMatchesDocument) {
+      renderLlmAuditUnavailable("AI candidate audit could not be loaded for this document.");
+    } else if (latestReport && llmAudit == null) {
+      renderLlmAuditUnavailable("Persisted AI candidate audit is unavailable for this document.");
+    } else {
+      renderLlmAudit(llmAudit || { accepted: [], rejected: [] });
+    }
     updateWorkflow(status, reviews, reports, redactions);
 
-    if (status && status.has_extracted_text) {
+    if (currentRole() !== "USER" && status && status.has_extracted_text) {
       document.getElementById("openReviewBtn").style.display = "block";
     } else {
       document.getElementById("openReviewBtn").style.display = "none";
@@ -1036,9 +1538,44 @@
     if (logoutBtn) {
       logoutBtn.addEventListener("click", logout);
     }
+    const adminRefreshBtn = document.getElementById("adminRefreshBtn");
+    if (adminRefreshBtn) {
+      adminRefreshBtn.addEventListener("click", loadAdminPanel);
+    }
+    ["adminUserSearch", "adminRoleFilter", "adminStatusFilter"].forEach((id) => {
+      const filter = document.getElementById(id);
+      if (filter) {
+        filter.addEventListener(id === "adminUserSearch" ? "input" : "change", renderAdminUsers);
+      }
+    });
+    if (els.apiMenuTrigger && els.apiMenu) {
+      els.apiMenuTrigger.addEventListener("click", () => {
+        toggleHeaderMenu(els.apiMenuTrigger, els.apiMenu);
+      });
+    }
+    if (els.profileMenuTrigger && els.profileMenu) {
+      els.profileMenuTrigger.addEventListener("click", () => {
+        toggleHeaderMenu(els.profileMenuTrigger, els.profileMenu);
+      });
+    }
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".authenticated-header .header-menu")) {
+        closeHeaderMenus();
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        closeHeaderMenus();
+      }
+    });
     els.healthBtn.addEventListener("click", checkHealth);
     els.uploadForm.addEventListener("submit", uploadDocuments);
     els.fileInput.addEventListener("change", renderFiles);
+    els.fileList.addEventListener("click", (event) => {
+      const removeButton = event.target.closest("[data-file-index]");
+      if (!removeButton) return;
+      removeSelectedFile(Number(removeButton.dataset.fileIndex));
+    });
 
     if (els.tabLlmAccepted) {
       els.tabLlmAccepted.addEventListener("click", () => {
@@ -1096,6 +1633,12 @@
       loadDashboard(button.dataset.documentId);
     });
 
+    els.artifactList.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-artifact-kind][data-artifact-id]");
+      if (!button) return;
+      downloadUserArtifact(button);
+    });
+
     els.metricFilters.forEach((button) => {
       button.addEventListener("click", () => {
         const filter = button.dataset.reviewFilter;
@@ -1106,6 +1649,7 @@
     });
 
     els.clearRecentBtn.addEventListener("click", () => {
+      state.dashboardLoadSequence += 1;
       state.documents = [];
       state.activeDocumentId = "";
       state.activeReviewFilter = "all";
@@ -1117,18 +1661,13 @@
       renderText(null);
       renderMetrics([], [], [], []);
       renderArtifacts([], []);
+      renderLlmAudit({ accepted: [], rejected: [] });
       stopPolling();
     });
 
     els.toggleValuesBtn.addEventListener("click", () => {
       state.revealValues = !state.revealValues;
       renderReviews();
-    });
-
-    els.reviewsBody.addEventListener("click", (event) => {
-      const button = event.target.closest("[data-review-id][data-decision]");
-      if (!button) return;
-      submitReviewDecision(button.dataset.reviewId, button.dataset.decision);
     });
 
     els.reviewsBody.addEventListener("click", (event) => {
@@ -1175,16 +1714,10 @@
     const phiTabBtn = document.getElementById("phiTabBtn");
     if (piiTabBtn && phiTabBtn) {
       piiTabBtn.addEventListener("click", () => {
-        piiTabBtn.classList.add("active");
-        phiTabBtn.classList.remove("active");
-        reviewState.activeTab = "PII";
-        renderReviewWorkspaceCards();
+        setReviewActiveTab("PII");
       });
       phiTabBtn.addEventListener("click", () => {
-        phiTabBtn.classList.add("active");
-        piiTabBtn.classList.remove("active");
-        reviewState.activeTab = "PHI";
-        renderReviewWorkspaceCards();
+        setReviewActiveTab("PHI");
       });
     }
 
@@ -1243,8 +1776,25 @@
         const entity = reviewState.entities.find(ent => ent.id === entId);
         if (!entity) return;
         
-        const isGoTo = e.target.classList.contains("go-to-btn");
-        handleSelectReviewEntity(entity, isGoTo);
+        if (e.target.closest(".previous-entity-btn")) {
+          navigateReviewEntity(-1, entity);
+          return;
+        }
+        if (e.target.closest(".next-entity-btn")) {
+          navigateReviewEntity(1, entity);
+          return;
+        }
+        handleSelectReviewEntity(entity, true);
+      });
+    }
+
+    const pagesScrollContainer = document.getElementById("pagesScrollContainer");
+    if (pagesScrollContainer) {
+      pagesScrollContainer.addEventListener("click", (event) => {
+        const highlight = event.target.closest("[data-review-entity-id]");
+        if (!highlight) return;
+        const entity = reviewState.entities.find((item) => item.id === highlight.dataset.reviewEntityId);
+        if (entity) handleSelectReviewEntity(entity, true);
       });
     }
 
@@ -1288,30 +1838,26 @@
     if (prevPageBtn && nextPageBtn) {
       prevPageBtn.addEventListener("click", () => {
         if (!reviewState.selectedEntity) return;
-        const current = parseInt(reviewState.selectedEntity.page_number) || 1;
-        if (current > 1) {
-          const nextEntity = reviewState.entities.find(e => e.page_number == current - 1);
-          if (nextEntity) {
-            handleSelectReviewEntity(nextEntity, true);
-          } else {
-            // No entity, just scroll page
-            const el = document.getElementById(`page-container-${current - 1}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
+        const currentPage = parseInt(reviewState.selectedEntity.page_number) || 1;
+        if (currentPage <= 1) return;
+        const targetPage = currentPage - 1;
+        const entity = reviewState.entities.find((item) => Number(item.page_number) === targetPage);
+        if (entity) {
+          handleSelectReviewEntity(entity, true);
+        } else {
+          document.getElementById(`page-container-${targetPage}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
       nextPageBtn.addEventListener("click", () => {
         if (!reviewState.selectedEntity) return;
-        const current = parseInt(reviewState.selectedEntity.page_number) || 1;
-        if (current < reviewState.pages.length) {
-          const nextEntity = reviewState.entities.find(e => e.page_number == current + 1);
-          if (nextEntity) {
-            handleSelectReviewEntity(nextEntity, true);
-          } else {
-            // No entity, just scroll page
-            const el = document.getElementById(`page-container-${current + 1}`);
-            if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-          }
+        const currentPage = parseInt(reviewState.selectedEntity.page_number) || 1;
+        if (currentPage >= reviewState.pages.length) return;
+        const targetPage = currentPage + 1;
+        const entity = reviewState.entities.find((item) => Number(item.page_number) === targetPage);
+        if (entity) {
+          handleSelectReviewEntity(entity, true);
+        } else {
+          document.getElementById(`page-container-${targetPage}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
         }
       });
     }
@@ -1345,6 +1891,104 @@
     });
   }
 
+  function getFilteredReviewEntities() {
+    return reviewState.entities.filter((entity) => {
+      if (normalizeCategory(entity.privacy_category) !== reviewState.activeTab) return false;
+
+      if (reviewState.searchQuery) {
+        const query = reviewState.searchQuery.toLowerCase();
+        const matchesSearch = [entity.entity_value, entity.entity_type, entity.detector]
+          .some((value) => String(value || "").toLowerCase().includes(query));
+        if (!matchesSearch) return false;
+      }
+
+      if (
+        reviewState.filters.detectors.length
+        && !reviewState.filters.detectors.includes(String(entity.detector || "").toLowerCase())
+      ) return false;
+
+      const confidence = (
+        entity.final_confidence == null
+          ? entity.confidence_score
+          : entity.final_confidence
+      ) * 100;
+      if (reviewState.filters.confidence === "90-100" && confidence < 90) return false;
+      if (reviewState.filters.confidence === "80-90" && (confidence < 80 || confidence >= 90)) return false;
+      if (reviewState.filters.confidence === "below-80" && confidence >= 80) return false;
+      if (reviewState.filters.reviewRequired === "yes" && !entity.is_review_required) return false;
+      if (reviewState.filters.reviewRequired === "no" && entity.is_review_required) return false;
+      return true;
+    });
+  }
+
+  function setReviewActiveTab(category) {
+    reviewState.activeTab = category;
+    reviewState.selectedEntity = getFilteredReviewEntities()[0] || null;
+
+    document.getElementById("piiTabBtn")?.classList.toggle("active", category === "PII");
+    document.getElementById("phiTabBtn")?.classList.toggle("active", category === "PHI");
+    renderReviewWorkspaceText();
+    renderReviewWorkspaceCards();
+    renderReviewWorkspaceDetails();
+  }
+
+  function navigateReviewEntity(direction, fromEntity) {
+    const entities = getFilteredReviewEntities();
+    if (!entities.length) return;
+    const current = fromEntity || reviewState.selectedEntity;
+    const currentIndex = current
+      ? entities.findIndex((entity) => entity.id === current.id)
+      : -1;
+    const nextIndex = currentIndex < 0
+      ? (direction < 0 ? entities.length - 1 : 0)
+      : currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= entities.length) return;
+    handleSelectReviewEntity(entities[nextIndex], true);
+  }
+
+  function updatePageNavigationControls() {
+    const currentPage = reviewState.selectedEntity
+      ? (parseInt(reviewState.selectedEntity.page_number) || 1)
+      : 1;
+    const previousButton = document.getElementById("prevPageBtn");
+    const nextButton = document.getElementById("nextPageBtn");
+    if (previousButton) previousButton.disabled = !reviewState.selectedEntity || currentPage <= 1;
+    if (nextButton) nextButton.disabled = !reviewState.selectedEntity || currentPage >= reviewState.pages.length;
+  }
+
+  function renderReviewPageText(page, pageIndex) {
+    const offset = reviewState.pageOffsets[pageIndex];
+    const pageEntities = reviewState.entities
+      .filter((entity) => String(entity.page_number) === String(page.page_number))
+      .map((entity) => ({
+        entity,
+        start: Number(entity.start_char) - offset.start,
+        end: Number(entity.end_char) - offset.start,
+      }))
+      .filter((item) => (
+        Number.isFinite(item.start)
+        && Number.isFinite(item.end)
+        && item.start >= 0
+        && item.end > item.start
+        && item.end <= page.text.length
+      ))
+      .sort((left, right) => left.start - right.start || left.end - right.end);
+
+    if (!pageEntities.length) return escapeHtml(page.text);
+
+    let cursor = 0;
+    let html = "";
+    pageEntities.forEach(({ entity, start, end }) => {
+      if (start < cursor) return;
+      html += escapeHtml(page.text.slice(cursor, start));
+      const isActive = reviewState.selectedEntity && reviewState.selectedEntity.id === entity.id;
+      const categoryClass = normalizeCategory(entity.privacy_category).toLowerCase();
+      html += `<span ${isActive ? `id="active-highlight-span"` : ""} class="entity-highlight ${categoryClass} ${isActive ? "is-active" : ""}" data-review-entity-id="${escapeHtml(entity.id)}">${escapeHtml(page.text.slice(start, end))}</span>`;
+      cursor = end;
+    });
+    return html + escapeHtml(page.text.slice(cursor));
+  }
+
   function renderReviewWorkspaceText() {
     const container = document.getElementById("pagesScrollContainer");
     if (!container) return;
@@ -1358,19 +2002,7 @@
       const pageNum = page.page_number;
       const isSelectedPage = reviewState.selectedEntity && reviewState.selectedEntity.page_number == pageNum;
       
-      let pageHtmlText = escapeHtml(page.text);
-      if (isSelectedPage) {
-        const offsetInfo = reviewState.pageOffsets[index];
-        const localStart = reviewState.selectedEntity.start_char - offsetInfo.start;
-        const localEnd = reviewState.selectedEntity.end_char - offsetInfo.start;
-
-        if (localStart >= 0 && localEnd <= page.text.length) {
-          const before = page.text.slice(0, localStart);
-          const matchVal = page.text.slice(localStart, localEnd);
-          const after = page.text.slice(localEnd);
-          pageHtmlText = `${escapeHtml(before)}<span id="active-highlight-span" class="entity-highlight selected-border">${escapeHtml(matchVal)}</span>${escapeHtml(after)}`;
-        }
-      }
+      const pageHtmlText = renderReviewPageText(page, index);
 
       return `
         <div id="page-container-${pageNum}" class="page-box ${isSelectedPage ? "active-page" : ""}">
@@ -1386,6 +2018,7 @@
       currentNumEl.textContent = reviewState.selectedEntity ? reviewState.selectedEntity.page_number : 1;
       totalNumEl.textContent = reviewState.pages.length;
     }
+    updatePageNavigationControls();
   }
 
   function renderReviewWorkspaceCards() {
@@ -1409,33 +2042,7 @@
       });
     });
 
-    const filtered = reviewState.entities.filter(entity => {
-      if (normalizeCategory(entity.privacy_category) !== reviewState.activeTab) return false;
-
-      if (reviewState.searchQuery) {
-        const q = reviewState.searchQuery.toLowerCase();
-        const valueMatch = (entity.entity_value || "").toLowerCase().includes(q);
-        const typeMatch = (entity.entity_type || "").toLowerCase().includes(q);
-        const detectorMatch = (entity.detector || "").toLowerCase().includes(q);
-        if (!valueMatch && !typeMatch && !detectorMatch) return false;
-      }
-
-      if (reviewState.filters.detectors.length > 0) {
-        if (!reviewState.filters.detectors.includes((entity.detector || "").toLowerCase())) {
-          return false;
-        }
-      }
-
-      const score = (entity.final_confidence == null ? entity.confidence_score : entity.final_confidence) * 100;
-      if (reviewState.filters.confidence === "90-100" && score < 90) return false;
-      if (reviewState.filters.confidence === "80-90" && (score < 80 || score >= 90)) return false;
-      if (reviewState.filters.confidence === "below-80" && score >= 80) return false;
-
-      if (reviewState.filters.reviewRequired === "yes" && !entity.is_review_required) return false;
-      if (reviewState.filters.reviewRequired === "no" && entity.is_review_required) return false;
-
-      return true;
-    });
+    const filtered = getFilteredReviewEntities();
 
     const piiCount = reviewState.entities.filter(e => normalizeCategory(e.privacy_category) === "PII").length;
     const phiCount = reviewState.entities.filter(e => normalizeCategory(e.privacy_category) === "PHI").length;
@@ -1443,40 +2050,54 @@
     document.getElementById("phiTabCount").textContent = phiCount;
 
     if (!filtered.length) {
+      reviewState.selectedEntity = null;
       listContainer.innerHTML = `<div class="empty-state">No entities match criteria.</div>`;
+      renderReviewWorkspaceText();
+      renderReviewWorkspaceDetails();
       return;
     }
 
-    listContainer.innerHTML = filtered.map(entity => {
-      const activeClass = reviewState.selectedEntity && reviewState.selectedEntity.id === entity.id ? "active" : "";
-      const catClass = normalizeCategory(entity.privacy_category).toLowerCase();
-      const confidence = confidenceLabel(entity.final_confidence == null ? entity.confidence_score : entity.final_confidence);
-      
-      const rStatus = reviewState.reviewMap.has(entity.id) ? reviewState.reviewMap.get(entity.id).review_status : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
-      const displayVal = reviewState.revealValues ? entity.entity_value : maskValue(entity.entity_value);
-      const occurrence = occurrenceById.get(entity.id) || { index: 1, total: 1 };
-      const occurrenceLabel = occurrence.total > 1
-        ? `Occurrence ${occurrence.index} of ${occurrence.total}`
-        : "Single occurrence";
+    let selectedIndex = reviewState.selectedEntity
+      ? filtered.findIndex((entity) => entity.id === reviewState.selectedEntity.id)
+      : -1;
+    if (selectedIndex < 0) {
+      selectedIndex = 0;
+      reviewState.selectedEntity = filtered[0];
+      renderReviewWorkspaceText();
+      renderReviewWorkspaceDetails();
+    }
 
-      return `
-        <div class="entity-card ${activeClass}" data-entity-id="${entity.id}">
-          <div class="card-header-row">
-            <span class="card-label">${escapeHtml(entity.entity_type)}</span>
-            <span class="card-badge ${catClass}">${escapeHtml(entity.privacy_category)}</span>
-          </div>
-          <div class="card-details">
-            <div><strong>Value:</strong> ${escapeHtml(displayVal)}</div>
-            <div><strong>Detector:</strong> ${escapeHtml(entity.detector)}</div>
-            <div><strong>Confidence:</strong> ${escapeHtml(confidence)} &middot; <span class="status-pill ${statusTone(rStatus)}">${rStatus}</span></div>
-            <div><strong>Position:</strong> ${escapeHtml(occurrenceLabel)} &middot; Page ${escapeHtml(entity.page_number)} &middot; chars ${escapeHtml(entity.start_char)}-${escapeHtml(entity.end_char)}</div>
-          </div>
-          <div class="card-actions">
-            <button class="button secondary compact go-to-btn" data-entity-id="${entity.id}" type="button">Go To</button>
-          </div>
+    const entity = filtered[selectedIndex];
+    const catClass = normalizeCategory(entity.privacy_category).toLowerCase();
+    const confidence = confidenceLabel(entity.final_confidence == null ? entity.confidence_score : entity.final_confidence);
+    const rStatus = reviewState.reviewMap.has(entity.id)
+      ? reviewState.reviewMap.get(entity.id).review_status
+      : (entity.is_review_required ? "PENDING" : "AUTO APPROVED");
+    const displayVal = reviewState.revealValues ? entity.entity_value : maskValue(entity.entity_value);
+    const occurrence = occurrenceById.get(entity.id) || { index: 1, total: 1 };
+    const occurrenceLabel = occurrence.total > 1
+      ? `Occurrence ${occurrence.index} of ${occurrence.total}`
+      : "Single occurrence";
+
+    listContainer.innerHTML = `
+      <div class="entity-card active" data-entity-id="${entity.id}">
+        <div class="card-header-row">
+          <span class="card-label">${escapeHtml(entity.entity_type)}</span>
+          <span class="card-badge ${catClass}">${escapeHtml(entity.privacy_category)}</span>
         </div>
-      `;
-    }).join("");
+        <div class="card-details">
+          <div><strong>Value:</strong> ${escapeHtml(displayVal)}</div>
+          <div><strong>Detector:</strong> ${escapeHtml(entity.detector)}</div>
+          <div><strong>Confidence:</strong> ${escapeHtml(confidence)} &middot; <span class="status-pill ${statusTone(rStatus)}">${escapeHtml(rStatus)}</span></div>
+          <div><strong>Position:</strong> ${escapeHtml(occurrenceLabel)} &middot; Page ${escapeHtml(entity.page_number)} &middot; chars ${escapeHtml(entity.start_char)}-${escapeHtml(entity.end_char)}</div>
+        </div>
+        <div class="card-actions entity-navigation-actions">
+          <button class="button secondary compact previous-entity-btn" data-entity-id="${entity.id}" type="button" ${selectedIndex === 0 ? "disabled" : ""}>Previous</button>
+          <strong class="entity-position-indicator">${selectedIndex + 1} of ${filtered.length}</strong>
+          <button class="button secondary compact next-entity-btn" data-entity-id="${entity.id}" type="button" ${selectedIndex === filtered.length - 1 ? "disabled" : ""}>Next</button>
+        </div>
+      </div>
+    `;
   }
 
   function renderReviewWorkspaceDetails() {
@@ -1551,6 +2172,9 @@
 
   function handleSelectReviewEntity(entity, shouldScroll) {
     reviewState.selectedEntity = entity;
+    reviewState.activeTab = normalizeCategory(entity.privacy_category);
+    document.getElementById("piiTabBtn")?.classList.toggle("active", reviewState.activeTab === "PII");
+    document.getElementById("phiTabBtn")?.classList.toggle("active", reviewState.activeTab === "PHI");
     
     renderReviewWorkspaceText();
     renderReviewWorkspaceCards();
@@ -1566,6 +2190,11 @@
         const highlightEl = document.getElementById("active-highlight-span");
         if (highlightEl) {
           highlightEl.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+
+        const activeCard = document.querySelector(".entity-card.active");
+        if (activeCard) {
+          activeCard.scrollIntoView({ behavior: "smooth", block: "nearest" });
         }
       }, 100);
     }
@@ -1692,9 +2321,11 @@
     renderText(null);
     renderMetrics([], [], [], []);
     renderArtifacts([], []);
+    renderLlmAudit({ accepted: [], rejected: [] });
     bindEvents();
     renderUserChip();
     applyRoleVisibility();
+    syncUserDocuments();
     checkHealth();
     validateSession();
     if (state.activeDocumentId) {
@@ -1711,6 +2342,7 @@
           setAuth(auth.token, user);
           renderUserChip();
           applyRoleVisibility();
+          syncUserDocuments();
         }
       }
     } catch (error) {

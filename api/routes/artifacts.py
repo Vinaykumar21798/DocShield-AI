@@ -27,6 +27,16 @@ def resolve_artifact_path(
             detail="Artifact path is outside the allowed storage directory.",
         )
 
+    relative_parts = {
+        part.lower()
+        for part in resolved_path.relative_to(root_path).parts
+    }
+    if relative_parts.intersection({"original", "extracted"}):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Requested path is not a generated artifact.",
+        )
+
     if not resolved_path.exists() or not resolved_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

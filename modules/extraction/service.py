@@ -138,6 +138,11 @@ class ExtractionService:
         return ExtractedTextResponse(
             document_id=document.id,
             filename=document.filename,
+            owner=(
+                document.owner.name
+                if document.owner is not None
+                else document.uploaded_by
+            ),
             file_type=document.file_type,
             document_type=document.document_type,
             document_status=document.status,

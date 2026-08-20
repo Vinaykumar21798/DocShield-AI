@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict
 class DocumentStatusResponse(BaseModel):
     document_id: str
     filename: str
+    owner: Optional[str] = None
     file_type: str
     document_type: Optional[str] = None
     document_status: str

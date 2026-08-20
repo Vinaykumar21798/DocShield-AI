@@ -12,6 +12,12 @@ from api.dependencies import (
 from api.routes.artifacts import resolve_artifact_path
 from api.schemas.report import ReportDetailResponse, ReportResponse
 from database.models import Document, Report, User
+from database.repositories.report_repository import (
+    empty_llm_candidate_audit,
+    extract_llm_candidate_audit,
+    load_llm_candidate_audit,
+    normalize_llm_candidate_audit,
+)
 from modules.upload.storage import StorageService
 
 router = APIRouter(tags=["Reports"])
@@ -21,6 +27,11 @@ def _serialize_report(
     report: Report,
     payload: Optional[Dict[str, Any]] = None,
 ) -> ReportDetailResponse:
+    audit = (
+        normalize_llm_candidate_audit(report.llm_candidate_audit)
+        if report.llm_candidate_audit is not None
+        else None
+    )
     return ReportDetailResponse(
         report_id=report.id,
         document_id=report.document_id,
@@ -36,6 +47,9 @@ def _serialize_report(
         total_phi=report.total_phi or 0,
         review_completion=bool(report.review_completion),
         redaction_completion=bool(report.redaction_completion),
+        llm_candidate_audit=audit,
+        llm_candidate_accepted_count=len(audit["accepted"]) if audit else 0,
+        llm_candidate_rejected_count=len(audit["rejected"]) if audit else 0,
         created_at=report.created_at,
         payload=payload,
     )
@@ -56,6 +70,28 @@ def _load_report_payload(report: Report) -> Optional[Dict[str, Any]]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Report artifact is not valid JSON: {exc}",
         ) from exc
+
+
+def _persist_report_audit(
+    db,
+    report: Report,
+    payload: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    if report.llm_candidate_audit is not None:
+        return normalize_llm_candidate_audit(report.llm_candidate_audit)
+
+    audit = (
+        extract_llm_candidate_audit(payload, report.document_id)
+        if payload is not None
+        else load_llm_candidate_audit(report)
+    )
+    if audit is None:
+        return None
+
+    report.llm_candidate_audit = audit
+    db.add(report)
+    db.commit()
+    return audit
 
 
 @router.get(
@@ -84,6 +120,8 @@ def list_document_reports(
         .order_by(Report.created_at.desc())
         .all()
     )
+    for report in reports:
+        _persist_report_audit(db, report)
     return [_serialize_report(report) for report in reports]
 
 
@@ -116,6 +154,11 @@ def get_report(
     require_document_access(db, current_user, document)
 
     payload = _load_report_payload(report) if include_payload else None
+    audit = _persist_report_audit(db, report, payload=payload)
+    if payload is not None:
+        payload["llm_candidate_audit"] = (
+            audit if audit is not None else empty_llm_candidate_audit()
+        )
     return _serialize_report(report, payload=payload)
 
 
@@ -154,4 +197,8 @@ def download_report_file(
         path=artifact_path,
         media_type="application/json",
         filename=artifact_path.name,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

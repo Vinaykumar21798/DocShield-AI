@@ -96,4 +96,8 @@ def download_redacted_file(
         path=artifact_path,
         media_type="text/plain",
         filename=artifact_path.name,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )

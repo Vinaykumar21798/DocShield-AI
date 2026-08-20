@@ -1,7 +1,9 @@
-from typing import List
+from datetime import datetime
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import func
 
 from api.dependencies import DatabaseSession, require_roles
 from api.schemas.auth import VALID_ROLES, UserResponse
@@ -22,6 +24,15 @@ class ActiveUpdateRequest(BaseModel):
     is_active: bool
 
 
+class RecentDocument(BaseModel):
+    document_id: str
+    filename: str
+    owner: str
+    status: str
+    entity_count: int
+    created_at: Optional[datetime] = None
+
+
 class UserStats(BaseModel):
     total_users: int
     total_documents: int
@@ -30,6 +41,10 @@ class UserStats(BaseModel):
     total_redactions: int
     pending_reviews: int
     users_by_role: dict
+    completion_rate: float
+    processing_overview: dict
+    privacy_summary: dict
+    recent_documents: list[RecentDocument]
 
 
 @router.get(
@@ -120,8 +135,10 @@ def get_stats(
     db: DatabaseSession = None,
     _: User = Depends(require_roles("ADMIN")),
 ) -> UserStats:
-    total_users = db.query(User).count()
-    total_documents = db.query(Document).count()
+    users = db.query(User).all()
+    documents = db.query(Document).all()
+    total_users = len(users)
+    total_documents = len(documents)
     total_reports = db.query(Report).count()
     total_entities = db.query(Entity).count()
     total_redactions = db.query(Redaction).count()
@@ -132,9 +149,85 @@ def get_stats(
     )
 
     users_by_role = {}
-    for user in db.query(User).all():
+    for user in users:
         role = user.role or "USER"
         users_by_role[role] = users_by_role.get(role, 0) + 1
+
+    pending_document_ids = {
+        document_id
+        for (document_id,) in (
+            db.query(Entity.document_id)
+            .join(Review, Review.entity_id == Entity.id)
+            .filter(Review.review_status == "PENDING")
+            .distinct()
+            .all()
+        )
+    }
+    processing_overview = {
+        "completed": 0,
+        "pending_review": 0,
+        "failed": 0,
+    }
+    for document in documents:
+        document_status = (document.status or "").strip().upper()
+        if document_status in {"FAILED", "ERROR"}:
+            processing_overview["failed"] += 1
+        elif (
+            document.id in pending_document_ids
+            or document_status not in {"COMPLETED", "DONE", "SUCCESS"}
+        ):
+            processing_overview["pending_review"] += 1
+        else:
+            processing_overview["completed"] += 1
+
+    completion_rate = (
+        round(
+            processing_overview["completed"] / total_documents * 100,
+            1,
+        )
+        if total_documents
+        else 0.0
+    )
+
+    privacy_summary = {"pii": 0, "phi": 0}
+    for privacy_category, count in (
+        db.query(Entity.privacy_category, func.count(Entity.id))
+        .group_by(Entity.privacy_category)
+        .all()
+    ):
+        normalized = (privacy_category or "").strip().upper()
+        if normalized == "PII":
+            privacy_summary["pii"] = count
+        elif normalized == "PHI":
+            privacy_summary["phi"] = count
+
+    recent_documents = []
+    for document in (
+        db.query(Document)
+        .order_by(Document.created_at.desc())
+        .limit(10)
+        .all()
+    ):
+        owner = document.owner
+        owner_label = (
+            owner.name
+            if owner is not None
+            else (document.uploaded_by or "Unknown")
+        )
+        recent_documents.append(
+            RecentDocument(
+                document_id=document.id,
+                filename=document.filename,
+                owner=owner_label,
+                status=document.status,
+                entity_count=(
+                    db.query(Entity)
+                    .filter(Entity.document_id == document.id)
+                    .count()
+                ),
+                created_at=document.created_at,
+            )
+        )
 
     return UserStats(
         total_users=total_users,
@@ -144,4 +237,8 @@ def get_stats(
         total_redactions=total_redactions,
         pending_reviews=pending_reviews,
         users_by_role=users_by_role,
+        completion_rate=completion_rate,
+        processing_overview=processing_overview,
+        privacy_summary=privacy_summary,
+        recent_documents=recent_documents,
     )

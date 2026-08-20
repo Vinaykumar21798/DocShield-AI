@@ -256,6 +256,20 @@ class FailingTextExtractor:
 
 
 class FakeDetectionService:
+    last_llm_candidate_audit = {
+        "accepted": [
+            {
+                "entity_value": "Synthetic Candidate",
+                "entity_type": "PERSON",
+                "decision": "CONFIRM",
+                "confidence": 0.91,
+                "detector": "Qwen3:4b",
+                "reasoning": "Synthetic context supports the candidate.",
+            }
+        ],
+        "rejected": [],
+    }
+
     def detect(self, text, document_type=None):
         self.document_type = document_type
         email = "jane.patient@example.com"
@@ -386,6 +400,14 @@ def test_workflow_resumes_from_stored_ocr_checkpoint(
     assert saved_job.workflow_stage == "COMPLETE_WORKFLOW"
     assert saved_job.last_completed_stage == "COMPLETE_WORKFLOW"
     assert ocr_result_count == 1
+    report = (
+        db_session.query(Report)
+        .filter(Report.document_id == document.id)
+        .one()
+    )
+    assert report.llm_candidate_audit == (
+        FakeDetectionService.last_llm_candidate_audit
+    )
 
     redacted_text_file = tmp_path / state.redacted_file_path
     assert redacted_text_file.exists()
