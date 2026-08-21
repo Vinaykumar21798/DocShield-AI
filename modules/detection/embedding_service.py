@@ -56,6 +56,17 @@ class EmbeddingService:
         "PHONE_NUMBER": "telephone contact phone cell mobile number telephone calling line",
         "EMAIL": "electronic mail email address user inbox contact mailbox",
         "URL": "website link webpage web address url internet domain online portal",
+        "BANK_ACCOUNT": "bank account number financial account checking savings account identifier iban",
+        "BANK_ACCOUNT_NUMBER": "bank account number financial account checking savings account identifier iban",
+        "TAX_ID": "tax identification number taxpayer id itin pan ein government tax number",
+        "PAN": "permanent account number income tax pan card identifier financial tax id",
+        "AADHAAR": "aadhaar national identity number 12-digit uidai government citizen id",
+        "PASSPORT": "passport travel document number international government identity document",
+        "DRIVING_LICENSE": "driving license driver permit card number transport motor vehicle id",
+        "CREDIT_CARD": "credit card debit card payment card number visa mastercard cardholder",
+        "CARDHOLDER_NAME": "credit card debit card cardholder account holder customer name on card",
+        "TRANSACTION_ID": "transaction reference id payment confirmation receipt voucher sequence",
+        "COMPANY": "business enterprise corporation company bank institution vendor employer organization",
     }
 
     def __init__(self):

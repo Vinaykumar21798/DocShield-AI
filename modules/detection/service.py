@@ -287,12 +287,20 @@ class DetectionService:
             self._presidio = PresidioDetector()
         return self._presidio
 
+    @presidio.setter
+    def presidio(self, value):
+        self._presidio = value
+
     @property
     def gliner(self):
         if self._gliner is None:
             logger.info("Loading GLiNER...")
             self._gliner = GLiNERDetector()
         return self._gliner
+
+    @gliner.setter
+    def gliner(self, value):
+        self._gliner = value
 
     @property
     def medspacy(self):
@@ -301,12 +309,31 @@ class DetectionService:
             self._medspacy = MedSpaCyDetector()
         return self._medspacy
 
+    @medspacy.setter
+    def medspacy(self, value):
+        self._medspacy = value
+
     @property
     def qwen3b(self):
         if self._qwen3b is None:
-            logger.info("Loading Qwen3:4b...")
+            logger.info("Loading gemma4:e4b...")
             self._qwen3b = Qwen3BDetector()
         return self._qwen3b
+
+    @qwen3b.setter
+    def qwen3b(self, value):
+        self._qwen3b = value
+
+    @property
+    def gemma(self):
+        if self._qwen3b is None:
+            logger.info("Loading gemma4:e4b...")
+            self._qwen3b = Qwen3BDetector()
+        return self._qwen3b
+
+    @gemma.setter
+    def gemma(self, value):
+        self._qwen3b = value
 
     def _detector_getters(self) -> dict[str, Callable[[], BaseDetector]]:
         return {
@@ -315,7 +342,402 @@ class DetectionService:
             "gliner": lambda: self.gliner,
             "medspacy": lambda: self.medspacy,
             "qwen3b": lambda: self.qwen3b,
+            "gemma": lambda: self.gemma,
         }
+
+    def _run_detector_on_chunks(
+        self,
+        detector: BaseDetector,
+        chunks: list[DocumentChunk],
+        state: PipelineState,
+        page_number: int,
+        allow_claimed_spans: bool = False,
+    ) -> list[DetectionResult]:
+        """
+        Executes one detector across all relevant semantic chunks.
+        Remaps chunk-local detection offsets to document-global coordinates
+        and aggregates candidates into PipelineState without mutating or destroying text.
+        """
+        if not chunks:
+            state.add_entities([], detector.name)
+            return []
+
+        all_chunk_entities: list[DetectionResult] = []
+        executed_chunks = 0
+        skipped_chunks = 0
+        failed_chunks = 0
+        total_duration = 0.0
+
+        candidate_summary = state.remaining_candidate_summary(
+            min_chars=self.config.min_candidate_chars,
+        )
+
+        for chunk in chunks:
+            chunk_text = chunk.text
+            if not chunk_text or not chunk_text.strip():
+                skipped_chunks += 1
+                logger.info(
+                    "DetectorChunk: chunk_id=%d detector=%s status=SKIPPED reason='Empty or whitespace-only chunk text'",
+                    chunk.chunk_id,
+                    detector.name,
+                )
+                continue
+
+            # Check if detector should run on this chunk
+            try:
+                should_run = detector.should_run(chunk_text, state)
+            except Exception as exc:
+                should_run = True
+                logger.warning(
+                    "DetectorChunk: chunk_id=%d detector=%s should_run check failed (%s); defaulting to execute for safety",
+                    chunk.chunk_id,
+                    detector.name,
+                    exc,
+                )
+
+            if not should_run:
+                skipped_chunks += 1
+                logger.info(
+                    "DetectorChunk: chunk_id=%d detector=%s status=SKIPPED reason='No relevant entity patterns/context in chunk'",
+                    chunk.chunk_id,
+                    detector.name,
+                )
+                continue
+
+            self._attach_orchestration_context(
+                detector,
+                state,
+                chunk_text,
+                candidate_summary,
+                chunk.start_char,
+                None,
+            )
+
+            start_time = time.perf_counter()
+            try:
+                raw_chunk_entities = detector.detect(
+                    chunk_text,
+                    page_number,
+                ) or []
+                chunk_duration = time.perf_counter() - start_time
+                total_duration += chunk_duration
+                executed_chunks += 1
+
+                logger.info(
+                    "DetectorChunk: chunk_id=%d range=%d-%d detector=%s status=EXECUTED entities=%d latency=%.1fms",
+                    chunk.chunk_id,
+                    chunk.start_char,
+                    chunk.end_char,
+                    detector.name,
+                    len(raw_chunk_entities),
+                    chunk_duration * 1000.0,
+                )
+
+                # Remap local offsets to document global coordinates
+                for entity in raw_chunk_entities:
+                    local_start = entity.start_char
+                    local_end = entity.end_char
+                    global_start = chunk.start_char + local_start
+                    global_end = chunk.start_char + local_end
+
+                    entity.start_char = global_start
+                    entity.end_char = global_end
+                    entity.start = global_start
+                    entity.end = global_end
+                    entity.metadata["chunk_id"] = chunk.chunk_id
+                    entity.metadata["chunk_text"] = chunk.text
+                    entity.metadata["section_name"] = chunk.section_name
+                    entity.metadata["local_span"] = (local_start, local_end)
+                    entity.metadata["global_span"] = (global_start, global_end)
+
+                all_chunk_entities.extend(raw_chunk_entities)
+
+            except Exception as exc:
+                chunk_duration = time.perf_counter() - start_time
+                total_duration += chunk_duration
+                failed_chunks += 1
+                logger.error(
+                    "DetectorChunk: chunk_id=%d range=%d-%d detector=%s status=FAILED error=%s latency=%.1fms",
+                    chunk.chunk_id,
+                    chunk.start_char,
+                    chunk.end_char,
+                    detector.name,
+                    str(exc),
+                    chunk_duration * 1000.0,
+                    exc_info=True,
+                )
+
+        state.log_time(detector.name, total_duration)
+
+        # Aggregate candidates across all processed chunks
+        return self._aggregate_detector_candidates(
+            detector=detector,
+            raw_entities=all_chunk_entities,
+            state=state,
+            allow_claimed_spans=allow_claimed_spans,
+            executed_chunks=executed_chunks,
+            skipped_chunks=skipped_chunks,
+            failed_chunks=failed_chunks,
+        )
+
+    @staticmethod
+    def _is_authoritative_detection(
+        entity: DetectionResult,
+        detector_name: str,
+        high_conf_threshold: float = 0.80,
+    ) -> bool:
+        """
+        Determines whether a detection qualifies for authoritative LOCKED status.
+        Protects against early weak generic classifications prematurely locking entities.
+        """
+        if entity.confidence_score < high_conf_threshold:
+            return False
+
+        det_lower = detector_name.lower()
+        if "regex" in det_lower:
+            return True
+
+        if "medspacy" in det_lower:
+            return entity.confidence_score >= 0.80
+
+        if "gliner" in det_lower:
+            # GLiNER is authoritative on specialized types or strong confidence
+            return entity.confidence_score >= 0.85 or entity.entity_type in {
+                "PATIENT", "DOCTOR", "PHYSICIAN", "NURSE", "HEALTHCARE_STAFF",
+                "HOSPITAL", "CLINIC", "MEDICAL_FACILITY", "HEALTHCARE_ORGANIZATION",
+                "INSURANCE_PROVIDER", "SSN", "PASSPORT_NUMBER", "DRIVING_LICENSE",
+            }
+
+        if "presidio" in det_lower:
+            # Structured Presidio (NPI) or deterministically validated entities
+            if entity.entity_type == "NPI_NUMBER":
+                return True
+            if entity.metadata.get("deterministic_validation") == "passed" and entity.confidence_score >= 0.85:
+                return True
+            # Weak generic Presidio NER should remain PENDING for downstream specialization
+            return False
+
+        return entity.confidence_score >= high_conf_threshold
+
+    def _aggregate_detector_candidates(
+        self,
+        detector: BaseDetector,
+        raw_entities: list[DetectionResult],
+        state: PipelineState,
+        allow_claimed_spans: bool = False,
+        executed_chunks: int = 0,
+        skipped_chunks: int = 0,
+        failed_chunks: int = 0,
+    ) -> list[DetectionResult]:
+        """
+        Validates, filters, and aggregates candidate detections from all chunks
+        into PipelineState with span-level locking, overlap suppression, and detector continuation.
+        """
+        raw_entities = EntityValidator.validate_candidates(
+            raw_entities,
+            state.original_text,
+        )
+        raw_entities = self._filter_valid_entities(
+            raw_entities,
+            len(state.original_text),
+            detector.name,
+        )
+
+        high_conf_threshold = self.config.high_confidence_threshold
+        accepted_high: list[DetectionResult] = []
+        pending_low: list[DetectionResult] = []
+
+        for entity in raw_entities:
+            # 1. Check if entity matches or upgrades a previously seen entity
+            if DetectionService._matches_previous_entity(
+                entity,
+                state,
+                high_conf_threshold,
+            ):
+                if entity.metadata.get("duplicate_upgraded_previous"):
+                    state.prune_pending_candidates()
+                    state.log_candidate_routing(
+                        entity,
+                        "LOCKED" if entity.confidence_score >= high_conf_threshold else "PENDING_FOR_LLM",
+                        f"Upgraded previous entity with higher confidence ({entity.confidence_score:.2f}) from {detector.name}",
+                        detector.name,
+                    )
+                    logger.info(
+                        "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=UPGRADED reason='Upgraded previous candidate'",
+                        entity.entity_value,
+                        entity.entity_type,
+                        detector.name,
+                        entity.confidence_score,
+                    )
+                else:
+                    state.log_candidate_routing(
+                        entity,
+                        "DUPLICATE_SUPPRESSED",
+                        "Overlaps previously resolved entity or duplicate candidate",
+                        detector.name,
+                    )
+                    logger.info(
+                        "DuplicateSuppressed: value=%r detector=%r reason='Duplicates previously resolved entity'",
+                        entity.entity_value,
+                        detector.name,
+                    )
+                continue
+
+            # 2. Pre-detector overlap check: check if span overlaps an already LOCKED authoritative span
+            locked_match = state.get_overlapping_locked_span(entity.start_char, entity.end_char, getattr(entity, "page_number", 1))
+            if not allow_claimed_spans and locked_match is not None:
+                # Check for specialized replacement of a generic locked entity
+                prev_type = locked_match.get("entity_type", "").upper()
+                curr_type = entity.entity_type.upper()
+                is_specialization = curr_type in DetectionService.ENTITY_SPECIALIZATIONS.get(prev_type, set())
+
+                if is_specialization and entity.confidence_score >= 0.70:
+                    locked_match["entity_type"] = entity.entity_type
+                    if detector.name not in locked_match.get("duplicate_sources", []):
+                        locked_match.setdefault("duplicate_sources", []).append(detector.name)
+                    for prev in state.resolved_entities:
+                        if prev.start_char == locked_match["start_char"] and prev.end_char == locked_match["end_char"]:
+                            prev.entity_type = entity.entity_type
+                            prev.metadata["specialized_by"] = detector.name
+                    logger.info(
+                        "CandidateGate: value=%r specialized to %r from %s",
+                        entity.entity_value,
+                        entity.entity_type,
+                        detector.name,
+                    )
+                    continue
+
+                state.log_candidate_routing(
+                    entity,
+                    "OVERLAP_SUPPRESSED",
+                    f"Overlaps locked {locked_match['entity_type']} from {locked_match['detector']}",
+                    detector.name,
+                )
+                if detector.name not in locked_match.get("duplicate_sources", []):
+                    locked_match.setdefault("duplicate_sources", []).append(detector.name)
+                logger.info(
+                    "OverlapSuppressed: value=%r detector=%r span=[%d,%d] reason='Overlaps locked %s from %s'",
+                    entity.entity_value,
+                    detector.name,
+                    entity.start_char,
+                    entity.end_char,
+                    locked_match["entity_type"],
+                    locked_match["detector"],
+                )
+                continue
+
+            # 3. Determine if candidate qualifies for LOCKED vs PENDING
+            is_authoritative = self._is_authoritative_detection(entity, detector.name, high_conf_threshold)
+
+            if is_authoritative:
+                accepted_high.append(entity)
+                state.lock_span(
+                    entity,
+                    reason=f"Authoritative high-confidence {detector.name} detection",
+                )
+                state.log_candidate_routing(
+                    entity,
+                    "LOCKED",
+                    f"Authoritative high-confidence {detector.name} detection",
+                    detector.name,
+                )
+                logger.info(
+                    "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=LOCKED reason='Authoritative high-confidence detection'",
+                    entity.entity_value,
+                    entity.entity_type,
+                    detector.name,
+                    entity.confidence_score,
+                )
+            else:
+                gate_eval = self.quality_gate.evaluate(
+                    candidate=entity,
+                    document_text=state.original_text,
+                    document_type=getattr(self, "_current_document_type", None),
+                    chunk_text=entity.metadata.get("chunk_text"),
+                )
+
+                state.log_candidate_routing(
+                    candidate=entity,
+                    decision=gate_eval.decision,
+                    reason=gate_eval.reason,
+                    detector_name=detector.name,
+                    semantic_score=gate_eval.semantic_score,
+                    structural_score=gate_eval.structural_score,
+                )
+
+                logger.info(
+                    "QualityGateCandidate: candidate_id=%s doc_id=%s chunk_id=%s page=%d value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f doc_type=%r quality_decision=%s action=%s reason=%r llm_required=%s",
+                    getattr(entity, "id", hex(id(entity))[-6:]),
+                    getattr(state, "document_id", "doc"),
+                    entity.metadata.get("chunk_id", 0),
+                    getattr(entity, "page_number", 1),
+                    entity.entity_value,
+                    entity.entity_type,
+                    detector.name,
+                    entity.confidence_score,
+                    gate_eval.semantic_score,
+                    getattr(self, "_current_document_type", "generic"),
+                    gate_eval.quality_decision,
+                    gate_eval.action,
+                    gate_eval.reason,
+                    gate_eval.llm_required,
+                )
+
+                if gate_eval.decision == "PRE_LLM_REJECT":
+                    logger.info(
+                        "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PRE_LLM_REJECT reason=%r",
+                        entity.entity_value,
+                        entity.entity_type,
+                        detector.name,
+                        entity.confidence_score,
+                        gate_eval.semantic_score,
+                        gate_eval.reason,
+                    )
+                else:
+                    pending_low.append(entity)
+                    logger.info(
+                        "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PENDING_FOR_LLM reason=%r",
+                        entity.entity_value,
+                        entity.entity_type,
+                        detector.name,
+                        entity.confidence_score,
+                        gate_eval.semantic_score,
+                        gate_eval.reason,
+                    )
+
+        state.add_entities(
+            accepted_high,
+            detector.name,
+            mask_confidence_threshold=high_conf_threshold,
+        )
+
+        if pending_low:
+            state.add_pending_candidates(pending_low)
+            bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
+            if bypass_llm:
+                state.add_entities(
+                    pending_low,
+                    detector_name=detector.name,
+                    mask_confidence_threshold=high_conf_threshold,
+                )
+            logger.info(
+                "%s queued %d low-confidence candidate(s) for downstream detector continuation / validation",
+                detector.name,
+                len(pending_low),
+            )
+
+        logger.info(
+            "Detector completed: detector=%s chunks_executed=%d chunks_skipped=%d chunks_failed=%d entities_found=%d total_entities=%d remaining_candidates=%d queued_for_validation=%d",
+            detector.name,
+            executed_chunks,
+            skipped_chunks,
+            failed_chunks,
+            len(accepted_high),
+            len(state.resolved_entities),
+            len(pending_low),
+            len(pending_low),
+        )
+        return accepted_high
 
     def _run_detector(
         self,
@@ -328,8 +750,7 @@ class DetectionService:
         known_entities: list[dict] | None = None,
     ) -> list[DetectionResult]:
         """
-        Executes one detector against the current unmasked text and updates
-        PipelineState with newly accepted entities.
+        Executes one detector against a specific text slice/context.
         """
         run_text = custom_text if custom_text is not None else state.current_text
         if not run_text or not run_text.strip():
@@ -357,156 +778,15 @@ class DetectionService:
             duration = time.perf_counter() - start_time
             state.log_time(detector.name, duration)
             if context_offset:
-                raw_entities = self._offset_entities(raw_entities, context_offset)
+                self._offset_entities(raw_entities, context_offset)
 
-            raw_entities = EntityValidator.validate_candidates(
-                raw_entities,
-                state.original_text,
+            return self._aggregate_detector_candidates(
+                detector=detector,
+                raw_entities=raw_entities,
+                state=state,
+                allow_claimed_spans=allow_claimed_spans,
+                executed_chunks=1,
             )
-
-            raw_entities = self._filter_valid_entities(
-                raw_entities,
-                len(state.original_text),
-                detector.name,
-            )
-            high_conf_threshold = self.config.high_confidence_threshold
-            accepted_high: list[DetectionResult] = []
-            pending_low: list[DetectionResult] = []
-
-            for entity in raw_entities:
-                logger.info(
-                    "Candidate: value=%r entity_type=%r detector=%r confidence=%.3f span=%d-%d",
-                    entity.entity_value,
-                    entity.entity_type,
-                    detector.name,
-                    entity.confidence_score,
-                    entity.start_char,
-                    entity.end_char,
-                )
-
-                if DetectionService._matches_previous_entity(
-                    entity,
-                    state,
-                    high_conf_threshold,
-                ):
-                    state.log_candidate_routing(
-                        entity,
-                        "DUPLICATE_SUPPRESSED",
-                        "Overlaps previously resolved entity or duplicate candidate",
-                        detector.name,
-                    )
-                    logger.info(
-                        "DuplicateSuppressed: value=%r detector=%r reason='Duplicates previously resolved entity'",
-                        entity.entity_value,
-                        detector.name,
-                    )
-                    continue
-
-                if not allow_claimed_spans and not state.is_span_unmasked(entity.start_char, entity.end_char, min_confidence=0.80):
-                    state.log_candidate_routing(
-                        entity,
-                        "DUPLICATE_SUPPRESSED",
-                        "High-confidence authoritative span already locked",
-                        detector.name,
-                    )
-                    logger.info(
-                        "DuplicateSuppressed: value=%r detector=%r reason='High-confidence authoritative span already locked'",
-                        entity.entity_value,
-                        detector.name,
-                    )
-                    continue
-
-                if entity.confidence_score >= high_conf_threshold:
-                    accepted_high.append(entity)
-                    state.log_candidate_routing(
-                        entity,
-                        "LOCKED",
-                        f"Authoritative high-confidence {detector.name} detection",
-                        detector.name,
-                    )
-                    logger.info(
-                        "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=LOCKED reason='Authoritative high-confidence detection'",
-                        entity.entity_value,
-                        entity.entity_type,
-                        detector.name,
-                        entity.confidence_score,
-                    )
-                else:
-                    # Evaluate low-confidence candidate through the Quality Gate
-                    gate_eval = self.quality_gate.evaluate(
-                        entity,
-                        state.original_text,
-                        document_type=getattr(self, "_current_document_type", None),
-                    )
-
-                    state.log_candidate_routing(
-                        entity,
-                        gate_eval.decision,
-                        gate_eval.reason,
-                        detector.name,
-                        semantic_score=gate_eval.semantic_score,
-                        structural_score=gate_eval.structural_score,
-                    )
-
-                    if gate_eval.decision == "PRE_LLM_REJECT":
-                        logger.info(
-                            "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PRE_LLM_REJECT reason=%r",
-                            entity.entity_value,
-                            entity.entity_type,
-                            detector.name,
-                            entity.confidence_score,
-                            gate_eval.semantic_score,
-                            gate_eval.reason,
-                        )
-                    else:
-                        pending_low.append(entity)
-                        logger.info(
-                            "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PENDING_FOR_LLM reason=%r",
-                            entity.entity_value,
-                            entity.entity_type,
-                            detector.name,
-                            entity.confidence_score,
-                            gate_eval.semantic_score,
-                            gate_eval.reason,
-                        )
-
-            state.add_entities(
-                accepted_high,
-                detector.name,
-                mask_confidence_threshold=high_conf_threshold,
-            )
-
-            # Prune pending candidates that have now been covered by high-confidence entities
-            if accepted_high:
-                state.pending_candidates = [
-                    c for c in state.pending_candidates
-                    if state.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80)
-                ]
-
-            if pending_low:
-                state.add_pending_candidates(pending_low)
-                bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
-                if bypass_llm:
-                    state.add_entities(
-                        pending_low,
-                        detector_name=detector.name,
-                        mask_confidence_threshold=high_conf_threshold,
-                    )
-                logger.info(
-                    "%s queued %d low-confidence candidate(s) for Qwen contextual validation",
-                    detector.name,
-                    len(pending_low),
-                )
-
-            logger.info(
-                "Detector completed: detector=%s entities_found=%d total_entities=%d remaining_candidates=%d queued_for_validation=%d",
-                detector.name,
-                len(accepted_high),
-                len(state.resolved_entities),
-                len(pending_low),
-                len(pending_low),
-            )
-            return accepted_high
 
         except Exception:
             duration = time.perf_counter() - start_time
@@ -1030,10 +1310,29 @@ class DetectionService:
         route = self.router.route_for_domain(domain)
         detector_getters = self._detector_getters()
 
+        # Generate semantic chunks as the common detection input
+        semantic_chunks = self.chunker.chunk_document(state.original_text)
+        total_doc_len = len(state.original_text)
+        covered_indices = set()
+        for c in semantic_chunks:
+            covered_indices.update(range(c.start_char, c.end_char))
+        covered_chars = len(covered_indices)
+        uncovered_chars = max(0, total_doc_len - covered_chars)
+        coverage_pct = (covered_chars / total_doc_len * 100.0) if total_doc_len > 0 else 100.0
+
         logger.info("==================================================")
         logger.info("DETECTION PIPELINE EXECUTION (Page %d)", page_number)
         logger.info("Document Type: %s | Domain: %s", document_type or "Unspecified", domain)
         logger.info("Orchestration Route: %s", " -> ".join(route))
+        logger.info(
+            "DocumentCoverage: document_id=%s number_of_chunks=%d total_document_length=%d covered_characters=%d uncovered_characters=%d coverage_percentage=%.2f%%",
+            getattr(state, "document_id", "doc"),
+            len(semantic_chunks),
+            total_doc_len,
+            covered_chars,
+            uncovered_chars,
+            coverage_pct,
+        )
         logger.info("==================================================")
 
         while True:
@@ -1076,11 +1375,11 @@ class DetectionService:
                     config,
                 )
             else:
-                new_entities = self._run_detector(
-                    detector,
-                    state,
-                    page_number,
-                    custom_text=state.original_text,
+                new_entities = self._run_detector_on_chunks(
+                    detector=detector,
+                    chunks=semantic_chunks,
+                    state=state,
+                    page_number=page_number,
                     allow_claimed_spans=False,
                 )
             self._calibrate_confidence(state.resolved_entities, config)
@@ -1102,21 +1401,385 @@ class DetectionService:
                     remaining["count"],
                 )
 
-        # If any pending candidates remain after loop, validate them with Qwen
+        # PHASE 4: High-Recall Residual Entity Discovery with Gemma
+        # (Runs on uncovered / partially covered chunks to recover missed entities BEFORE validation)
         bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
+        if not bypass_llm:
+            logger.info(
+                ">>> [PHASE 4: RESIDUAL ENTITY DISCOVERY] Running coverage analysis and residual discovery with Gemma..."
+            )
+            self._execute_gemma_residual_discovery(
+                detector=self.gemma,
+                state=state,
+                semantic_chunks=semantic_chunks,
+                config=config,
+                document_type=document_type,
+                page_number=page_number,
+            )
+
+        # PHASE 5: Contextual LLM Validation for the Combined Candidate Pool
+        # (Validates all existing low-confidence detector candidates + new Phase 4 residual candidates)
         if state.pending_candidates and not bypass_llm:
             logger.info(
-                ">>> [LLM CANDIDATE VALIDATION] Sending %d low-confidence candidate(s) to Qwen3:4b for contextual validation...",
+                ">>> [PHASE 5: LLM CANDIDATE VALIDATION] Validating %d combined candidate(s) with Gemma (CONFIRM / RECLASSIFY / REJECT)...",
                 len(state.pending_candidates),
             )
             self._execute_qwen_candidate_validation(
-                detector=self.qwen3b,
+                detector=self.gemma,
                 state=state,
                 config=config,
                 document_type=document_type,
             )
 
         return domain, route
+
+    @classmethod
+    def evaluate_chunk_coverage(
+        cls,
+        chunk: DocumentChunk,
+        resolved_entities: list[DetectionResult],
+        original_text: str,
+        document_type: str | None = None,
+    ) -> dict[str, Any]:
+        """
+        Span-Level and Semantic Region Coverage Decision Function (Phase 4).
+
+        Evaluates whether a chunk is genuinely fully resolved vs containing meaningful
+        unresolved intervals that could harbor sensitive PII/PHI/financial data.
+        Coverage percentage is logged as telemetry, but safety decisions are based on
+        unresolved semantic interval analysis.
+        """
+        chunk_len = len(chunk.text)
+        if chunk_len == 0:
+            return {
+                "coverage_status": "FULLY_COVERED",
+                "coverage_percentage": 100.0,
+                "resolved_spans": 0,
+                "unresolved_regions": 0,
+                "meaningful_unresolved_regions": 0,
+                "high_risk_context": False,
+                "skip_residual_detection": True,
+                "reason": "Empty chunk",
+            }
+
+        # 1. Collect entity spans within this chunk
+        chunk_entities = [
+            e for e in resolved_entities
+            if max(chunk.start_char, e.start_char) < min(chunk.end_char, e.end_char)
+        ]
+
+        if not chunk_entities:
+            has_meaningful_text = bool(re.search(r"[a-zA-Z0-9]", chunk.text))
+            return {
+                "coverage_status": "UNCOVERED",
+                "coverage_percentage": 0.0,
+                "resolved_spans": 0,
+                "unresolved_regions": 1 if has_meaningful_text else 0,
+                "meaningful_unresolved_regions": 1 if has_meaningful_text else 0,
+                "high_risk_context": False,
+                "skip_residual_detection": not has_meaningful_text,
+                "reason": "No detector detections in chunk; full residual security review required.",
+            }
+
+        # 2. Convert and merge relative spans
+        rel_spans: list[tuple[int, int]] = []
+        for e in chunk_entities:
+            s = max(0, e.start_char - chunk.start_char)
+            end = min(chunk_len, e.end_char - chunk.start_char)
+            if s < end:
+                rel_spans.append((s, end))
+
+        rel_spans.sort(key=lambda x: x[0])
+        merged_spans: list[tuple[int, int]] = []
+        for s, end in rel_spans:
+            if not merged_spans:
+                merged_spans.append((s, end))
+            else:
+                last_s, last_end = merged_spans[-1]
+                if s <= last_end:
+                    merged_spans[-1] = (last_s, max(last_end, end))
+                else:
+                    merged_spans.append((s, end))
+
+        # 3. Calculate unresolved intervals
+        unresolved_intervals: list[tuple[int, int]] = []
+        curr = 0
+        for s, end in merged_spans:
+            if s > curr:
+                unresolved_intervals.append((curr, s))
+            curr = max(curr, end)
+        if curr < chunk_len:
+            unresolved_intervals.append((curr, chunk_len))
+
+        # 4. Analyze unresolved intervals for meaningful content and high-risk context
+        total_covered_chars = sum(end - s for s, end in merged_spans)
+        coverage_percentage = round((total_covered_chars / max(1, chunk_len)) * 100.0, 1)
+
+        meaningful_unresolved_count = 0
+        high_risk_context_flag = False
+
+        HIGH_RISK_CUES = {
+            "account", "acct", "holder", "patient", "mrn", "member", "policy", "dob",
+            "birth", "ssn", "tax", "pan", "aadhaar", "passport", "rx", "diagnosis",
+            "condition", "medication", "prescribed", "dr.", "doctor", "physician",
+            "hospital", "clinic", "address", "phone", "mobile", "card", "cvv",
+            "amount", "balance", "total", "claim", "employer", "tin", "cin", "npi",
+        }
+
+        for u_start, u_end in unresolved_intervals:
+            raw_text = chunk.text[u_start:u_end]
+            stripped = raw_text.strip()
+            if not stripped or len(stripped) < 2 or not any(c.isalnum() for c in stripped):
+                continue
+
+            is_pure_label_prompt = bool(re.match(r"^[A-Za-z\s\-_/]+[:|\-]\s*$", raw_text.strip()))
+            if is_pure_label_prompt:
+                continue
+
+            words = [w for w in re.split(r"[\s,:;|/\-]+", stripped) if w]
+            if not words:
+                continue
+
+            has_digits = any(any(c.isdigit() for c in w) for w in words)
+            has_cap_words = any(w[0].isupper() for w in words if w.isalpha())
+            has_significant_length = len(stripped) >= 4
+
+            if has_digits or has_cap_words or has_significant_length:
+                meaningful_unresolved_count += 1
+                surrounding_start = max(0, u_start - 30)
+                surrounding_context = chunk.text[surrounding_start:u_end].lower()
+                if any(cue in surrounding_context for cue in HIGH_RISK_CUES):
+                    high_risk_context_flag = True
+
+        # 5. Determine Coverage Status based on unresolved semantic regions
+        if meaningful_unresolved_count == 0:
+            coverage_status = "FULLY_COVERED"
+            skip_residual = True
+            reason = f"All meaningful semantic regions resolved by {len(merged_spans)} span(s); remaining text is whitespace/delimiters."
+        elif coverage_percentage < 35.0 or meaningful_unresolved_count >= 3:
+            coverage_status = "INSUFFICIENTLY_COVERED"
+            skip_residual = False
+            reason = f"Sparse coverage ({coverage_percentage}%) with {meaningful_unresolved_count} meaningful unresolved region(s)."
+        else:
+            coverage_status = "PARTIALLY_COVERED"
+            skip_residual = False
+            risk_note = " (High-risk context detected)" if high_risk_context_flag else ""
+            reason = f"Coverage {coverage_percentage}%, but {meaningful_unresolved_count} unresolved region(s) remain{risk_note}."
+
+        return {
+            "coverage_status": coverage_status,
+            "coverage_percentage": coverage_percentage,
+            "resolved_spans": len(merged_spans),
+            "unresolved_regions": len(unresolved_intervals),
+            "meaningful_unresolved_regions": meaningful_unresolved_count,
+            "high_risk_context": high_risk_context_flag,
+            "skip_residual_detection": skip_residual,
+            "reason": reason,
+        }
+
+    def _execute_gemma_residual_discovery(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        semantic_chunks: list[DocumentChunk],
+        config: DynamicDetectionConfig,
+        document_type: str | None = None,
+        page_number: int = 1,
+    ) -> list[DetectionResult]:
+        """
+        Phase 4: Exhaustive High-Recall Residual Entity Discovery.
+
+        Evaluates coverage across all semantic chunks and dispatches Gemma to inspect
+        uncovered / insufficiently covered regions for sensitive entities missed by upstream detectors.
+        Discovered candidates are merged into state.pending_candidates for Phase 5 validation.
+        """
+        if not semantic_chunks:
+            return []
+
+        start_residual = time.perf_counter()
+        total_chunks = len(semantic_chunks)
+        fully_covered = 0
+        partially_covered = 0
+        insufficiently_covered = 0
+        uncovered = 0
+        sent_to_gemma = 0
+        discovered_entities: list[DetectionResult] = []
+        duplicates_suppressed = 0
+        failures = 0
+
+        logger.info(
+            ">>> [PHASE 4: COVERAGE ANALYSIS] Analyzing %d semantic chunk(s) for residual discovery...",
+            total_chunks,
+        )
+
+        for chunk in semantic_chunks:
+            chunk_len = len(chunk.text.strip())
+            if chunk_len < 5:
+                continue
+
+            # Evaluate chunk coverage using span-level & semantic region analysis
+            coverage_eval = self.evaluate_chunk_coverage(
+                chunk=chunk,
+                resolved_entities=state.resolved_entities,
+                original_text=state.original_text,
+                document_type=document_type,
+            )
+
+            coverage_status = coverage_eval["coverage_status"]
+            if coverage_status == "FULLY_COVERED":
+                fully_covered += 1
+            elif coverage_status == "PARTIALLY_COVERED":
+                partially_covered += 1
+            elif coverage_status == "INSUFFICIENTLY_COVERED":
+                insufficiently_covered += 1
+            else:
+                uncovered += 1
+
+            logger.info(
+                "ResidualCoverage: doc_id=doc chunk_id=%d coverage=%.1f%% status=%s resolved_spans=%d unresolved_regions=%d meaningful_unresolved_regions=%d high_risk_context=%s action=%s reason=%r",
+                chunk.chunk_id,
+                coverage_eval["coverage_percentage"],
+                coverage_status,
+                coverage_eval["resolved_spans"],
+                coverage_eval["unresolved_regions"],
+                coverage_eval["meaningful_unresolved_regions"],
+                coverage_eval["high_risk_context"],
+                "SKIP" if coverage_eval["skip_residual_detection"] else "SEND_TO_GEMMA",
+                coverage_eval["reason"],
+            )
+
+            # Skip chunk only if all meaningful content is genuinely resolved
+            if coverage_eval["skip_residual_detection"]:
+                continue
+
+            sent_to_gemma += 1
+            start_chunk_call = time.perf_counter()
+
+            chunk_entities = [
+                e for e in state.resolved_entities
+                if max(chunk.start_char, e.start_char) < min(chunk.end_char, e.end_char)
+            ]
+
+            # Execute Gemma High-Recall Residual Discovery
+            chunk_results = []
+            if hasattr(detector, "detect_residual_chunk"):
+                chunk_results = detector.detect_residual_chunk(
+                    chunk_text=chunk.text,
+                    chunk_start=chunk.start_char,
+                    chunk_end=chunk.end_char,
+                    known_entities=chunk_entities,
+                    document_type=document_type,
+                    page_number=page_number,
+                )
+            elif hasattr(detector, "detect"):
+                chunk_results = detector.detect(
+                    text=chunk.text,
+                    page_number=page_number,
+                )
+
+            chunk_latency = (time.perf_counter() - start_chunk_call) * 1000.0
+
+            valid_for_chunk = []
+            for item in chunk_results:
+                # Ensure global coordinates match original text verbatim
+                if item.start_char < 0 or item.end_char > len(state.original_text):
+                    continue
+                actual_text = state.original_text[item.start_char:item.end_char]
+                if actual_text.strip() != item.entity_value.strip():
+                    continue
+
+                # Check if span is unmasked and does not overlap locked authoritative spans
+                if not state.is_span_unmasked(item.start_char, item.end_char):
+                    logger.info(
+                        "ResidualDuplicateSuppressed: entity=%r type=%r span=%d-%d reason='Overlaps locked/resolved span'",
+                        item.entity_value,
+                        item.entity_type,
+                        item.start_char,
+                        item.end_char,
+                    )
+                    duplicates_suppressed += 1
+                    continue
+
+                # Set provenance metadata
+                item.detector = getattr(detector, "name", "gemma")
+                item.metadata["llm_mode"] = "RESIDUAL_DETECTION"
+                item.metadata["original_detector"] = getattr(detector, "MODEL_NAME", "gemma4:e4b")
+                item.metadata["validator"] = getattr(detector, "MODEL_NAME", "gemma4:e4b")
+                item.metadata["residual_discovery"] = True
+                item.metadata["chunk_text"] = chunk.text
+                item.metadata["chunk_id"] = chunk.chunk_id
+
+                # Deduplicate against existing pending candidates
+                existing_match = next(
+                    (p for p in state.pending_candidates if (p.start_char, p.end_char) == (item.start_char, item.end_char)),
+                    None,
+                )
+                if existing_match:
+                    existing_match.confidence_score = max(existing_match.confidence_score, item.confidence_score)
+                    continue
+
+                valid_for_chunk.append(item)
+                discovered_entities.append(item)
+                state.pending_candidates.append(item)
+
+                logger.info(
+                    "GemmaResidualDetection: doc_id=doc chunk_id=%d value=%r type=%r span=%d-%d confidence=%.2f reason=%r detector=gemma4:e4b mode=RESIDUAL_DETECTION status=ADDED_TO_VALIDATION_POOL",
+                    chunk.chunk_id,
+                    item.entity_value,
+                    item.entity_type,
+                    item.start_char,
+                    item.end_char,
+                    item.confidence_score,
+                    item.metadata.get("residual_reason", ""),
+                )
+
+            logger.info(
+                "ResidualChunkReview: doc_id=doc chunk_id=%d span=%d-%d coverage=%s existing_entities=%d entities_found=%d latency=%.1fms status=%s",
+                chunk.chunk_id,
+                chunk.start_char,
+                chunk.end_char,
+                coverage_status,
+                len(chunk_entities),
+                len(valid_for_chunk),
+                chunk_latency,
+                "DISCOVERY_COMPLETED",
+            )
+
+        total_latency = (time.perf_counter() - start_residual) * 1000.0
+        avg_latency = total_latency / max(1, sent_to_gemma)
+
+        # Update pipeline metrics
+        state.pipeline_metrics["total_chunks"] = total_chunks
+        state.pipeline_metrics["fully_covered_chunks"] = fully_covered
+        state.pipeline_metrics["partially_covered_chunks"] = partially_covered
+        state.pipeline_metrics["insufficiently_covered_chunks"] = insufficiently_covered
+        state.pipeline_metrics["uncovered_chunks"] = uncovered
+        state.pipeline_metrics["chunks_sent_to_gemma"] = sent_to_gemma
+        state.pipeline_metrics["llm_residual_entities"] += len(discovered_entities)
+        state.pipeline_metrics["llm_residual_duplicates_suppressed"] = duplicates_suppressed
+        state.pipeline_metrics["llm_residual_failures"] = failures
+
+        logger.info(
+            "==================================================\n"
+            "Gemma Residual Discovery Summary\n"
+            "==================================================\n"
+            "Total chunks: %d\n"
+            "Fully covered: %d\n"
+            "Partially covered: %d\n"
+            "Insufficiently covered: %d\n"
+            "Uncovered: %d\n"
+            "Chunks sent to Gemma: %d\n"
+            "Residual candidates added: %d\n"
+            "Duplicates suppressed: %d\n"
+            "Failures: %d\n"
+            "Model: %s\n"
+            "Average latency: %.1fms\n"
+            "Total latency: %.1fms\n"
+            "==================================================",
+            total_chunks, fully_covered, partially_covered, insufficiently_covered, uncovered, sent_to_gemma, len(discovered_entities), duplicates_suppressed, failures, getattr(detector, "MODEL_NAME", "gemma4:e4b"), avg_latency, total_latency
+        )
+
+        return discovered_entities
 
     def _execute_qwen_candidate_validation(
         self,
@@ -1125,7 +1788,11 @@ class DetectionService:
         config: DynamicDetectionConfig,
         document_type: str | None = None,
     ) -> None:
-        """Executes LLM candidate validation and updates structured telemetry."""
+        """
+        Phase 5: Contextual Candidate Validation for the Combined Candidate Pool.
+
+        Validates all low-confidence detector candidates + newly discovered Phase 4 residual candidates.
+        """
         if not state.pending_candidates:
             return
 
@@ -1139,15 +1806,18 @@ class DetectionService:
 
         validated_spans = {(e.start_char, e.end_char) for e in validated}
         for cand in pending_cands:
+            cand_id = cand.metadata.get("candidate_id", "cand")
             if (cand.start_char, cand.end_char) in validated_spans:
                 match = next(e for e in validated if (e.start_char, e.end_char) == (cand.start_char, cand.end_char))
-                decision = match.metadata.get("qwen_validation", "CONFIRM")
-                reason = match.metadata.get("qwen_reason", "Validated by Qwen")
+                decision = match.metadata.get("gemma_validation") or match.metadata.get("qwen_validation", "CONFIRM")
+                reason = match.metadata.get("gemma_reason") or match.metadata.get("qwen_reason", "Validated by Gemma")
                 if decision == "RECLASSIFY":
                     state.pipeline_metrics["llm_reclassified"] += 1
                 else:
                     state.pipeline_metrics["llm_confirmed"] += 1
 
+                orig_det = cand.metadata.get("original_detector") or cand.detector
+                orig_mode = cand.metadata.get("llm_mode", "VALIDATION")
                 state.record_llm_candidate(
                     candidate_value=match.entity_value,
                     entity_type=match.entity_type,
@@ -1157,22 +1827,23 @@ class DetectionService:
                     reasoning=reason,
                     start_char=match.start_char,
                     end_char=match.end_char,
-                    detector=getattr(detector, "name", "Qwen3:4b"),
+                    detector=orig_det,
                     page_number=match.page_number,
                 )
 
                 logger.info(
-                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=%s final_type=%r reason=%r",
-                    cand.entity_value,
-                    cand.entity_type,
-                    cand.confidence_score,
+                    "GemmaValidation: doc_id=doc candidate_id=%s model=gemma4:e4b mode=VALIDATION decision=%s original_type=%r final_type=%r reason=%r confidence=%.2f",
+                    cand_id,
                     decision,
+                    cand.entity_type,
                     match.entity_type,
                     reason,
+                    match.confidence_score,
                 )
             else:
                 state.pipeline_metrics["llm_rejected"] += 1
-                rejection_reason = cand.metadata.get("qwen_reason", "Contextual noise or non-PII/PHI")
+                rejection_reason = cand.metadata.get("gemma_reason") or cand.metadata.get("qwen_reason", "Contextual noise or non-sensitive text")
+                orig_det = cand.metadata.get("original_detector") or cand.detector
                 state.record_llm_candidate(
                     candidate_value=cand.entity_value,
                     entity_type=cand.entity_type,
@@ -1181,20 +1852,19 @@ class DetectionService:
                     reasoning=rejection_reason,
                     start_char=cand.start_char,
                     end_char=cand.end_char,
-                    detector=getattr(detector, "name", "Qwen3:4b"),
+                    detector=orig_det,
                     page_number=cand.page_number,
                 )
                 logger.info(
-                    "QwenValidation: candidate=%r proposed_type=%r confidence=%.2f decision=REJECT reason=%r",
-                    cand.entity_value,
+                    "GemmaValidation: doc_id=doc candidate_id=%s model=gemma4:e4b mode=VALIDATION decision=REJECT original_type=%r final_type=null reason=%r",
+                    cand_id,
                     cand.entity_type,
-                    cand.confidence_score,
                     rejection_reason,
                 )
 
         state.add_entities(
             validated,
-            detector_name=getattr(detector, "name", "Qwen3:4b"),
+            detector_name=getattr(detector, "name", "gemma"),
             mask_confidence_threshold=config.high_confidence_threshold,
         )
         state.clear_pending_candidates()

@@ -34,18 +34,23 @@ CANDIDATE_LABEL_WORDS = {
     "passport",
     "patient",
     "phone",
+    "physician",
     "policy",
     "procedure",
     "provider",
     "ssn",
     "agreement",
+    "amount",
     "authorized",
+    "billed",
     "customer",
     "driving",
     "emergency",
     "gstin",
+    "id",
     "invoice",
     "license",
+    "number",
     "organization",
     "salary",
     "signatory",
@@ -138,6 +143,7 @@ class PipelineState:
 
     original_text: str
 
+    locked_spans: list[dict[str, Any]] = field(default_factory=list)
     resolved_entities: list[DetectionResult] = field(default_factory=list)
     pending_candidates: list[DetectionResult] = field(default_factory=list)
     executed_detectors: list[str] = field(default_factory=list)
@@ -174,6 +180,85 @@ class PipelineState:
                 for idx in range(max(0, entity.start_char), min(len(chars), entity.end_char)):
                     chars[idx] = " "
         return "".join(chars)
+
+    def lock_span(
+        self,
+        entity: DetectionResult,
+        reason: str = "Authoritative high-confidence detection",
+        document_id: str | None = None,
+    ) -> None:
+        """
+        Registers an authoritative high-confidence locked span in document-global coordinates.
+        Protects the exact character interval from redundant detection while keeping context untouched.
+        """
+        for locked in self.locked_spans:
+            if (
+                locked.get("page_number", 1) == getattr(entity, "page_number", 1)
+                and locked["start_char"] == entity.start_char
+                and locked["end_char"] == entity.end_char
+            ):
+                det = getattr(entity, "detector", "Unknown")
+                if det not in locked.get("duplicate_sources", []):
+                    locked.setdefault("duplicate_sources", []).append(det)
+                locked["confidence"] = max(locked["confidence"], entity.confidence_score)
+                return
+
+        span_entry = {
+            "document_id": document_id or getattr(self, "document_id", "doc"),
+            "page_number": getattr(entity, "page_number", 1),
+            "start_char": entity.start_char,
+            "end_char": entity.end_char,
+            "entity_value": entity.entity_value,
+            "entity_type": entity.entity_type,
+            "confidence": round(float(entity.confidence_score), 3),
+            "detector": getattr(entity, "detector", "Unknown"),
+            "status": "LOCKED",
+            "reason": reason,
+            "duplicate_sources": [getattr(entity, "detector", "Unknown")],
+        }
+        self.locked_spans.append(span_entry)
+
+    def is_span_locked(
+        self,
+        start_char: int,
+        end_char: int,
+        page_number: int = 1,
+    ) -> bool:
+        """
+        Checks whether the interval [start_char, end_char] overlaps any authoritative locked span.
+        Uses exact interval overlap logic: max(start_char, locked_start) < min(end_char, locked_end).
+        """
+        for locked in self.locked_spans:
+            if locked.get("page_number", 1) == page_number:
+                if max(start_char, locked["start_char"]) < min(end_char, locked["end_char"]):
+                    return True
+        return False
+
+    def get_overlapping_locked_span(
+        self,
+        start_char: int,
+        end_char: int,
+        page_number: int = 1,
+    ) -> dict[str, Any] | None:
+        """
+        Returns the locked span record that overlaps with [start_char, end_char], or None if no overlap.
+        """
+        for locked in self.locked_spans:
+            if locked.get("page_number", 1) == page_number:
+                if max(start_char, locked["start_char"]) < min(end_char, locked["end_char"]):
+                    return locked
+        return None
+
+    def prune_pending_candidates(self) -> None:
+        """
+        Removes any candidate from pending_candidates whose span has now been claimed
+        by an authoritative locked high-confidence entity.
+        """
+        self.pending_candidates = [
+            c for c in self.pending_candidates
+            if not self.is_span_locked(c.start_char, c.end_char, getattr(c, "page_number", 1))
+            and self.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80)
+        ]
 
     def record_llm_candidate(
         self,
@@ -240,7 +325,7 @@ class PipelineState:
         if decision == "LOCKED":
             self.pipeline_metrics["high_confidence_locked"] += 1
             det_stats["locked"] += 1
-        elif decision == "DUPLICATE_SUPPRESSED":
+        elif decision in {"DUPLICATE_SUPPRESSED", "OVERLAP_SUPPRESSED"}:
             self.pipeline_metrics["duplicate_suppressed"] += 1
             det_stats["duplicates_suppressed"] += 1
         elif decision == "PRE_LLM_REJECT":
@@ -258,7 +343,9 @@ class PipelineState:
     ) -> None:
         """
         Add newly detected entities to the pipeline.
+        Updates locked spans for high-confidence detections and prunes pending candidates.
         """
+        threshold = mask_confidence_threshold if mask_confidence_threshold is not None else 0.80
 
         if not entities:
             # Still record that the detector was executed and found nothing
@@ -278,6 +365,14 @@ class PipelineState:
             ]
             self.resolved_entities.append(new_entity)
 
+            if new_entity.confidence_score >= threshold:
+                self.lock_span(
+                    new_entity,
+                    reason=f"Authoritative high-confidence {detector_name} detection",
+                )
+
+        self.prune_pending_candidates()
+
         if detector_name not in self.executed_detectors:
             self.executed_detectors.append(detector_name)
         self.detection_history.append({"step": detector_name, "count": len(entities)})
@@ -285,7 +380,7 @@ class PipelineState:
     def add_pending_candidates(self, candidates: list[DetectionResult]) -> None:
         """Adds low-confidence candidate detections to the pending validation queue."""
         for c in candidates:
-            if self.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80):
+            if not self.is_span_locked(c.start_char, c.end_char, getattr(c, "page_number", 1)) and self.is_span_unmasked(c.start_char, c.end_char, min_confidence=0.80):
                 self.pending_candidates.append(c)
 
     def clear_pending_candidates(self) -> None:
@@ -309,9 +404,13 @@ class PipelineState:
     ) -> bool:
         """
         Returns True when a detector result belongs entirely to text that has
-        not already been claimed by an existing high-confidence entity.
+        not already been claimed by an existing high-confidence entity or locked span.
+        Uses exact interval overlap logic: max(start, locked_start) < min(end, locked_end).
         """
         if start < 0 or end > len(self.original_text) or start >= end:
+            return False
+
+        if self.is_span_locked(start, end):
             return False
 
         for entity in self.resolved_entities:
@@ -407,18 +506,18 @@ class PipelineState:
     ) -> None:
         # 1. Check if the line matches a structured Key-Value / Label-Value pattern
         label_match = re.match(
-            r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,35})\s*[:]\s*(.+?)\s*$",
+            r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,25})\s*[:]\s*(.+?)\s*$",
             line,
         )
+        if label_match and not self._looks_like_label(label_match.group(1)):
+            label_match = None
+
         if not label_match and line.count(" - ") == 1:
             temp_match = re.match(
-                r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,35})\s+[-]\s+(.+?)\s*$",
+                r"^\s*([A-Za-z0-9][A-Za-z0-9\s]{0,25})\s+[-]\s+(.+?)\s*$",
                 line,
             )
-            if temp_match and (
-                self._looks_like_label(temp_match.group(1))
-                or all(w[0].isupper() or w.isupper() for w in re.findall(r"\b[A-Za-z]+\b", temp_match.group(1)))
-            ):
+            if temp_match and self._looks_like_label(temp_match.group(1)):
                 label_match = temp_match
 
         exclude_start = -1
