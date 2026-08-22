@@ -597,12 +597,19 @@ Return JSON format with "entities" key containing items with value, entity_type,
             if isinstance(response, dict):
                 msg = response.get("message", {})
                 raw_content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
+                p_tok = response.get("prompt_eval_count", 0) or (len(prompt) // 4)
+                c_tok = response.get("eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
             else:
                 msg = getattr(response, "message", None)
                 if isinstance(msg, dict):
                     raw_content = msg.get("content", "")
                 else:
                     raw_content = getattr(msg, "content", "") if msg else ""
+                p_tok = getattr(response, "prompt_eval_count", 0) or (len(prompt) // 4)
+                c_tok = getattr(response, "eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
+
+            self.prompt_tokens += max(1, p_tok)
+            self.completion_tokens += max(1, c_tok)
 
             if not raw_content or not raw_content.strip():
                 return []
