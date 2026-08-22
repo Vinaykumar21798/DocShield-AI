@@ -81,7 +81,14 @@ class RegexDetector(BaseDetector):
             r"(?im)^\s*(?:[-*][ \t]*)?(?:Driving License|Driver License|Driver's License|Driving Licence|Driver Licence|DL)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$|\b[A-Z]{2}\d{2}[ \t-]?\d{7,12}\b",
 
         "NATIONAL_ID":
-            r"(?im)^\s*(?:[-*][ \t]*)?(?:National ID|NID|Military ID)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$",
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:National ID|NID)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$",
+
+        "MILITARY_ID":
+            r"(?im)\b(?:Military[ \t]+ID|DoD[ \t]+ID|DoD[ \t]+Number|DoD[ \t]+#|CAC[ \t]+ID|Geneva[ \t]+Convention[ \t]+ID)[ \t]*[:\-]?[ \t]*([A-Za-z0-9-]{7,20})\b",
+
+        "TAX_ID":
+            r"(?im)\b(?:EIN|Employer[ \t]+ID|ITIN|Tax[ \t]+ID)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*(\d{2}-\d{7}|9\d{2}-\d{2}-\d{4}|\d{9})\b"
+            r"|\b(?:SIN|Social[ \t]+Insurance)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*(\d{3}[ -]\d{3}[ -]\d{3})\b",
 
         "CRYPTO_WALLET":
             r"(?im)^\s*(?:[-*][ \t]*)?(?:Crypto Wallet|Wallet Address)[ \t]*[:\-][ \t]*([A-Za-z0-9]{32,64})[ \t]*$",
@@ -90,7 +97,22 @@ class RegexDetector(BaseDetector):
             r"\b[A-Z][0-9]{7,8}\b",
 
         "CREDIT_CARD":
-            r"\b(?:\d[ -]?){13,16}\b",
+            r"(?im)\b(?:Card|Credit[ \t]+Card|Debit[ \t]+Card|PAN)[ \t]*(?:Number|No|#)?[ \t]*[:\-]?[ \t]*((?:\d{4}[ -]?){3,4}\d{1,4}|\d{13,19})\b"
+            r"|\b(?:\d{4}[ -]){3}\d{4}\b"
+            r"|\b(?:\d{4}[ -]){2}\d{4}[ -]\d{3,4}\b"
+            r"|\b(?:\d[ -]?){13,19}\b",
+
+        "CVV":
+            r"(?im)\b(?:CVV|CVC|CID|CVV2|CVC2|Security[ \t]+Code)[ \t]*[:\-]?[ \t]*(\d{3,4})\b",
+
+        "EXPIRATION_DATE":
+            r"(?im)\b(?:Exp(?:iry)?|Expiration|Valid[ \t]+Thru)[ \t]*(?:Date)?[:\-]?[ \t]*((?:0[1-9]|1[0-2])[/-](?:\d{2}|\d{4}))\b",
+
+        "RX_NUMBER":
+            r"(?im)\b(?:Rx|Prescription)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*([A-Z0-9-]{5,20})\b",
+
+        "DEVICE_ID":
+            r"(?im)\b(?:Device|Implant|Pacemaker|Prosthetic)[ \t]*(?:Serial|ID|#)?[:\-]?[ \t]*([A-Z0-9-]{5,30})\b",
 
         "GSTIN":
             r"\b\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]\b",
@@ -171,7 +193,12 @@ class RegexDetector(BaseDetector):
             r"\b\d{5}(?:-\d{4})?\b",
 
         "BANK_ACCOUNT":
-            r"(?im)\bBank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$|\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b",
+            r"(?im)\b(?:Bank[ \t]+Account|Account|Acct|A/c)[ \t]*(?:Number|No|#)?[ \t]*[:\.]?[ \t]*([A-Z0-9]{2,4}(?:[ \t\-]?[A-Z0-9]{2,6}){2,8})\b"
+            r"|\b[A-Z]{2}\d{2}(?:[ \t]?[A-Z0-9]{4}){2,7}\b"
+            r"|\bBank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$",
+
+        "BRANCH_CODE":
+            r"(?im)\b(?:Branch[ \t]+(?:Code|ID|Number|No|#)|SWIFT(?:-BIC)?|BIC)[ \t]*[:\-][ \t]*([A-Z0-9-]{4,20})\b",
 
         "MRN":
             r"(?im)\b(?:Medical Record #|MRN|Medical Record Number)[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)\b"
@@ -242,13 +269,19 @@ class RegexDetector(BaseDetector):
     }
     ENTITY_PRIORITY = {
         "BANK_ACCOUNT": 101,
-        "CREDIT_CARD": 100,
+        "CREDIT_CARD": 101,
+        "BRANCH_CODE": 100,
+        "CVV": 100,
+        "MILITARY_ID": 98,
         "SSN": 96,
+        "TAX_ID": 95,
         "DOCUMENT_ID": 94,
         "REPORT_ID": 94,
         "TRACKING_NUMBER": 93,
         "ACCESS_CODE": 92,
         "MRN": 92,
+        "RX_NUMBER": 92,
+        "DEVICE_ID": 92,
         "CLAIM_NUMBER": 91,
         "POLICY_NUMBER": 91,
         "INSURANCE_ID": 90,
@@ -256,6 +289,7 @@ class RegexDetector(BaseDetector):
         "EMPLOYEE_ID": 89,
         "GSTIN": 88,
         "DRIVING_LICENSE": 87,
+        "EXPIRATION_DATE": 86,
         "PATIENT": 86,
         "PERSON": 86,
         "DOCTOR": 86,
@@ -275,7 +309,6 @@ class RegexDetector(BaseDetector):
         "PROCEDURE": 82,
         "PAN_NUMBER": 80,
         "FINANCIAL_AMOUNT": 78,
-        "TAX_ID": 90,
         "NPI_NUMBER": 90,
         "MEMBER_ID": 90,
         "GROUP_NUMBER": 90,
@@ -317,8 +350,15 @@ class RegexDetector(BaseDetector):
         "PAN_NUMBER": ["pan"],
         "PASSPORT_NUMBER": ["passport"],
         "DRIVING_LICENSE": ["driving license", "driver license"],
-        "CREDIT_CARD": ["card", "visa", "mastercard"],
-        "BANK_ACCOUNT": ["iban", "bank", "account", "bank account"],
+        "CREDIT_CARD": ["card", "visa", "mastercard", "debit", "credit", "pan"],
+        "CVV": ["cvv", "cvc", "cid", "security code"],
+        "EXPIRATION_DATE": ["exp", "expiry", "expiration", "valid thru"],
+        "BANK_ACCOUNT": ["iban", "bank", "account", "bank account", "a/c"],
+        "BRANCH_CODE": ["branch", "branch code", "code", "swift", "bic", "bank"],
+        "MILITARY_ID": ["military", "dod", "dod id", "cac", "defense", "geneva"],
+        "TAX_ID": ["tax", "tin", "ein", "itin", "sin", "employer"],
+        "RX_NUMBER": ["rx", "prescription", "rx#", "pharmacy"],
+        "DEVICE_ID": ["device", "implant", "serial", "pacemaker", "prosthetic"],
         "GSTIN": ["gstin", "gst"],
         "IFSC_CODE": ["ifsc", "bank"],
         "UPI_ID": ["upi", "payment"],
@@ -351,7 +391,6 @@ class RegexDetector(BaseDetector):
         "NPI_NUMBER": ["npi", "provider", "tax", "billing", "national provider"],
         "MEMBER_ID": ["member", "mbr", "id", "policy", "subscriber"],
         "GROUP_NUMBER": ["group", "grp", "number", "id"],
-        "TAX_ID": ["tax", "tin", "ein", "employer"],
         "EOB_NUMBER": ["eob", "explanation", "benefits", "number"],
         "PO_BOX": ["box", "po box", "p.o. box", "address"],
         "CLINICAL_MEASUREMENT": ["a1c", "cholesterol", "hdl", "ldl", "triglycerides", "mg/dl", "%"],
@@ -363,6 +402,14 @@ class RegexDetector(BaseDetector):
         "CITY_STATE_ZIP",
         "FINANCIAL_AMOUNT",
         "BANK_ACCOUNT",
+        "BRANCH_CODE",
+        "MILITARY_ID",
+        "TAX_ID",
+        "CREDIT_CARD",
+        "CVV",
+        "EXPIRATION_DATE",
+        "RX_NUMBER",
+        "DEVICE_ID",
         "DATE",
         "DATE_RANGE",
         "DATE_OF_BIRTH",
@@ -372,7 +419,6 @@ class RegexDetector(BaseDetector):
         "REPORT_ID",
         "TRACKING_NUMBER",
         "ACCESS_CODE",
-        "DIAGNOSIS",
         "DRIVING_LICENSE",
         "EMPLOYEE_ID",
         "HOSPITAL",
@@ -395,7 +441,6 @@ class RegexDetector(BaseDetector):
         "MEMBER_ID",
         "GROUP_NUMBER",
         "SSN",
-        "TAX_ID",
     }
     LABELED_NAME_PLACEHOLDERS = {
         "anonymous",

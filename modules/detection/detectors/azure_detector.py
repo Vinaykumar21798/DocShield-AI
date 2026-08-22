@@ -44,12 +44,21 @@ class CandidateValidationItem(BaseModel):
 
 class AzureOpenAIDetector(BaseDetector):
     """
-    Azure OpenAI Detector using gpt-5.4-mini / AzureOpenAI SDK for high-speed cloud LLM extraction.
+    Azure OpenAI Detector using gpt-5.4-mini / AzureOpenAI SDK for high-recall cloud LLM extraction.
+    Covers global privacy frameworks (HIPAA, GDPR, PCI-DSS, GLBA, CCPA, and international identifiers).
     """
 
     MODEL_NAME = "gpt-5.4-mini"
     TEMPERATURE = 0.0
     TOP_P = 0.1
+
+    COMMON_FORM_NOISE = {
+        "request", "requests", "requested", "transfer", "transferred", "transferee",
+        "captioned", "enclosed", "cif", "deposit", "term deposit", "faithfully",
+        "yours faithfully", "sincerely", "regards", "branch name", "branch code",
+        "account transfer", "home branch", "arrange", "understand", "caption",
+        "dear", "sir", "madam", "please", "thank", "thanks", "hello", "hi",
+    }
 
     def __init__(self):
         super().__init__()
@@ -106,7 +115,7 @@ class AzureOpenAIDetector(BaseDetector):
         document_type: str | None = None,
     ) -> list[DetectionResult]:
         """
-        Phase 4: Fast Azure OpenAI candidate validation (CONFIRM / RECLASSIFY / REJECT).
+        Phase 5: Contextual LLM candidate validation (CONFIRM / RECLASSIFY / REJECT).
         """
         if not candidates:
             return []
@@ -120,7 +129,6 @@ class AzureOpenAIDetector(BaseDetector):
                     chunk_text = c_text
                     break
 
-            # Record token usage for Azure candidate validation
             prompt_estimate = max(50, len(chunk_text or candidate.entity_value) // 4 + 80)
             completion_estimate = 30
             if self.client:
@@ -128,8 +136,22 @@ class AzureOpenAIDetector(BaseDetector):
                     resp = self.client.chat.completions.create(
                         model=self.deployment,
                         messages=[
-                            {"role": "system", "content": "You are an expert PII/PHI validation classifier. Confirm if candidate is a valid entity."},
-                            {"role": "user", "content": f"Entity: '{candidate.entity_value}' (Type: {candidate.entity_type})\nContext: {chunk_text[:400]}"}
+                            {
+                                "role": "system",
+                                "content": (
+                                    "You are a strict PII/PHI compliance validation classifier. "
+                                    "Confirm if candidate is genuinely sensitive personal, health, or financial data. "
+                                    "Reject generic English verbs/nouns (e.g. 'request', 'transfer', 'captioned', 'enclosed', 'notice')."
+                                ),
+                            },
+                            {
+                                "role": "user",
+                                "content": (
+                                    f"Candidate Entity: '{candidate.entity_value}' (Proposed Type: {candidate.entity_type})\n"
+                                    f"Context: \"\"\"{chunk_text[:400]}\"\"\"\n\n"
+                                    "Decide: CONFIRM, RECLASSIFY, or REJECT."
+                                ),
+                            },
                         ],
                         temperature=0.0,
                     )
@@ -166,47 +188,145 @@ class AzureOpenAIDetector(BaseDetector):
         val = candidate.entity_value.strip()
         e_type = candidate.entity_type
         norm_type = e_type.strip().upper().replace(" ", "_")
+        val_lower = val.lower().strip(" ,;:.[](){}\"'\t\n-")
+
+        # 1. Reject common noise words and generic English verbs
+        if val_lower in self.COMMON_FORM_NOISE:
+            return CandidateValidationItem(
+                candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                decision="REJECT",
+                confidence_score=0.10,
+                reasoning=f"Rejected '{val}' as common document verb/form noise.",
+            )
 
         from modules.detection.validators.entity_validator import EntityValidator
         if EntityValidator._is_rejected_semantic_value(e_type, val):
             return CandidateValidationItem(
                 candidate_id=str(getattr(candidate, "entity_id", "cand")),
                 decision="REJECT",
-                confidence_score=0.20,
+                confidence_score=0.10,
                 reasoning=f"Rejected '{val}' as generic form header or document noise.",
             )
 
+        # 2. Phone validation: require minimum 7 digits
         if "PHONE" in norm_type or "FAX" in norm_type or "CONTACT" in norm_type:
             if sum(c.isdigit() for c in val) < 7:
                 return CandidateValidationItem(
                     candidate_id=str(getattr(candidate, "entity_id", "cand")),
                     decision="REJECT",
-                    confidence_score=0.20,
+                    confidence_score=0.10,
                     reasoning=f"Rejected '{val}' as non-phone text (lacks required digits).",
                 )
 
-        if len(val) >= 3 or val.isdigit():
-            reason_msg = f"Validated '{val}' as a sensitive {e_type} entity within document context."
-            if "FINANCIAL" in e_type or e_type in {"MONEY", "SALARY", "COST"}:
-                reason_msg = f"Confirmed monetary amount '{val}' as sensitive financial data."
-            elif "PERSON" in e_type or e_type in {"PATIENT", "DOCTOR", "PHYSICIAN"}:
-                reason_msg = f"Validated person identity '{val}' within document context."
-            elif "ORGANIZATION" in e_type or e_type in {"HOSPITAL", "INSURANCE_PROVIDER"}:
-                reason_msg = f"Confirmed organizational entity '{val}' in enterprise document context."
+        # 3. High-entropy, Financial, Government, Military, Tax & Structured Identifiers (Synthetic & Real)
+        STRUCTURED_IDENTIFIER_KEYWORDS = [
+            "ACCOUNT", "BANK", "IBAN", "ROUTING", "SWIFT", "BIC", "BRANCH",
+            "SSN", "PASSPORT", "CARD", "PAN", "TAX", "TIN", "EIN", "ITIN",
+            "AADHAAR", "MRN", "MILITARY", "DOD", "CAC", "SIN", "NINO",
+            "DEVICE", "RX", "PRESCRIPTION", "LICENSE", "CREDIT", "DEBIT"
+        ]
+        if any(kw in norm_type for kw in STRUCTURED_IDENTIFIER_KEYWORDS):
+            has_alnum = sum(c.isalnum() for c in val) >= 3
+            if has_alnum:
+                return CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="CONFIRM",
+                    corrected_type=e_type,
+                    confidence_score=min(0.95, max(0.85, candidate.confidence_score)),
+                    reasoning=f"Confirmed sensitive identifier '{val}' ({e_type}).",
+                )
 
+        # 4. Clinical & Healthcare Entities (Diagnoses, Medications, Procedures)
+        CLINICAL_KEYWORDS = ["DIAGNOSIS", "MEDICATION", "PROCEDURE", "TREATMENT", "SYMPTOM", "CONDITION", "DRUG"]
+        if any(kw in norm_type for kw in CLINICAL_KEYWORDS):
+            if val_lower not in self.COMMON_FORM_NOISE and len(val) >= 2:
+                return CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="CONFIRM",
+                    corrected_type=e_type,
+                    confidence_score=min(0.92, max(0.85, candidate.confidence_score)),
+                    reasoning=f"Confirmed clinical health entity '{val}' ({e_type}).",
+                )
+
+        # 5. Person Name validation
+        if any(kw in norm_type for kw in ["PERSON", "PATIENT", "DOCTOR", "PHYSICIAN"]):
+            if val_lower in self.COMMON_FORM_NOISE or (len(val.split()) == 1 and val.islower()):
+                return CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="REJECT",
+                    confidence_score=0.10,
+                    reasoning=f"Rejected '{val}' as non-name word.",
+                )
+            if len(val) >= 2 and any(c.isalpha() for c in val):
+                return CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="CONFIRM",
+                    corrected_type=e_type,
+                    confidence_score=min(0.92, max(0.85, candidate.confidence_score)),
+                    reasoning=f"Validated person identity '{val}' within document context.",
+                )
+
+        # 6. Organizations, Clinics & Facilities
+        if any(kw in norm_type for kw in ["ORGANIZATION", "HOSPITAL", "CLINIC", "PROVIDER", "INSURANCE"]):
+            if val_lower in self.COMMON_FORM_NOISE or len(val) < 3:
+                return CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="REJECT",
+                    confidence_score=0.10,
+                    reasoning=f"Rejected '{val}' as non-organization word.",
+                )
             return CandidateValidationItem(
                 candidate_id=str(getattr(candidate, "entity_id", "cand")),
                 decision="CONFIRM",
                 corrected_type=e_type,
                 confidence_score=min(0.90, max(0.85, candidate.confidence_score)),
-                reasoning=reason_msg,
+                reasoning=f"Confirmed organization '{val}'.",
             )
+
+        if len(val) >= 3 and any(c.isalnum() for c in val):
+            return CandidateValidationItem(
+                candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                decision="CONFIRM",
+                corrected_type=e_type,
+                confidence_score=min(0.88, max(0.80, candidate.confidence_score)),
+                reasoning=f"Validated '{val}' as sensitive {e_type} entity.",
+            )
+
         return CandidateValidationItem(
             candidate_id=str(getattr(candidate, "entity_id", "cand")),
             decision="REJECT",
             confidence_score=0.20,
-            reasoning=f"Rejected '{val}' as non-sensitive text or structural noise.",
+            reasoning=f"Rejected '{val}' as non-sensitive text.",
         )
+
+    def _locate_span_in_chunk(self, chunk_text: str, entity_value: str) -> tuple[int, int, str] | None:
+        """
+        Locates the exact start/end character offsets of entity_value in chunk_text.
+        Handles exact matches as well as formatting/whitespace variations.
+        Returns (rel_start, rel_end, verbatim_text_slice) or None.
+        """
+        if not entity_value or not chunk_text:
+            return None
+
+        # 1. Exact match
+        idx = chunk_text.find(entity_value)
+        if idx != -1:
+            return idx, idx + len(entity_value), chunk_text[idx:idx + len(entity_value)]
+
+        # 2. Case-insensitive exact match
+        idx = chunk_text.lower().find(entity_value.lower())
+        if idx != -1:
+            return idx, idx + len(entity_value), chunk_text[idx:idx + len(entity_value)]
+
+        # 3. Flexible whitespace & punctuation regex match
+        escaped_tokens = [re.escape(tok) for tok in re.split(r"[\s\-_/]+", entity_value.strip()) if tok]
+        if escaped_tokens:
+            pattern = r"[\s\-_/]*".join(escaped_tokens)
+            match = re.search(pattern, chunk_text, re.IGNORECASE)
+            if match:
+                return match.start(), match.end(), chunk_text[match.start():match.end()]
+
+        return None
 
     def detect_residual_chunk(
         self,
@@ -218,7 +338,7 @@ class AzureOpenAIDetector(BaseDetector):
         page_number: int = 1,
     ) -> list[DetectionResult]:
         """
-        Phase 5: High-Recall Azure OpenAI Residual Entity Discovery.
+        Phase 4: High-Recall 6-Domain Global Regulatory & Compliance Residual Entity Discovery.
         """
         if not chunk_text or not chunk_text.strip():
             return []
@@ -226,33 +346,30 @@ class AzureOpenAIDetector(BaseDetector):
         known_entities = known_entities or []
         known_entities_text = self._format_known_entities(known_entities)
 
-        target_entities = TaxonomyService.get_target_entities(document_type)
-        must_have = target_entities.get("MUST_HAVE") or DEFAULT_MUST_HAVE
-        nice_to_have = target_entities.get("NICE_TO_HAVE") or DEFAULT_NICE_TO_HAVE
+        prompt = f"""You are an elite PII, PHI, Financial, and Government Data Protection Security Auditor.
+Your primary mission is ZERO MISSED SENSITIVE ENTITIES across all global privacy regulations (HIPAA, PCI-DSS, GLBA, GDPR, CCPA/CPRA, State Privacy Laws, International Standards).
 
-        must_have_str = "\n".join(f"- {e}" for e in must_have[:35])
-        nice_to_have_str = "\n".join(f"- {e}" for e in nice_to_have[:25])
-
-        prompt = f"""You are a specialized PII/PHI compliance high-recall security reviewer using {self.deployment}.
-Your primary security mission is: DO NOT MISS IMPORTANT SENSITIVE ENTITIES.
-Pay special attention to key-value pairs (e.g. "Driver's License: <val>", "Crypto Wallet: <val>", "Social Media ID: <val>").
+EXHAUSTIVE 6-DOMAIN TAXONOMY TARGETS:
+1. HEALTHCARE & PHI: Patient Names, Date of Birth, Medical Record # (MRN), Health Plan/Member IDs, Diagnoses, Procedures, Medications, Prescriptions (Rx), Doctors, Hospitals, Medical Device Serials, Implant IDs.
+2. FINANCIAL & PAYMENT CARDS: Credit & Debit Card Numbers (all formats/networks: Visa, Mastercard, Amex, Discover, RuPay, etc.), CVV/CVC, Expiration Dates, Bank Account Numbers (all country formats/spacings), IBAN, SWIFT/BIC, Branch Codes, Routing Numbers, Sort Codes, Crypto Wallet Addresses, Financial Balances.
+3. GOVERNMENT, TAX & MILITARY: SSN, ITIN, EIN, Military ID / DoD ID / CAC, State Driver's Licenses, Passports, Aadhaar Numbers, PAN (India), Canadian SIN, UK NINO, EU National IDs, Tax IDs worldwide.
+4. DIRECT & CONTACT PII: Full Names, Aliases, Street/Mailing Addresses, Phone Numbers (all country formats), Email Addresses, Employee IDs.
+5. STATE-LAW SENSITIVE SPI: Precise Geolocation, Biometric Templates, Genetic Data, Racial/Ethnic Identifiers.
+6. TECHNICAL CREDENTIALS: Passwords, API Keys, Access Tokens, Session Cookies, IP Addresses.
 
 CRITICAL INSTRUCTIONS:
-1. Review the entire chunk for sensitive entities.
-2. DO NOT RE-EXTRACT ALREADY RESOLVED ENTITIES:
+1. Review the entire chunk for sensitive entities. Pay special attention to key-value pairs (e.g. "A/c No: <val>", "Branch Code: <val>", "Card No: <val>", "DoD ID: <val>", "Rx: <val>", "Tax ID: <val>").
+2. SYNTHETIC & TEST DATA SUPPORT: Include synthetic, test, or mock numbers in document context (e.g., mock 16-digit cards, fake SSNs, mock bank accounts). Extract any value acting as a sensitive identifier.
+3. DO NOT EXTRACT GENERIC FORM WORDS OR VERBS (e.g. "Request", "Transfer", "Enclosed", "Captioned", "Faithfully", "Dear", "Sir", "Madam").
+4. DO NOT RE-EXTRACT ALREADY RESOLVED ENTITIES:
 {known_entities_text}
+5. VERBATIM SUBSTRING MANDATE: You MUST extract the EXACT raw substring from the text as the 'value'. Do NOT reformat, strip spaces, or alter punctuation.
 
-Taxonomy Targets:
-MUST_HAVE:
-{must_have_str}
-
-NICE_TO_HAVE:
-{nice_to_have_str}
-
-Semantic Chunk to Inspect:
+Text to Inspect:
 \"\"\"{chunk_text}\"\"\"
 
-Return valid JSON format with "entities" key containing items with value, entity_type, confidence_score.
+Return a valid JSON object with the "entities" key containing items with "value", "entity_type", and "confidence_score":
+{{"entities": [{{"value": "...", "entity_type": "...", "confidence_score": 0.90}}]}}
 """
 
         if self.client is None:
@@ -287,19 +404,26 @@ Return valid JSON format with "entities" key containing items with value, entity
                     continue
                 val = str(item.get("value", "") or item.get("entity_value", "")).strip()
                 t = str(item.get("entity_type", "")).strip()
-                c = float(item.get("confidence_score", 0.85))
+                c = float(item.get("confidence_score", 0.88))
 
                 if not val or len(val) < 2 or not t:
                     continue
 
-                rel_idx = chunk_text.find(val)
-                start_char = chunk_start + rel_idx if rel_idx != -1 else chunk_start
-                end_char = start_char + len(val)
+                if val.lower() in self.COMMON_FORM_NOISE:
+                    continue
+
+                span_match = self._locate_span_in_chunk(chunk_text, val)
+                if not span_match:
+                    continue
+
+                rel_start, rel_end, verbatim_slice = span_match
+                start_char = chunk_start + rel_start
+                end_char = chunk_start + rel_end
 
                 results.append(
                     DetectionResult(
                         entity_type=t,
-                        entity_value=val,
+                        entity_value=verbatim_slice,
                         confidence_score=c,
                         start_char=start_char,
                         end_char=end_char,
@@ -321,3 +445,5 @@ Return valid JSON format with "entities" key containing items with value, entity
             chunk_end=len(text),
             page_number=page_number,
         )
+
+

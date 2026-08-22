@@ -2,6 +2,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 from typing import Callable, Dict, Optional, Tuple
 from uuid import uuid4
 
@@ -1069,6 +1070,57 @@ class DocumentProcessingWorkflow:
         # Type disagreements must be reflected in confidence calibration before
         # this point rather than overriding the threshold during persistence.
         return detection.confidence_score < HUMAN_REVIEW_THRESHOLD
+
+    @staticmethod
+    def _expand_entity_occurrences(
+        source_text: str,
+        entities: list[DetectionResult],
+    ) -> list[DetectionResult]:
+        """
+        Safely expands high-entropy and multi-word confirmed entities across document text.
+        Never expands generic single words, short terms, or common noise words.
+        """
+        if not source_text or not entities:
+            return entities
+
+        expanded: list[DetectionResult] = list(entities)
+        existing_spans = {(e.start_char, e.end_char) for e in entities if e.start_char is not None and e.end_char is not None}
+
+        EXPANDABLE_TYPES = {
+            "SSN", "BANK_ACCOUNT", "BRANCH_CODE", "PHONE_NUMBER", "US_PHONE_NUMBER",
+            "EMAIL", "MRN", "PASSPORT_NUMBER", "CREDIT_CARD", "AADHAAR_NUMBER",
+            "PAN_NUMBER", "TAX_ID", "POLICY_NUMBER", "CLAIM_NUMBER", "MEMBER_ID"
+        }
+
+        for entity in entities:
+            val = (entity.entity_value or "").strip()
+            if len(val) < 4:
+                continue
+
+            is_expandable_type = entity.entity_type in EXPANDABLE_TYPES
+            is_multi_word = len(val.split()) >= 2 and all(len(w) >= 2 for w in val.split())
+
+            if not (is_expandable_type or is_multi_word):
+                continue
+
+            pattern = re.escape(val)
+            for m in re.finditer(pattern, source_text, re.IGNORECASE):
+                span = (m.start(), m.end())
+                if span not in existing_spans:
+                    existing_spans.add(span)
+                    expanded.append(
+                        DetectionResult(
+                            entity_type=entity.entity_type,
+                            entity_value=source_text[m.start():m.end()],
+                            confidence_score=entity.confidence_score,
+                            start_char=m.start(),
+                            end_char=m.end(),
+                            page_number=entity.page_number,
+                            detector=entity.detector,
+                            privacy_category=entity.privacy_category,
+                        )
+                    )
+        return expanded
 
     @staticmethod
     def _apply_redactions(
