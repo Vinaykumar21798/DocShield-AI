@@ -41,7 +41,7 @@ class Report(Base):
 
     processing_duration_ms = Column(Integer)
     detectors_used = Column(String)
-    qwen_invoked = Column(Boolean, default=False)
+    gemma_invoked = Column(Boolean, default=False)
     total_pii = Column(Integer, default=0)
     total_phi = Column(Integer, default=0)
     review_completion = Column(Boolean, default=False)

@@ -107,14 +107,15 @@ class CrashDetector(FakeDetector):
         raise RuntimeError(f"{self.name} crashed")
 
 
-def service_with_detectors(regex, presidio, gliner, medspacy, qwen=None):
+def service_with_detectors(regex, presidio, gliner, medspacy, gemma=None):
     service = DetectionService()
     service.regex = regex
     service._presidio = presidio
     service._gliner = gliner
     service._medspacy = medspacy
-    if qwen is not None:
-        service._qwen3b = qwen
+    if gemma is not None:
+        service._gemma4e4b = gemma
+        service._azure_llm = gemma
     return service
 
 
@@ -258,8 +259,8 @@ def test_low_confidence_entity_continues_to_next_detector_until_resolved(
             "confidence": 0.92,
         },
     )
-    qwen = FakeDetector(
-        "qwen3b",
+    gemma = FakeDetector(
+        "gemma4e4b",
         {
             "type": "PERSON",
             "value": "Alice",
@@ -273,7 +274,7 @@ def test_low_confidence_entity_continues_to_next_detector_until_resolved(
         presidio,
         gliner,
         FailDetector("medspacy"),
-        qwen=qwen,
+        gemma=gemma,
     )
 
     results = service.detect(text)
@@ -285,7 +286,7 @@ def test_low_confidence_entity_continues_to_next_detector_until_resolved(
     assert regex.seen_texts == [text]
     assert presidio.seen_texts == [text]
     assert gliner.seen_texts == [text]
-    assert qwen.seen_texts == []
+    assert gemma.seen_texts == []
 
 
 def test_regex_below_80_routes_forward_and_later_detector_becomes_final(monkeypatch):
@@ -304,31 +305,31 @@ def test_regex_below_80_routes_forward_and_later_detector_becomes_final(monkeypa
             "confidence": 0.79,
         },
     )
-    class ContextRelativeQwen(FakeDetector):
+    class ContextRelativeGemma(FakeDetector):
         def detect(self, text, page_number=1):
             self.seen_texts.append(text)
             self.contexts.append(getattr(self, "orchestration_context", None))
-            qwen_start = text.index("E11.9")
+            gemma_start = text.index("E11.9")
             return [
                 DetectionResult(
                     entity_type="ICD10_CODE",
                     entity_value="E11.9",
                     confidence_score=0.79,
-                    start_char=qwen_start,
-                    end_char=qwen_start + len("E11.9"),
+                    start_char=gemma_start,
+                    end_char=gemma_start + len("E11.9"),
                     page_number=page_number,
                     detector=self.name,
                     metadata={"test_detector": True},
                 )
             ]
 
-    qwen = ContextRelativeQwen("qwen3b")
+    gemma = ContextRelativeGemma("gemma4e4b")
     service = service_with_detectors(
         regex,
         FakeDetector("presidio", result=None),
         FakeDetector("gliner", result=None),
         FakeDetector("medspacy", result=None),
-        qwen=qwen,
+        gemma=gemma,
     )
 
     results = service.detect(text)
@@ -337,8 +338,8 @@ def test_regex_below_80_routes_forward_and_later_detector_becomes_final(monkeypa
     assert results[0].entity_value == "E11.9"
     assert results[0].confidence_score == 0.79
     assert results[0].confidence_score < 0.80
-    assert results[0].detector == "Qwen3:4b"
-    assert qwen.seen_texts
+    assert results[0].detector == "Gemma4:e4b"
+    assert gemma.seen_texts
 
 
 def test_detector_crash_is_skipped_and_next_detector_runs(monkeypatch):
@@ -437,7 +438,7 @@ def test_pipeline_stops_on_absent_entity_candidates_not_leftover_labels(monkeypa
     assert regex.seen_texts == [text]
 
 
-class FakeQwenDetector(BaseDetector):
+class FakeGemmaDetector(BaseDetector):
     client = object()
 
     def __init__(self):
@@ -446,7 +447,7 @@ class FakeQwenDetector(BaseDetector):
 
     @property
     def name(self):
-        return "qwen3b"
+        return "gemma4e4b"
 
     def should_run(self, text, state):
         return True
@@ -469,32 +470,32 @@ class FakeQwenDetector(BaseDetector):
         ]
 
 
-def test_qwen_runs_last_on_remaining_unmasked_text(monkeypatch):
+def test_gemma_runs_last_on_remaining_unmasked_text(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "false")
     text = "x" * 300 + "\nName: Alice\n" + "y" * 300
     alice_start = text.index("Alice")
-    fake_qwen = FakeQwenDetector()
+    fake_gemma = FakeGemmaDetector()
 
     service = service_with_detectors(
         FakeDetector("regex", result=None),
         FakeDetector("presidio", result=None),
         FakeDetector("gliner", result=None),
         FakeDetector("medspacy", result=None),
-        qwen=fake_qwen,
+        gemma=fake_gemma,
     )
 
     results = service.detect(text)
 
     assert [item.entity_value for item in results] == ["Alice"]
     assert results[0].start_char == alice_start
-    assert results[0].detector == "Qwen3:4b"
-    assert len(fake_qwen.seen_texts) == 1
-    assert "Alice" in fake_qwen.seen_texts[0]
-    assert len(fake_qwen.seen_texts[0]) < len(text)
-    context_offset = fake_qwen.contexts[0]["text_offset"]
+    assert results[0].detector == "Gemma4:e4b"
+    assert len(fake_gemma.seen_texts) == 1
+    assert "Alice" in fake_gemma.seen_texts[0]
+    assert len(fake_gemma.seen_texts[0]) < len(text)
+    context_offset = fake_gemma.contexts[0]["text_offset"]
     assert context_offset <= alice_start
-    assert alice_start < context_offset + len(fake_qwen.seen_texts[0])
-    assert fake_qwen.contexts[0]["executed_detectors"] == [
+    assert alice_start < context_offset + len(fake_gemma.seen_texts[0])
+    assert fake_gemma.contexts[0]["executed_detectors"] == [
         "regex",
         "presidio",
         "gliner",
@@ -796,7 +797,7 @@ Clinical information related to your diabetes care, including recent A1C results
     assert not any("types of information" in entity.entity_value for entity in results)
 
 
-def test_qwen_context_uses_original_text_with_known_entity_metadata(monkeypatch):
+def test_gemma_context_uses_original_text_with_known_entity_metadata(monkeypatch):
     monkeypatch.setenv("BYPASS_LLM", "false")
     text = "Patient Name: John Doe\nDiagnosis: asthma"
     patient_start = text.index("John Doe")
@@ -812,8 +813,8 @@ def test_qwen_context_uses_original_text_with_known_entity_metadata(monkeypatch)
             "confidence": 0.95,
         },
     )
-    qwen = FakeDetector(
-        "qwen3b",
+    gemma = FakeDetector(
+        "gemma4e4b",
         {
             "type": "DIAGNOSIS",
             "value": "asthma",
@@ -827,13 +828,13 @@ def test_qwen_context_uses_original_text_with_known_entity_metadata(monkeypatch)
         FakeDetector("presidio", result=None),
         FakeDetector("gliner", result=None),
         FakeDetector("medspacy", result=None),
-        qwen=qwen,
+        gemma=gemma,
     )
 
     results = service.detect(text, document_type="medical_record")
 
-    assert qwen.seen_texts == [text]
-    assert qwen.contexts[0]["known_entities"] == [
+    assert gemma.seen_texts == [text]
+    assert gemma.contexts[0]["known_entities"] == [
         {
             "entity_type": "PATIENT",
             "start_char": patient_start,

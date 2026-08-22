@@ -181,10 +181,26 @@
     const body = document.getElementById("adminDocumentsBody");
     if (!body) return;
     if (!Array.isArray(documents) || !documents.length) {
-      body.innerHTML = `<tr><td colspan="5" class="empty-state">No documents have been uploaded yet.</td></tr>`;
+      body.innerHTML = `<tr><td colspan="8" class="empty-state">No documents have been uploaded yet.</td></tr>`;
       return;
     }
-    body.innerHTML = documents.map((documentItem) => `
+    body.innerHTML = documents.map((documentItem) => {
+      const hasTokens = documentItem.prompt_tokens != null || documentItem.completion_tokens != null;
+      const totalTokens = (documentItem.prompt_tokens || 0) + (documentItem.completion_tokens || 0);
+      const tokensDisplay = hasTokens ? totalTokens.toLocaleString() : "-";
+
+      const costDisplay = documentItem.llm_cost_usd != null
+        ? `$${Number(documentItem.llm_cost_usd).toFixed(4)}`
+        : "-";
+
+      const rawProvider = (documentItem.llm_provider || "").trim().toUpperCase();
+      let providerHtml = `<span style="color: var(--muted, #94a3b8); font-weight: 500;">-</span>`;
+      if (rawProvider) {
+        const providerClass = rawProvider === "AZURE" ? "tone-info" : "tone-neutral";
+        providerHtml = `<span class="status-pill ${providerClass}" style="font-size: 0.68rem; padding: 2px 7px;">${escapeHtml(rawProvider)}</span>`;
+      }
+
+      return `
       <tr>
         <td>
           <strong class="admin-document-name">${escapeHtml(documentItem.filename)}</strong>
@@ -193,9 +209,13 @@
         <td class="admin-truncate" title="${escapeHtml(documentItem.owner)}">${escapeHtml(documentItem.owner)}</td>
         <td><span class="status-pill ${statusTone(documentItem.status)}">${escapeHtml(documentItem.status)}</span></td>
         <td>${escapeHtml(documentItem.entity_count)}</td>
-        <td>${escapeHtml(formatDate(documentItem.created_at))}</td>
+        <td>${tokensDisplay !== "-" ? `<strong>${tokensDisplay}</strong>` : "-"}</td>
+        <td>${costDisplay}</td>
+        <td>${providerHtml}</td>
+        <td style="white-space: nowrap;">${escapeHtml(formatDate(documentItem.created_at))}</td>
       </tr>
-    `).join("");
+    `;
+    }).join("");
   }
 
   function renderAdminStats(stats) {
@@ -1095,7 +1115,7 @@
         <tr>
           <td>
             <span class="entity-type">
-              <strong>${escapeHtml(item.entity_type || item.original_type || "Entity")}</strong>
+              <strong>${escapeHtml(item.entity_type || item.original_type || "-")}</strong>
               ${item.original_type && item.original_type !== item.entity_type ? `<small>orig: ${escapeHtml(item.original_type)}</small>` : ""}
             </span>
           </td>

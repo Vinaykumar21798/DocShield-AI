@@ -156,7 +156,7 @@ def _qwen_availability() -> dict[str, Any]:
         return {
             "available": False,
             "mode": "skipped",
-            "model": "qwen3:4b",
+            "model": "gemma4:e4b",
             "error": "BYPASS_LLM is enabled",
         }
     try:
@@ -165,7 +165,7 @@ def _qwen_availability() -> dict[str, Any]:
         return {
             "available": False,
             "mode": "skipped",
-            "model": "qwen3:4b",
+            "model": "gemma4:e4b",
             "error": f"ollama package import failed: {exc}",
         }
     host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -176,24 +176,24 @@ def _qwen_availability() -> dict[str, Any]:
             m.get("model") or m.get("name") or ""
             for m in models.get("models", [])
         ]
-        if not any("qwen3:4b" in name for name in names):
+        if not any("gemma4:e4b" in name for name in names):
             return {
                 "available": False,
                 "mode": "skipped",
-                "model": "qwen3:4b",
-                "error": f"qwen3:4b not served by Ollama at {host}; got: {names}",
+                "model": "gemma4:e4b",
+                "error": f"gemma4:e4b not served by Ollama at {host}; got: {names}",
             }
     except Exception as exc:
         return {
             "available": False,
             "mode": "skipped",
-            "model": "qwen3:4b",
+            "model": "gemma4:e4b",
             "error": f"Ollama unreachable at {host}: {exc}",
         }
     return {
         "available": True,
         "mode": "ollama_qwen3_4b",
-        "model": "qwen3:4b",
+        "model": "gemma4:e4b",
         "error": None,
     }
 
@@ -233,7 +233,7 @@ DETECTOR_PROFILES: dict[str, DetectorProfile] = {
     ),
     "qwen": DetectorProfile(
         key="qwen",
-        label="Qwen3:4b",
+        label="Gemma4:e4b",
         factory=lambda: _instantiate(
             "modules.detection.detectors.qwen_detector", "Qwen3BDetector"
         ),

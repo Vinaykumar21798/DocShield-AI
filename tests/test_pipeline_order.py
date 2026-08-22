@@ -4,7 +4,7 @@ from typing import Any
 from modules.detection.semantic_chunker import SemanticChunker, DocumentChunk
 from modules.detection.service import DetectionService, DynamicDetectionConfig
 from modules.detection.detectors.base_detector import BaseDetector
-from modules.detection.detectors.qwen_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
+from modules.detection.detectors.gemma_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
 

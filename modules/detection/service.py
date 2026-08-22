@@ -5,7 +5,7 @@ import os
 import re
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Any, Callable
 
 from modules.detection.confidence import ConfidenceCalculator
 from modules.detection.candidate_quality_gate import CandidateQualityGate
@@ -14,14 +14,14 @@ from modules.detection.detectors.gliner_detector import GLiNERDetector
 from modules.detection.detectors.medspacy_detector import MedSpaCyDetector
 from modules.detection.detectors.presidio_detector import PresidioDetector
 from modules.detection.detectors.regex_detector import RegexDetector
-from modules.detection.detectors.qwen_detector import Qwen3BDetector
+from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
 from modules.detection.analyzer.detector_selector import DetectorSelector
 from modules.detection.deduplicator import Deduplicator
 from modules.detection.entity_mapper import EntityMapper, PrivacyMapper
 from modules.detection.exceptions import DetectionError
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
-from modules.detection.semantic_chunker import SemanticChunker
+from modules.detection.semantic_chunker import DocumentChunk, SemanticChunker
 from modules.detection.taxonomy import TaxonomyService
 from modules.detection.validators.entity_validator import EntityValidator
 
@@ -182,7 +182,10 @@ class DetectionService:
         "gliner": 3,
         "presidio": 2,
         "qwen3b": 6,
+        "gemma": 6,
     }
+
+    LLM_DETECTOR_NAMES = {"gemma", "qwen3b", "qwen3:4b", "qwen"}
 
     PII_SAFETY_TYPES = {
         "ACCESS_CODE",
@@ -315,25 +318,32 @@ class DetectionService:
 
     @property
     def qwen3b(self):
-        if self._qwen3b is None:
-            logger.info("Loading gemma4:e4b...")
-            self._qwen3b = Qwen3BDetector()
-        return self._qwen3b
+        return self.gemma
 
     @qwen3b.setter
     def qwen3b(self, value):
-        self._qwen3b = value
+        self.gemma = value
 
     @property
     def gemma(self):
-        if self._qwen3b is None:
-            logger.info("Loading gemma4:e4b...")
-            self._qwen3b = Qwen3BDetector()
-        return self._qwen3b
+        provider = os.getenv("LLM_PROVIDER", "gemma").lower().strip()
+        if provider == "azure":
+            if getattr(self, "_azure_llm", None) is None:
+                logger.info("Loading Azure OpenAI (gpt-5.4-mini)...")
+                from modules.detection.detectors.azure_detector import AzureOpenAIDetector
+                self._azure_llm = AzureOpenAIDetector()
+            return self._azure_llm
+        else:
+            if getattr(self, "_gemma4e4b", None) is None:
+                logger.info("Loading gemma4:e4b...")
+                from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
+                self._gemma4e4b = Gemma4E4BDetector()
+            return self._gemma4e4b
 
     @gemma.setter
     def gemma(self, value):
-        self._qwen3b = value
+        self._gemma4e4b = value
+        self._azure_llm = value
 
     def _detector_getters(self) -> dict[str, Callable[[], BaseDetector]]:
         return {
@@ -563,8 +573,7 @@ class DetectionService:
                         detector.name,
                     )
                     logger.info(
-                        "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=UPGRADED reason='Upgraded previous candidate'",
-                        entity.entity_value,
+                        "CandidateGate: entity_type=%r detector=%r confidence=%.2f decision=UPGRADED reason='Upgraded previous candidate'",
                         entity.entity_type,
                         detector.name,
                         entity.confidence_score,
@@ -577,8 +586,8 @@ class DetectionService:
                         detector.name,
                     )
                     logger.info(
-                        "DuplicateSuppressed: value=%r detector=%r reason='Duplicates previously resolved entity'",
-                        entity.entity_value,
+                        "DuplicateSuppressed: entity_type=%r detector=%r reason='Duplicates previously resolved entity'",
+                        entity.entity_type,
                         detector.name,
                     )
                 continue
@@ -600,8 +609,9 @@ class DetectionService:
                             prev.entity_type = entity.entity_type
                             prev.metadata["specialized_by"] = detector.name
                     logger.info(
-                        "CandidateGate: value=%r specialized to %r from %s",
-                        entity.entity_value,
+                        "CandidateGate: span=%d-%d specialized to %r from %s",
+                        entity.start_char,
+                        entity.end_char,
                         entity.entity_type,
                         detector.name,
                     )
@@ -616,8 +626,8 @@ class DetectionService:
                 if detector.name not in locked_match.get("duplicate_sources", []):
                     locked_match.setdefault("duplicate_sources", []).append(detector.name)
                 logger.info(
-                    "OverlapSuppressed: value=%r detector=%r span=[%d,%d] reason='Overlaps locked %s from %s'",
-                    entity.entity_value,
+                    "OverlapSuppressed: entity_type=%r detector=%r span=[%d,%d] reason='Overlaps locked %s from %s'",
+                    entity.entity_type,
                     detector.name,
                     entity.start_char,
                     entity.end_char,
@@ -642,8 +652,7 @@ class DetectionService:
                     detector.name,
                 )
                 logger.info(
-                    "CandidateGate: value=%r entity_type=%r detector=%r confidence=%.2f decision=LOCKED reason='Authoritative high-confidence detection'",
-                    entity.entity_value,
+                    "CandidateGate: entity_type=%r detector=%r confidence=%.2f decision=LOCKED reason='Authoritative high-confidence detection'",
                     entity.entity_type,
                     detector.name,
                     entity.confidence_score,
@@ -666,12 +675,11 @@ class DetectionService:
                 )
 
                 logger.info(
-                    "QualityGateCandidate: candidate_id=%s doc_id=%s chunk_id=%s page=%d value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f doc_type=%r quality_decision=%s action=%s reason=%r llm_required=%s",
+                    "QualityGateCandidate: candidate_id=%s doc_id=%s chunk_id=%s page=%d type=%r detector=%r confidence=%.2f semantic_relevance=%.2f doc_type=%r quality_decision=%s action=%s llm_required=%s",
                     getattr(entity, "id", hex(id(entity))[-6:]),
                     getattr(state, "document_id", "doc"),
                     entity.metadata.get("chunk_id", 0),
                     getattr(entity, "page_number", 1),
-                    entity.entity_value,
                     entity.entity_type,
                     detector.name,
                     entity.confidence_score,
@@ -679,30 +687,25 @@ class DetectionService:
                     getattr(self, "_current_document_type", "generic"),
                     gate_eval.quality_decision,
                     gate_eval.action,
-                    gate_eval.reason,
                     gate_eval.llm_required,
                 )
 
                 if gate_eval.decision == "PRE_LLM_REJECT":
                     logger.info(
-                        "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PRE_LLM_REJECT reason=%r",
-                        entity.entity_value,
+                        "CandidateGate: type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PRE_LLM_REJECT",
                         entity.entity_type,
                         detector.name,
                         entity.confidence_score,
                         gate_eval.semantic_score,
-                        gate_eval.reason,
                     )
                 else:
                     pending_low.append(entity)
                     logger.info(
-                        "CandidateGate: value=%r type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PENDING_FOR_LLM reason=%r",
-                        entity.entity_value,
+                        "CandidateGate: type=%r detector=%r confidence=%.2f semantic_relevance=%.2f decision=PENDING_FOR_LLM",
                         entity.entity_type,
                         detector.name,
                         entity.confidence_score,
                         gate_eval.semantic_score,
-                        gate_eval.reason,
                     )
 
         state.add_entities(
@@ -815,10 +818,9 @@ class DetectionService:
                 len(state.original_text),
             ):
                 logger.info(
-                    "Skipping invalid %s entity from %s before masking: value=%r span=%s-%s",
+                    "Skipping invalid %s entity from %s before masking: span=%s-%s",
                     getattr(entity, "entity_type", "UNKNOWN"),
                     detector_name,
-                    getattr(entity, "entity_value", None),
                     getattr(entity, "start_char", None),
                     getattr(entity, "end_char", None),
                 )
@@ -831,10 +833,9 @@ class DetectionService:
             ):
                 if entity.metadata.pop("duplicate_upgraded_previous", False):
                     logger.info(
-                        "Upgraded previous %s entity from %s duplicate: value=%r confidence=%.3f span=%s-%s",
+                        "Upgraded previous %s entity from %s duplicate: confidence=%.3f span=%s-%s",
                         entity.entity_type,
                         detector_name,
-                        entity.entity_value,
                         entity.confidence_score,
                         entity.start_char,
                         entity.end_char,
@@ -874,10 +875,9 @@ class DetectionService:
         for entity in entities:
             if not DetectionService._is_valid_entity(entity, text_length):
                 logger.info(
-                    "Skipping invalid %s entity from %s: value=%r span=%s-%s",
+                    "Skipping invalid %s entity from %s: span=%s-%s",
                     getattr(entity, "entity_type", "UNKNOWN"),
                     detector_name,
-                    getattr(entity, "entity_value", None),
                     getattr(entity, "start_char", None),
                     getattr(entity, "end_char", None),
                 )
@@ -1282,7 +1282,7 @@ class DetectionService:
         reduction_pct = (saved / total_low * 100.0) if total_low > 0 else 0.0
 
         logger.info("==================================================")
-        logger.info("QWEN USAGE SUMMARY")
+        logger.info("GEMMA USAGE SUMMARY")
         logger.info("==================================================")
         logger.info("validation_candidates=%d", m.get("sent_to_llm_validation", 0))
         logger.info("residual_detection_chunks=%d", len(getattr(state, "detection_history", [])))
@@ -1335,7 +1335,12 @@ class DetectionService:
         )
         logger.info("==================================================")
 
-        while True:
+        route_iterations = 0
+        selected_detector_names: set[str] = set()
+        max_route_iterations = len(route) + 1
+
+        while route_iterations < max_route_iterations:
+            route_iterations += 1
             selection = self.router.select_next_detector(
                 state=state,
                 detector_getters=detector_getters,
@@ -1350,38 +1355,53 @@ class DetectionService:
 
             if selection.detector is None:
                 logger.info(
-                    "Detection Route Finished: %s (Remaining candidates: %d %s)",
+                    "Detection Route Finished: %s (Remaining candidates: %d)",
                     selection.reason,
                     selection.remaining_candidates["count"],
-                    selection.remaining_candidates["preview"],
                 )
                 break
 
             detector = selection.detector
+            detector_name = detector.name.lower()
+
+            if detector_name in selected_detector_names:
+                logger.error(
+                    "Detection route stopped by no-progress guard: detector=%s "
+                    "was selected more than once iteration=%d max_iterations=%d",
+                    detector.name,
+                    route_iterations,
+                    max_route_iterations,
+                )
+                break
+            selected_detector_names.add(detector_name)
+
             logger.info(
-                ">>> [DETECTOR RUN: %s] Reason: %s | Unresolved candidates remaining: %d %s",
+                ">>> [DETECTOR RUN: %s] Reason: %s | Unresolved candidates remaining: %d",
                 detector.name,
                 selection.reason,
                 selection.remaining_candidates["count"],
-                selection.remaining_candidates["preview"],
             )
+
+            # Gemma has a dedicated, bounded two-phase path below: residual
+            # discovery first, then batch candidate validation. Deferring it
+            # here prevents the generic detector loop from invoking the same
+            # expensive model repeatedly or validating before discovery.
+            if detector_name in self.LLM_DETECTOR_NAMES:
+                logger.info(
+                    "Deferring detector=%s to bounded residual discovery and "
+                    "candidate validation phases",
+                    detector.name,
+                )
+                break
+
             before_count = len(state.resolved_entities)
-            if detector.name.lower() in {"qwen3b", "qwen3:4b", "qwen"}:
-                new_entities = self._run_qwen_detector(
-                    detector,
-                    state,
-                    page_number,
-                    selection.remaining_candidates,
-                    config,
-                )
-            else:
-                new_entities = self._run_detector_on_chunks(
-                    detector=detector,
-                    chunks=semantic_chunks,
-                    state=state,
-                    page_number=page_number,
-                    allow_claimed_spans=False,
-                )
+            new_entities = self._run_detector_on_chunks(
+                detector=detector,
+                chunks=semantic_chunks,
+                state=state,
+                page_number=page_number,
+                allow_claimed_spans=False,
+            )
             self._calibrate_confidence(state.resolved_entities, config)
             remaining = state.remaining_candidate_summary(
                 min_chars=config.min_candidate_chars,
@@ -1400,6 +1420,14 @@ class DetectionService:
                     detector.name,
                     remaining["count"],
                 )
+
+        else:
+            logger.error(
+                "Detection route stopped at maximum iteration guard: "
+                "iterations=%d route_length=%d",
+                route_iterations,
+                len(route),
+            )
 
         # PHASE 4: High-Recall Residual Entity Discovery with Gemma
         # (Runs on uncovered / partially covered chunks to recover missed entities BEFORE validation)
@@ -1532,7 +1560,14 @@ class DetectionService:
             if not stripped or len(stripped) < 2 or not any(c.isalnum() for c in stripped):
                 continue
 
-            is_pure_label_prompt = bool(re.match(r"^[A-Za-z\s\-_/]+[:|\-]\s*$", raw_text.strip()))
+            label_candidate = re.sub(
+                r"^[\s\[\](){}|,;]+|[\s\[\](){}|,;]+$",
+                "",
+                raw_text.strip(),
+            )
+            is_pure_label_prompt = bool(
+                re.match(r"^[A-Za-z\s\-_/]+[:|\-]\s*$", label_candidate)
+            )
             if is_pure_label_prompt:
                 continue
 
@@ -1672,10 +1707,28 @@ class DetectionService:
                     page_number=page_number,
                 )
             elif hasattr(detector, "detect"):
+                known_entity_metadata = self._known_entities_for_qwen_context(
+                    state,
+                    chunk.start_char,
+                    chunk.end_char,
+                    config,
+                )
+                self._attach_orchestration_context(
+                    detector,
+                    state,
+                    remaining_text=chunk.text,
+                    candidate_summary=state.remaining_candidate_summary(
+                        min_chars=config.min_candidate_chars,
+                    ),
+                    context_offset=chunk.start_char,
+                    known_entities=known_entity_metadata,
+                )
                 chunk_results = detector.detect(
                     text=chunk.text,
                     page_number=page_number,
                 )
+                if chunk.start_char:
+                    self._offset_entities(chunk_results, chunk.start_char)
 
             chunk_latency = (time.perf_counter() - start_chunk_call) * 1000.0
 
@@ -1691,8 +1744,7 @@ class DetectionService:
                 # Check if span is unmasked and does not overlap locked authoritative spans
                 if not state.is_span_unmasked(item.start_char, item.end_char):
                     logger.info(
-                        "ResidualDuplicateSuppressed: entity=%r type=%r span=%d-%d reason='Overlaps locked/resolved span'",
-                        item.entity_value,
+                        "ResidualDuplicateSuppressed: type=%r span=%d-%d reason='Overlaps locked/resolved span'",
                         item.entity_type,
                         item.start_char,
                         item.end_char,
@@ -1700,11 +1752,11 @@ class DetectionService:
                     duplicates_suppressed += 1
                     continue
 
-                # Set provenance metadata
-                item.detector = getattr(detector, "name", "gemma")
+                active_model_name = getattr(detector, "MODEL_NAME", getattr(detector, "name", "AzureOpenAI"))
+                item.detector = getattr(detector, "name", "azure")
                 item.metadata["llm_mode"] = "RESIDUAL_DETECTION"
-                item.metadata["original_detector"] = getattr(detector, "MODEL_NAME", "gemma4:e4b")
-                item.metadata["validator"] = getattr(detector, "MODEL_NAME", "gemma4:e4b")
+                item.metadata["original_detector"] = active_model_name
+                item.metadata["validator"] = active_model_name
                 item.metadata["residual_discovery"] = True
                 item.metadata["chunk_text"] = chunk.text
                 item.metadata["chunk_id"] = chunk.chunk_id
@@ -1723,14 +1775,13 @@ class DetectionService:
                 state.pending_candidates.append(item)
 
                 logger.info(
-                    "GemmaResidualDetection: doc_id=doc chunk_id=%d value=%r type=%r span=%d-%d confidence=%.2f reason=%r detector=gemma4:e4b mode=RESIDUAL_DETECTION status=ADDED_TO_VALIDATION_POOL",
+                    "LLMResidualDetection: doc_id=doc chunk_id=%d type=%r span=%d-%d confidence=%.2f detector=%s mode=RESIDUAL_DETECTION status=ADDED_TO_VALIDATION_POOL",
                     chunk.chunk_id,
-                    item.entity_value,
                     item.entity_type,
                     item.start_char,
                     item.end_char,
                     item.confidence_score,
-                    item.metadata.get("residual_reason", ""),
+                    active_model_name,
                 )
 
             logger.info(
@@ -1793,6 +1844,24 @@ class DetectionService:
 
         Validates all low-confidence detector candidates + newly discovered Phase 4 residual candidates.
         """
+        return self._execute_gemma_candidate_validation_impl(detector, state, config, document_type)
+
+    def _execute_gemma_candidate_validation(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        config: DynamicDetectionConfig,
+        document_type: str | None = None,
+    ) -> None:
+        return self._execute_gemma_candidate_validation_impl(detector, state, config, document_type)
+
+    def _execute_gemma_candidate_validation_impl(
+        self,
+        detector: BaseDetector,
+        state: PipelineState,
+        config: DynamicDetectionConfig,
+        document_type: str | None = None,
+    ) -> None:
         if not state.pending_candidates:
             return
 
@@ -1810,13 +1879,28 @@ class DetectionService:
             if (cand.start_char, cand.end_char) in validated_spans:
                 match = next(e for e in validated if (e.start_char, e.end_char) == (cand.start_char, cand.end_char))
                 decision = match.metadata.get("gemma_validation") or match.metadata.get("qwen_validation", "CONFIRM")
-                reason = match.metadata.get("gemma_reason") or match.metadata.get("qwen_reason", "Validated by Gemma")
+                raw_reason = match.metadata.get("gemma_reason") or match.metadata.get("qwen_reason")
+                val_text = match.entity_value or cand.entity_value or ""
+                val_type = match.entity_type or cand.entity_type or "ENTITY"
+                if raw_reason and not raw_reason.lower().startswith("validated by"):
+                    reason = raw_reason
+                elif decision == "RECLASSIFY":
+                    reason = f"Reclassified '{val_text}' from {cand.entity_type} to {val_type} based on structural document context."
+                elif "FINANCIAL" in val_type or val_type in {"MONEY", "SALARY", "COST"}:
+                    reason = f"Confirmed monetary amount '{val_text}' as sensitive financial data."
+                elif "PERSON" in val_type or val_type in {"PATIENT", "DOCTOR", "PHYSICIAN"}:
+                    reason = f"Validated person identity '{val_text}' within document context."
+                elif "ORGANIZATION" in val_type or val_type in {"HOSPITAL", "INSURANCE_PROVIDER"}:
+                    reason = f"Confirmed organizational entity '{val_text}' in enterprise document context."
+                else:
+                    reason = f"Validated '{val_text}' as a sensitive {val_type} entity within document context."
+
                 if decision == "RECLASSIFY":
                     state.pipeline_metrics["llm_reclassified"] += 1
                 else:
                     state.pipeline_metrics["llm_confirmed"] += 1
 
-                orig_det = cand.metadata.get("original_detector") or cand.detector
+                orig_det = match.detector or cand.metadata.get("original_detector") or cand.detector
                 orig_mode = cand.metadata.get("llm_mode", "VALIDATION")
                 state.record_llm_candidate(
                     candidate_value=match.entity_value,
@@ -1832,17 +1916,22 @@ class DetectionService:
                 )
 
                 logger.info(
-                    "GemmaValidation: doc_id=doc candidate_id=%s model=gemma4:e4b mode=VALIDATION decision=%s original_type=%r final_type=%r reason=%r confidence=%.2f",
+                    "LLMValidation: doc_id=doc candidate_id=%s model=%s mode=VALIDATION decision=%s original_type=%r final_type=%r confidence=%.2f",
                     cand_id,
+                    getattr(detector, "MODEL_NAME", "AzureOpenAI"),
                     decision,
                     cand.entity_type,
                     match.entity_type,
-                    reason,
                     match.confidence_score,
                 )
             else:
                 state.pipeline_metrics["llm_rejected"] += 1
-                rejection_reason = cand.metadata.get("gemma_reason") or cand.metadata.get("qwen_reason", "Contextual noise or non-sensitive text")
+                rej_raw = cand.metadata.get("gemma_reason") or cand.metadata.get("qwen_reason")
+                if rej_raw and not rej_raw.lower().startswith("contextual noise"):
+                    rejection_reason = rej_raw
+                else:
+                    rejection_reason = f"Rejected '{cand.entity_value}' as non-sensitive text fragment or structural noise."
+
                 orig_det = cand.metadata.get("original_detector") or cand.detector
                 state.record_llm_candidate(
                     candidate_value=cand.entity_value,
@@ -1856,10 +1945,10 @@ class DetectionService:
                     page_number=cand.page_number,
                 )
                 logger.info(
-                    "GemmaValidation: doc_id=doc candidate_id=%s model=gemma4:e4b mode=VALIDATION decision=REJECT original_type=%r final_type=null reason=%r",
+                    "LLMValidation: doc_id=doc candidate_id=%s model=%s mode=VALIDATION decision=REJECT original_type=%r final_type=null",
                     cand_id,
+                    getattr(detector, "MODEL_NAME", "AzureOpenAI"),
                     cand.entity_type,
-                    rejection_reason,
                 )
 
         state.add_entities(
@@ -1894,13 +1983,13 @@ class DetectionService:
         )
         if not contexts:
             logger.info(
-                "Skipping Qwen3:4b residual discovery because no unresolved candidate or low-confidence context remains"
+                "Skipping Gemma residual discovery because no unresolved candidate or low-confidence context remains"
             )
             state.add_entities([], detector.name)
             return []
 
         logger.info(
-            "Running Qwen3:4b residual discovery on %d bounded context(s), max_contexts=%d window=%d",
+            "Running Gemma residual discovery on %d bounded context(s), max_contexts=%d window=%d",
             len(contexts),
             self.QWEN_MAX_CONTEXTS,
             self.QWEN_CONTEXT_WINDOW,
@@ -2123,8 +2212,10 @@ class DetectionService:
                 }
             ):
                 logger.info(
-                    "Discarding entity %s because it crosses line boundaries (contains newline)",
-                    entity.entity_value
+                    "Discarding entity type=%s span=%d-%d because it crosses line boundaries",
+                    entity.entity_type,
+                    entity.start_char,
+                    entity.end_char,
                 )
                 continue
             filtered_results.append(entity)
@@ -2178,9 +2269,6 @@ class DetectionService:
         entities: list[DetectionResult],
         document_type: str | None = None,
     ) -> list[DetectionResult]:
-        if not document_type:
-            return entities
-
         address_types = {"ADDRESS", "CITY_STATE_ZIP"}
         ordered = sorted(
             entities,
@@ -2550,16 +2638,23 @@ class DetectionService:
 
     @staticmethod
     def _display_detector_name(detector: str) -> str:
+        llm_provider = os.getenv("LLM_PROVIDER", "").lower()
+        active_llm_label = "gpt-5.4-mini" if llm_provider in {"azure", "azure_openai", "azureopenai"} else "gemma4:e4b"
+
+        llm_keys = {
+            "azure", "azureopenai", "azure_openai", "azure_detector",
+            "gemma", "gemma4e4b", "gemma4:e4b", "gemma_detector", "gemma4", "gemma-4",
+            "qwen", "qwen3b", "qwen3:4b", "qwen_validation", "llm"
+        }
+
         display_names = {
             "regex": "Regex",
             "presidio": "Presidio",
             "medspacy": "MedSpaCy",
             "gliner": "GLiNER",
-            "qwen": "Qwen3:4b",
-            "qwen3b": "Qwen3:4b",
-            "qwen3:4b": "Qwen3:4b",
-            "qwen_validation": "Qwen3:4b",
         }
+        for k in llm_keys:
+            display_names[k] = active_llm_label
         ignored = {"ollama", "validator", "llm-validation"}
         parts = [
             part.strip()

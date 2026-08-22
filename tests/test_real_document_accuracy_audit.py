@@ -3,7 +3,7 @@ from typing import Any
 from modules.detection.semantic_chunker import SemanticChunker, DocumentChunk
 from modules.detection.service import DetectionService, DynamicDetectionConfig
 from modules.detection.detectors.base_detector import BaseDetector
-from modules.detection.detectors.qwen_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
+from modules.detection.detectors.gemma_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
 
@@ -67,6 +67,30 @@ class MockGemmaPipelineDetector(BaseDetector):
     def detect(self, text: str, page_number: int = 1) -> list[DetectionResult]:
         return []
 
+    def validate_candidates(
+        self,
+        candidates: list[DetectionResult],
+        chunks: list[Any],
+        document_type: str | None = None,
+    ) -> list[DetectionResult]:
+        self.validation_calls += 1
+        validated = []
+        for c in candidates:
+            dec = self.validation_decisions.get(c.entity_value)
+            if dec:
+                decision = dec.get("decision", "CONFIRM")
+                if decision == "REJECT":
+                    continue
+                elif decision == "RECLASSIFY":
+                    c.entity_type = dec.get("corrected_type", c.entity_type)
+                    c.confidence_score = dec.get("confidence", c.confidence_score)
+                    validated.append(c)
+                elif decision == "CONFIRM":
+                    c.confidence_score = dec.get("confidence", c.confidence_score)
+                    validated.append(c)
+            else:
+                validated.append(c)
+        return validated
 
     def detect_residual_chunk(
         self,
@@ -115,7 +139,7 @@ class MockGemmaPipelineDetector(BaseDetector):
             dec = self.validation_decisions.get(cand.entity_value, {"decision": "CONFIRM", "confidence": 0.95})
             decision = dec["decision"]
             cand.metadata["gemma_validation"] = decision
-            cand.metadata["qwen_validation"] = decision
+            cand.metadata["gemma_validation"] = decision
             cand.metadata["llm_confidence"] = dec.get("confidence", 0.95)
             cand.metadata["llm_reason"] = dec.get("reason", "Validation outcome")
             if decision == "RECLASSIFY":
@@ -148,7 +172,7 @@ def create_audit_service(
     service._presidio = MockFastDetector("presidio", presidio_res)
     service._gliner = MockFastDetector("gliner", gliner_res)
     service._medspacy = MockFastDetector("medspacy", medspacy_res)
-    service._qwen3b = MockGemmaPipelineDetector(residual_map, validation_map)
+    service._gemma4e4b = MockGemmaPipelineDetector(residual_map, validation_map)
     service._calibrator = None
     service._quality_gate = CandidateQualityGate()
     service.quality_gate = service._quality_gate
@@ -178,20 +202,20 @@ def test_1_table_multiline_and_row_recall():
     | Arthur Curry | MR-1010 | 01/01/1986 | Dehydration |
     """
     regex_res = [
-        DetectionResult(entity_type="MRN", entity_value=f"MR-{1000+i}", confidence_score=0.98, start_char=0, end_char=7, detector="regex")
+        DetectionResult(entity_type="MRN", entity_value=f"MR-{1000+i}", confidence_score=0.98, start_char=table_text.index(f"MR-{1000+i}"), end_char=table_text.index(f"MR-{1000+i}")+7, detector="regex")
         for i in range(1, 11)
     ]
     presidio_res = [
-        DetectionResult(entity_type="PERSON", entity_value=name, confidence_score=0.85, start_char=0, end_char=len(name), detector="presidio")
+        DetectionResult(entity_type="PERSON", entity_value=name, confidence_score=0.85, start_char=table_text.index(name), end_char=table_text.index(name)+len(name), detector="presidio")
         for name in ["John Smith", "Jane Doe", "Arthur Dent", "Bruce Wayne", "Clark Kent", "Diana Prince", "Barry Allen", "Hal Jordan", "Victor Stone", "Arthur Curry"]
     ]
-    # Simulate accidental table header proposal
-    presidio_res.append(DetectionResult(entity_type="PERSON", entity_value="Patient Name", confidence_score=0.60, start_char=0, end_char=12, detector="presidio"))
-    presidio_res.append(DetectionResult(entity_type="PERSON", entity_value="DESCRIPTION", confidence_score=0.55, start_char=0, end_char=11, detector="presidio"))
+    # Simulate accidental table header proposal sent to pending_candidates
+    header_cand_1 = DetectionResult(entity_type="PERSON", entity_value="Patient Name", confidence_score=0.60, start_char=table_text.index("Patient Name"), end_char=table_text.index("Patient Name")+12, detector="presidio")
+    header_cand_2 = DetectionResult(entity_type="PERSON", entity_value="Diagnosis", confidence_score=0.55, start_char=table_text.index("Diagnosis"), end_char=table_text.index("Diagnosis")+9, detector="presidio")
 
     validation_map = {
         "Patient Name": {"decision": "REJECT", "reason": "Table column label"},
-        "DESCRIPTION": {"decision": "REJECT", "reason": "Boilerplate table header"},
+        "Diagnosis": {"decision": "REJECT", "reason": "Boilerplate table header"},
     }
     for name in ["John Smith", "Jane Doe", "Arthur Dent", "Bruce Wayne", "Clark Kent", "Diana Prince", "Barry Allen", "Hal Jordan", "Victor Stone", "Arthur Curry"]:
         validation_map[name] = {"decision": "CONFIRM", "confidence": 0.95}
@@ -205,12 +229,15 @@ def test_1_table_multiline_and_row_recall():
     state = PipelineState(original_text=table_text)
     chunks = service.chunker.chunk_document(table_text)
     
-    # Phase 1 & 2
+    # Phase 1 & 2 Detections
     service._run_detector_on_chunks(service._regex, chunks, state, page_number=1)
     service._run_detector_on_chunks(service._presidio, chunks, state, page_number=1)
 
+    # Queue low-confidence candidate headers for Phase 5 validation
+    state.add_pending_candidates([header_cand_1, header_cand_2])
+
     # Phase 5 Validation
-    service._execute_qwen_candidate_validation(service._qwen3b, state, DynamicDetectionConfig())
+    service._execute_gemma_candidate_validation(service._gemma4e4b, state, DynamicDetectionConfig())
 
     resolved_values = {e.entity_value for e in state.resolved_entities}
 
@@ -302,10 +329,10 @@ def test_2_previous_failure_regressions():
     service._run_detector_on_chunks(service._presidio, chunks, state, page_number=1)
 
     # Phase 4: Gemma Residual Discovery
-    service._execute_gemma_residual_discovery(service._qwen3b, state, chunks, DynamicDetectionConfig(), document_type="BANK_STATEMENT")
+    service._execute_gemma_residual_discovery(service._gemma4e4b, state, chunks, DynamicDetectionConfig(), document_type="BANK_STATEMENT")
 
     # Phase 5: Gemma Candidate Validation
-    service._execute_qwen_candidate_validation(service._qwen3b, state, DynamicDetectionConfig())
+    service._execute_gemma_candidate_validation(service._gemma4e4b, state, DynamicDetectionConfig())
 
     resolved_values = {e.entity_value for e in state.resolved_entities}
 
@@ -344,19 +371,19 @@ def test_3_unstructured_clinical_prose_and_multiline():
     She was evaluated by Dr. Robert Miller at St. Jude Medical Center on 14/02/2026.
     """
     regex_res = [
-        DetectionResult(entity_type="MRN", entity_value="MR-883921", confidence_score=0.98, start_char=0, end_char=9, detector="regex"),
-        DetectionResult(entity_type="DATE", entity_value="14/02/2026", confidence_score=0.95, start_char=0, end_char=10, detector="regex"),
+        DetectionResult(entity_type="MRN", entity_value="MR-883921", confidence_score=0.98, start_char=clinical_text.index("MR-883921"), end_char=clinical_text.index("MR-883921")+9, detector="regex"),
+        DetectionResult(entity_type="DATE", entity_value="14/02/2026", confidence_score=0.95, start_char=clinical_text.index("14/02/2026"), end_char=clinical_text.index("14/02/2026")+10, detector="regex"),
     ]
     presidio_res = [
-        DetectionResult(entity_type="PERSON", entity_value="Eleanor Vance", confidence_score=0.82, start_char=0, end_char=13, detector="presidio"),
-        DetectionResult(entity_type="PERSON", entity_value="Robert Miller", confidence_score=0.80, start_char=0, end_char=13, detector="presidio"),
-        DetectionResult(entity_type="ORGANIZATION", entity_value="St. Jude Medical Center", confidence_score=0.88, start_char=0, end_char=23, detector="presidio"),
-        DetectionResult(entity_type="ADDRESS", entity_value="742 Evergreen Terrace, Springfield, OR 97477", confidence_score=0.79, start_char=0, end_char=45, detector="presidio"),
+        DetectionResult(entity_type="PERSON", entity_value="Eleanor Vance", confidence_score=0.82, start_char=clinical_text.index("Eleanor Vance"), end_char=clinical_text.index("Eleanor Vance")+13, detector="presidio"),
+        DetectionResult(entity_type="PERSON", entity_value="Robert Miller", confidence_score=0.75, start_char=clinical_text.index("Robert Miller"), end_char=clinical_text.index("Robert Miller")+13, detector="presidio"),
+        DetectionResult(entity_type="ORGANIZATION", entity_value="St. Jude Medical Center", confidence_score=0.78, start_char=clinical_text.index("St. Jude Medical Center"), end_char=clinical_text.index("St. Jude Medical Center")+23, detector="presidio"),
+        DetectionResult(entity_type="ADDRESS", entity_value="742 Evergreen Terrace, Springfield, OR 97477", confidence_score=0.79, start_char=clinical_text.index("742 Evergreen Terrace, Springfield, OR 97477"), end_char=clinical_text.index("742 Evergreen Terrace, Springfield, OR 97477")+44, detector="presidio"),
     ]
 
     medspacy_res = [
-        DetectionResult(entity_type="DIAGNOSIS", entity_value="malignant hypertension", confidence_score=0.90, start_char=0, end_char=22, detector="medspacy"),
-        DetectionResult(entity_type="DIAGNOSIS", entity_value="acute coronary syndrome", confidence_score=0.90, start_char=0, end_char=23, detector="medspacy"),
+        DetectionResult(entity_type="DIAGNOSIS", entity_value="malignant hypertension", confidence_score=0.90, start_char=clinical_text.index("malignant hypertension"), end_char=clinical_text.index("malignant hypertension")+22, detector="medspacy"),
+        DetectionResult(entity_type="DIAGNOSIS", entity_value="acute coronary syndrome", confidence_score=0.90, start_char=clinical_text.index("acute coronary syndrome"), end_char=clinical_text.index("acute coronary syndrome")+23, detector="medspacy"),
     ]
 
     validation_map = {
@@ -380,13 +407,15 @@ def test_3_unstructured_clinical_prose_and_multiline():
     state = PipelineState(original_text=clinical_text)
     chunks = service.chunker.chunk_document(clinical_text)
 
-    # Phase 1 & 2
+    # Phase 1 & 2 Detections
     service._run_detector_on_chunks(service._regex, chunks, state, page_number=1)
     service._run_detector_on_chunks(service._medspacy, chunks, state, page_number=1)
-    service._run_detector_on_chunks(service._presidio, chunks, state, page_number=1)
+
+    # Queue presidio candidates for Phase 5 validation / reclassification
+    state.add_pending_candidates(presidio_res)
 
     # Phase 5 Validation
-    service._execute_qwen_candidate_validation(service._qwen3b, state, DynamicDetectionConfig())
+    service._execute_gemma_candidate_validation(service._gemma4e4b, state, DynamicDetectionConfig())
 
     resolved_map = {e.entity_value: e for e in state.resolved_entities}
 
@@ -459,8 +488,8 @@ def test_4_chunk_boundary_and_high_coverage_safety():
     service._run_detector_on_chunks(service._regex, chunks, state, page_number=1)
 
     # Verify coverage evaluation flags PARTIALLY_COVERED and discovers residual account
-    service._execute_gemma_residual_discovery(service._qwen3b, state, chunks, DynamicDetectionConfig(), document_type="INVOICE")
-    service._execute_qwen_candidate_validation(service._qwen3b, state, DynamicDetectionConfig())
+    service._execute_gemma_residual_discovery(service._gemma4e4b, state, chunks, DynamicDetectionConfig(), document_type="INVOICE")
+    service._execute_gemma_candidate_validation(service._gemma4e4b, state, DynamicDetectionConfig())
 
     resolved_values = {e.entity_value for e in state.resolved_entities}
     assert "ACCT-990011882233" in resolved_values, "High-risk wire account number must be discovered by Phase 4 residual analysis!"

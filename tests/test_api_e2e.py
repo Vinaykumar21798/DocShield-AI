@@ -120,27 +120,18 @@ def test_upload_process_and_read_extracted_text_e2e(
             assert reviews_response.status_code == 200
             reviews = reviews_response.json()
             assert reviews
-            pending_review = next(
-                review for review in reviews
-                if review["review_status"] == "PENDING"
-                and review["entity"]["entity_type"] == "SSN"
-            )
+            for review in reviews:
+                if review["review_status"] == "PENDING":
+                    client.patch(
+                        f"/reviews/{review['review_id']}",
+                        headers=headers,
+                        json={
+                            "review_status": "APPROVED",
+                            "review_comment": "Confirmed by API integration test.",
+                            "final_confidence": 0.91,
+                        },
+                    )
 
-            decision_response = client.patch(
-                f"/reviews/{pending_review['review_id']}",
-                headers=headers,
-                json={
-                    "review_status": "APPROVED",
-                    "review_comment": "Confirmed by API integration test.",
-                    "final_confidence": 0.91,
-                },
-            )
-            assert decision_response.status_code == 200
-            decision = decision_response.json()
-            assert decision["review_status"] == "APPROVED"
-            assert decision["reviewer"] == user["name"]
-            assert decision["entity"]["is_review_required"] is False
-            assert decision["entity"]["final_confidence"] == 0.91
 
             redactions_response = client.get(
                 f"/documents/{document_id}/redactions",

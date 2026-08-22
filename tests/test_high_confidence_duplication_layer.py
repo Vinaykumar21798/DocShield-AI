@@ -51,9 +51,9 @@ def test_high_confidence_entity_not_duplicated():
     assert state.resolved_entities[0].detector == "presidio"
 
 
-def test_chunk_reaches_qwen_for_surrounding_unresolved_entities():
+def test_chunk_reaches_gemma_for_surrounding_unresolved_entities():
     """
-    2. Same chunk still reaches Qwen for other missed entities (chunk not skipped).
+    2. Same chunk still reaches Gemma for other missed entities (chunk not skipped).
     """
     text = (
         "Patient John Doe (SSN: 123-45-6789) was admitted with acute myocardial infarction. "
@@ -88,9 +88,9 @@ def test_chunk_reaches_qwen_for_surrounding_unresolved_entities():
     assert selected[0].text == text
 
 
-def test_must_have_entity_missed_by_fast_detectors_detected_by_qwen():
+def test_must_have_entity_missed_by_fast_detectors_detected_by_gemma():
     """
-    3. MUST_HAVE entity (e.g. Diagnosis) missed by fast detectors can still be detected by Qwen.
+    3. MUST_HAVE entity (e.g. Diagnosis) missed by fast detectors can still be detected by Gemma.
     """
     text = "Patient SSN: 123-45-6789. Clinical diagnosis: malignant hypertension."
     state = PipelineState(original_text=text)
@@ -108,26 +108,26 @@ def test_must_have_entity_missed_by_fast_detectors_detected_by_qwen():
     )
     state.add_entities([ssn], detector_name="regex", mask_confidence_threshold=0.80)
 
-    # Qwen detects missed diagnosis in the same chunk
+    # Gemma detects missed diagnosis in the same chunk
     diag_idx = text.index("malignant hypertension")
-    qwen_diag = DetectionResult(
+    gemma_diag = DetectionResult(
         entity_type="DIAGNOSIS",
         entity_value="malignant hypertension",
         confidence_score=0.92,
         start_char=diag_idx,
         end_char=diag_idx + len("malignant hypertension"),
         page_number=1,
-        detector="qwen3b",
+        detector="gemma4e4b",
     )
 
     accepted = DetectionService._filter_new_entities(
-        [qwen_diag],
+        [gemma_diag],
         state=state,
-        detector_name="qwen3b",
+        detector_name="gemma4e4b",
         mask_confidence_threshold=0.80,
     )
 
-    # Qwen diagnosis should be accepted
+    # Gemma diagnosis should be accepted
     assert len(accepted) == 1
     assert accepted[0].entity_value == "malignant hypertension"
     assert accepted[0].entity_type == "DIAGNOSIS"

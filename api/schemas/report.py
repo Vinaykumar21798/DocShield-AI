@@ -14,7 +14,7 @@ class ReportResponse(BaseModel):
     generated_by: Optional[str] = None
     processing_duration_ms: Optional[int] = None
     detectors_used: Optional[str] = None
-    qwen_invoked: bool = False
+    gemma_invoked: bool = False
     total_pii: int = 0
     total_phi: int = 0
     review_completion: bool = False

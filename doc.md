@@ -23,7 +23,7 @@ Rules:
 - Use Docker port `6380`, not `6379`, for Docker Redis.
 - Use `.env.local` only for local Python.
 - Do not add fixed `container_name` values to Compose.
-- Keep `qwen3:4b` as the only configured Ollama model.
+- Keep `gemma4:e4b` as the only configured Ollama model.
 
 ## 3. Components
 
@@ -188,7 +188,7 @@ Extracted text
   -> GLiNER if needed
   -> mask accepted high-confidence spans
   -> check remaining candidates
-  -> Qwen3:4b only for unresolved/low-confidence spans
+  -> Gemma only for unresolved/low-confidence spans
   -> Human Review for unresolved or final low-confidence results
 ```
 
@@ -208,7 +208,7 @@ Extracted text
   -> GLiNER if needed
   -> mask accepted high-confidence spans
   -> check remaining candidates
-  -> Qwen3:4b only for unresolved/low-confidence spans
+  -> Gemma only for unresolved/low-confidence spans
   -> Human Review for unresolved or final low-confidence results
 ```
 
@@ -222,9 +222,9 @@ Presidio < 80%   -> next detector
 MedSpaCy >= 80%  -> store/finalize that span
 MedSpaCy < 80%   -> next detector
 GLiNER >= 80%    -> store/finalize that span
-GLiNER < 80%     -> Qwen3:4b
-Qwen3:4b >= 80%  -> store/finalize that span
-Qwen3:4b < 80%   -> Human Review
+GLiNER < 80%     -> Gemma
+Gemma >= 80%     -> store/finalize that span
+Gemma < 80%      -> Human Review
 ```
 
 Important behavior:
@@ -232,7 +232,7 @@ Important behavior:
 - The pipeline does not stop just because Regex found something.
 - A high-confidence span is masked so later detectors do not duplicate it.
 - Remaining unresolved spans continue to the next detector.
-- Qwen3:4b is a final detector, not a validation layer.
+- Gemma performs bounded residual discovery and candidate validation.
 - Human review is the validation step.
 - If a detector crashes, the error is logged, that detector is skipped, and the next detector runs when candidates remain.
 - A detector crash should not fail the whole document unless the workflow cannot continue safely.
@@ -253,14 +253,14 @@ Status: Auto Ready or Review state from DB
 Decision: Approve / Reject only when review is required
 ```
 
-Example stored Qwen result:
+Example stored Gemma result:
 
 ```text
 Entity: HOSPITAL_OR_FACILITY
 Value: Farmington Medical Center
 Category: PHI
 Confidence: 96%
-Detector: Qwen3:4b
+Detector: Gemma
 Status: Auto Ready or Review state from DB
 Decision: Approve / Reject only when review is required
 ```
@@ -370,7 +370,7 @@ Expected services:
 Docker service notes:
 
 - API uses `BYPASS_LLM=True` because it does not run document detection directly.
-- Worker uses `BYPASS_LLM=False`, `OLLAMA_REQUIRED=True`, and `OLLAMA_REQUIRED_MODELS=qwen3:4b`.
+- Worker uses `BYPASS_LLM=False`, `OLLAMA_REQUIRED=True`, and `OLLAMA_REQUIRED_MODELS=gemma4:e4b`.
 - Containers reach Ollama through `http://host.docker.internal:11434`.
 - The local GUI override bind mounts `./storage:/app/storage`.
 
@@ -408,7 +408,7 @@ POSTGRES_USER=postgres
 POSTGRES_PASSWORD=<your-local-password>
 DATABASE_URL=postgresql+psycopg2://postgres:<your-local-password>@127.0.0.1:5432/pii_phi_document_intelligence_poc
 REDIS_URL=redis://localhost:6379/0
-OLLAMA_REQUIRED_MODELS=qwen3:4b
+OLLAMA_REQUIRED_MODELS=gemma4:e4b
 GLINER_ALLOW_MODEL_DOWNLOAD=True
 HF_HOME=.cache/huggingface
 DETECTION_HIGH_CONFIDENCE_THRESHOLD=0.80
@@ -733,4 +733,4 @@ Keep `numpy==1.26.4` unless the spaCy/thinc/MedSpaCy stack is retested.
 - Keep Docker and local Python profiles separate.
 - Do not commit `.env.local`, runtime uploads, extracted text, redacted files, or generated reports.
 - Do not reintroduce `container_name` in Compose.
-- Keep Ollama configuration on `qwen3:4b` unless the team explicitly changes the model decision.
+- Keep Ollama configuration on `gemma4:e4b` unless the team explicitly changes the model decision.

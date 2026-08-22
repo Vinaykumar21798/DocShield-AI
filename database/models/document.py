@@ -1,5 +1,5 @@
 from uuid import uuid4
-from sqlalchemy import Column, DateTime, Integer, String, ForeignKey
+from sqlalchemy import Column, DateTime, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -61,6 +61,11 @@ class Document(Base):
         nullable=True,
         index=True,
     )
+
+    prompt_tokens = Column(Integer, nullable=True)
+    completion_tokens = Column(Integer, nullable=True)
+    llm_cost_usd = Column(Float, nullable=True)
+    llm_provider = Column(String(50), nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

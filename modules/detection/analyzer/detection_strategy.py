@@ -17,7 +17,7 @@ class DetectionStrategy:
     use_presidio: bool = True
     use_gliner: bool = True
     use_medspacy: bool = True
-    use_qwen: bool = False
+    use_gemma: bool = False
 
     selected_detectors: list[str] = field(default_factory=list)
 

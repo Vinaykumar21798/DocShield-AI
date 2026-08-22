@@ -56,6 +56,7 @@ class EntityValidator:
         "complete",
         "fsa",
         "health",
+        "healthcare",
         "hipaa",
         "implemented",
         "medical",
@@ -76,6 +77,22 @@ class EntityValidator:
         "totals",
         "phi",
         "keep",
+        "patient",
+        "weight",
+        "excluded services",
+        "excluded services & other covered services",
+        "excluded services & other covered services not covered: cosmetic",
+        "covered services",
+        "not covered",
+        "cosmetic",
+        "what you can do",
+        "what happened",
+        "what information was involved",
+        "what we are doing",
+        "for more information",
+        "legal notice",
+        "notice of data breach",
+        "notice of data breach involving your health information",
         "comprehensive",
         "metabolic",
         "panel",
@@ -120,6 +137,60 @@ class EntityValidator:
         "clinical course",
         "procedures",
         "medications",
+        "patient name",
+        "member name",
+        "subscriber name",
+        "provider name",
+        "physician name",
+        "facility name",
+        "service date",
+        "billing date",
+        "visit date",
+        "visitdate",
+        "eob date",
+        "eobdate",
+        "statement date",
+        "statementdate",
+        "allowed amount",
+        "billed amount",
+        "paid amount",
+        "copay amount",
+        "amount covered",
+        "amountcovered",
+        "amount billed",
+        "amountbilled",
+        "amount paid",
+        "amountpaid",
+        "total billed",
+        "totalbilled",
+        "total paid",
+        "totalpaid",
+        "procedure code",
+        "procedurecode",
+        "diagnosis code",
+        "diagnosiscode",
+        "insurance id",
+        "insuranceid",
+        "policy number",
+        "policynumber",
+        "claim number",
+        "claimnumber",
+        "group number",
+        "groupnumber",
+        "subscriber id",
+        "subscriberid",
+        "member id",
+        "memberid",
+        "claim status",
+        "coverage type",
+        "patient responsibility",
+        "deductible amount",
+        "para obtener ayuda",
+        "ayuda en español",
+        "atención al cliente",
+        "language access services",
+        "assistance services",
+        "language assistance",
     }
     CLINICAL_VALUE_TYPES = {
         "abdominal pain": "SYMPTOM",
@@ -229,6 +300,13 @@ class EntityValidator:
         if entity_type not in cls.KNOWN_ENTITY_TYPES:
             return None
 
+        # Clean multiline candidate text for person/name candidates if second line is a structural label (e.g. "Linda Morgan\nFamily Member" -> "Linda Morgan")
+        if "\n" in candidate.entity_value and entity_type in {"PERSON", "PATIENT", "DOCTOR"}:
+            lines = [line.strip() for line in candidate.entity_value.splitlines() if line.strip()]
+            if len(lines) > 1 and re.search(r"(?i)^(?:Family Member|DOB|Insurance|Diagnosis|Prescription|Relationship|Relative|Primary)", lines[1]):
+                candidate.entity_value = lines[0]
+                candidate.end_char = candidate.start_char + len(lines[0])
+
         value = candidate.entity_value.strip()
         original_type = entity_type
         structurally_validated = False
@@ -337,6 +415,12 @@ class EntityValidator:
                 return None
             structurally_validated = True
 
+        elif entity_type in {"PHONE_NUMBER", "US_PHONE_NUMBER", "FAX_NUMBER", "ORGANIZATION_CONTACT_INFO"}:
+            digits_count = sum(c.isdigit() for c in value)
+            if digits_count < 7:
+                return None
+            structurally_validated = True
+
         elif entity_type in cls.IDENTIFIER_TYPES:
             if not cls.is_identifier_value(value, entity_type):
                 return None
@@ -354,10 +438,10 @@ class EntityValidator:
             "passed" if structurally_validated else "not_applicable"
         )
 
-        # Qwen confidence is self-reported.  Semantic Qwen-only candidates stay
+        # Gemma confidence is self-reported.  Semantic Gemma-only candidates stay
         # below the automatic-review threshold unless a deterministic rule has
         # validated their type and value.
-        if "qwen" in candidate.detector.lower() and not structurally_validated:
+        if "gemma" in candidate.detector.lower() and not structurally_validated:
             candidate.confidence_score = min(candidate.confidence_score, 0.79)
 
         candidate.text = candidate.entity_value
@@ -381,8 +465,27 @@ class EntityValidator:
         cls,
         entity_type: str,
         value: str,
-        semantic_key: str,
+        semantic_key: str | None = None,
     ) -> bool:
+        if semantic_key is None:
+            semantic_key = cls._semantic_key(value)
+        # Strip bullet markers and special characters
+        clean_value = re.sub(r"^(?:[•*\-]|â€¢|\d+\.|\w\.)\s*", "", value.strip(), flags=re.IGNORECASE)
+        clean_semantic_key = clean_value.lower()
+
+        # Reject single-word vague noise
+        if clean_semantic_key in {"info", "patient info", "provider info"}:
+            return True
+
+        # Reject audit report verb phrases or multi-word sentence fragments for any entity candidate
+        if re.search(r"\b(?:disclosed|exposed|repeated|references|documentation|noted|disclosures|compliance|cleartext|sections|outcomes|recommendation|strategy|protocols|policy|policies|portal|leak|sharing|tokenize|tracking|identifiers|plans|response|review|communication|distribution|redaction|prior)\b", clean_semantic_key):
+            return True
+
+        norm_type = entity_type.strip().upper().replace(" ", "_")
+        if len(clean_value.split()) > 4 and norm_type != "ADDRESS":
+            return True
+
+        norm_type = entity_type.strip().upper().replace(" ", "_")
         semantic_types = cls.GENERIC_SEMANTIC_TYPES | {
             "HOSPITAL",
             "MEDICAL_FACILITY",
@@ -395,21 +498,38 @@ class EntityValidator:
             "DIAGNOSIS",
             "DISEASE",
             "MEDICATION",
+            "CLINICAL_NOTES",
+            "FULL_NAME",
+            "PERSON_NAME",
         }
-        if entity_type not in semantic_types:
+        if norm_type not in semantic_types and not any(t in norm_type for t in ["PERSON", "NAME", "PHONE", "NOTE", "DIAGNOSIS"]):
             return False
 
-        if semantic_key in cls.BAD_GENERIC_VALUES:
+        if clean_semantic_key in cls.BAD_GENERIC_VALUES:
             return True
 
-        if re.search(r"\b(?:machine|serial|serial\s+number|model\s+number|catheter|asset\s+tag|lot\s+number|equipment)\b", semantic_key):
+        clean_key = re.sub(r"[^a-z0-9]", "", clean_value.lower())
+        if clean_key in {
+            "amountcovered", "amountbilled", "amountpaid", "totalbilled", "totalpaid",
+            "visitdate", "procedurecode", "diagnosiscode", "insuranceid", "policynumber",
+            "claimnumber", "groupnumber", "subscriberid", "memberid", "eobdate", "statementdate",
+            "patient", "weight", "excludedservices", "coveredservices", "notcovered", "cosmetic",
+            "whatyoucando", "whathappened", "whatwearedoing", "formoreinformation", "legalnotice",
+            "excludedservicesothercoveredservicesnotcoveredcosmetic", "excludedservicesothercoveredservices"
+        }:
             return True
 
-        normalized = cls._normalized_text(value)
-        if re.match(r"^(?:[•*\-]|â€¢)\s*(?:keep|always|this)\b", normalized, re.IGNORECASE):
+        if re.search(r"\b(?:disclosed|exposed|repeated|references|documentation|noted|disclosures|compliance|cleartext|sections|outcomes|recommendation|strategy|protocols)\b", clean_semantic_key):
             return True
 
-        if re.fullmatch(r"(?i)(?:level\s*\d+|date of service|total|totals|phi|ppo|hmo|epo|pos)", normalized):
+        if len(clean_value.split()) > 4 and entity_type in {"PERSON", "PATIENT", "DOCTOR", "PHONE_NUMBER", "US_PHONE_NUMBER", "SSN", "ORGANIZATION", "DISEASE"}:
+            return True
+
+        normalized = cls._normalized_text(clean_value)
+        if re.match(r"^(?:[•*\-]|â€¢)\s*(?:keep|always|this|patient)\b", normalized, re.IGNORECASE):
+            return True
+
+        if re.fullmatch(r"(?i)(?:level\s*\d+|date of service|total|totals|phi|ppo|hmo|epo|pos|patient|weight|excluded services)", normalized):
             return True
 
         return False
@@ -426,12 +546,20 @@ class EntityValidator:
             return False
 
         span = source_text[start:end]
+
+        # Strip field label prefixes (e.g. "SSN: 123-45-6789" -> "123-45-6789")
+        prefix_match = re.match(r"^(?:SSN|PATIENT NAME|PATIENT|NAME|CONTACT NUMBERS|PHONE|FAX|PHONE/FAX|ADDRESS|RE):\s*", span, re.IGNORECASE)
+        if prefix_match:
+            prefix_len = len(prefix_match.group(0))
+            start = start + prefix_len
+            span = source_text[start:end]
+
         leading = len(span) - len(span.lstrip())
         trailing = len(span) - len(span.rstrip())
         exact_value = span.strip()
         if cls._normalized_text(exact_value) != cls._normalized_text(
             candidate.entity_value
-        ):
+        ) and cls._normalized_text(exact_value) != cls._normalized_text(re.sub(r"^(?:SSN|PATIENT NAME|PATIENT|NAME|CONTACT NUMBERS|PHONE|FAX|PHONE/FAX|ADDRESS|RE):\s*", "", candidate.entity_value, flags=re.IGNORECASE)):
             return False
 
         candidate.start_char = start + leading

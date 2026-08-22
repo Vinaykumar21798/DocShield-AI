@@ -18,10 +18,13 @@ if (!(Test-Path ".venv")) {
     Write-Host "Created .venv"
 }
 
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+& $VenvPython -m pip install -r requirements.txt
+& $VenvPython -m spacy download en_core_web_sm
+
 Write-Host "Local profile initialized."
 Write-Host "Next commands:"
 Write-Host "  .\.venv\Scripts\Activate.ps1"
-Write-Host "  python -m pip install -r requirements.txt"
 Write-Host "  .\scripts\local-check.ps1"
 Write-Host "  .\scripts\local-migrate.ps1"
 Write-Host "  .\scripts\local-api.ps1"

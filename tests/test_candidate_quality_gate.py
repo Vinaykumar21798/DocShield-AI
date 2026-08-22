@@ -5,7 +5,7 @@ from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
 from modules.detection.semantic_chunker import SemanticChunker
 from modules.detection.service import DetectionService
-from modules.detection.detectors.qwen_detector import Qwen3BDetector
+from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
 from modules.detection.detectors.regex_detector import RegexDetector
 
 
@@ -156,9 +156,9 @@ def test_genuine_patient_and_address_pass_to_pending():
     assert decision_patient.decision == "PENDING_FOR_LLM"
 
 
-def test_qwen_validation_confirm_reclassify_reject():
-    """19, 20, 21, 22: Qwen validation decisions (CONFIRM, RECLASSIFY, REJECT) without inventing spans."""
-    qwen = Qwen3BDetector()
+def test_gemma_validation_confirm_reclassify_reject():
+    """19, 20, 21, 22: Gemma validation decisions (CONFIRM, RECLASSIFY, REJECT) without inventing spans."""
+    gemma = Gemma4E4BDetector()
     chunker = SemanticChunker()
 
     # Case 1: CONFIRM real person
@@ -173,11 +173,11 @@ def test_qwen_validation_confirm_reclassify_reject():
         page_number=1,
         detector="presidio",
     )
-    res1 = qwen.validate_candidates([cand1], chunks1, document_type="Insurance Policy / Benefit Summary")
+    res1 = gemma.validate_candidates([cand1], chunks1, document_type="Insurance Policy / Benefit Summary")
     assert len(res1) == 1
     assert res1[0].entity_value == "David A. Wilson"
     assert res1[0].entity_type == "PERSON"
-    assert res1[0].detector == "Qwen"
+    assert res1[0].detector == "Gemma"
 
     # Case 2: RECLASSIFY pharmacy misclassified as PERSON -> ORGANIZATION
     text2 = "Prescription filled at Westfield Pharmacy on Main Street."
@@ -191,10 +191,10 @@ def test_qwen_validation_confirm_reclassify_reject():
         page_number=1,
         detector="presidio",
     )
-    res2 = qwen.validate_candidates([cand2], chunks2, document_type="Explanation of Benefits (EOB) / Medical Claim")
+    res2 = gemma.validate_candidates([cand2], chunks2, document_type="Explanation of Benefits (EOB) / Medical Claim")
     assert len(res2) == 1
     assert res2[0].entity_type == "ORGANIZATION"
-    assert res2[0].detector == "Qwen"
+    assert res2[0].detector == "Gemma"
 
     # Case 3: REJECT benefit term
     text3 = "Coverage provisions: Mail Order $20 Copay."
@@ -208,12 +208,12 @@ def test_qwen_validation_confirm_reclassify_reject():
         page_number=1,
         detector="presidio",
     )
-    res3 = qwen.validate_candidates([cand3], chunks3, document_type="Summary of Benefits and Coverage (SBC)")
+    res3 = gemma.validate_candidates([cand3], chunks3, document_type="Summary of Benefits and Coverage (SBC)")
     assert len(res3) == 0
 
 
-def test_qwen_residual_detection_discovers_unmapped_entities_only():
-    """23 & 24: Residual Qwen detection discovers missed entity in same chunk without duplicating locked entity."""
+def test_gemma_residual_detection_discovers_unmapped_entities_only():
+    """23 & 24: Residual Gemma detection discovers missed entity in same chunk without duplicating locked entity."""
     text = "Patient SSN: 123-45-6789. Assessment revealed acute myocardial infarction."
     state = PipelineState(original_text=text)
 
@@ -230,7 +230,7 @@ def test_qwen_residual_detection_discovers_unmapped_entities_only():
     )
     state.add_entities([ssn], detector_name="regex", mask_confidence_threshold=0.80)
 
-    # 2. Qwen residual discovers diagnosis
+    # 2. Gemma residual discovers diagnosis
     diag_idx = text.index("acute myocardial infarction")
     diag = DetectionResult(
         entity_type="DIAGNOSIS",
@@ -239,14 +239,14 @@ def test_qwen_residual_detection_discovers_unmapped_entities_only():
         start_char=diag_idx,
         end_char=diag_idx + len("acute myocardial infarction"),
         page_number=1,
-        detector="qwen3b",
+        detector="gemma4e4b",
     )
 
-    accepted = DetectionService._filter_new_entities([diag], state, "qwen3b", 0.80)
+    accepted = DetectionService._filter_new_entities([diag], state, "gemma4e4b", 0.80)
     assert len(accepted) == 1
     assert accepted[0].entity_value == "acute myocardial infarction"
 
-    # Attempt duplicate SSN by Qwen residual should be rejected
+    # Attempt duplicate SSN by Gemma residual should be rejected
     dup_ssn = DetectionResult(
         entity_type="SSN",
         entity_value="123-45-6789",
@@ -254,9 +254,9 @@ def test_qwen_residual_detection_discovers_unmapped_entities_only():
         start_char=ssn_idx,
         end_char=ssn_idx + 11,
         page_number=1,
-        detector="qwen3b",
+        detector="gemma4e4b",
     )
-    dup_accepted = DetectionService._filter_new_entities([dup_ssn], state, "qwen3b", 0.80)
+    dup_accepted = DetectionService._filter_new_entities([dup_ssn], state, "gemma4e4b", 0.80)
     assert len(dup_accepted) == 0
 
 

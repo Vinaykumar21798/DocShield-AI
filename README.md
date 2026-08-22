@@ -1,330 +1,185 @@
 # DocShield-AI
 
-DocShield-AI is a FastAPI document-processing service for upload, OCR/text extraction, PII/PHI detection, human review, redaction artifacts, and audit reports. The repo also includes a static proof-of-concept UI served by the API at `/ui/`.
+**DocShield-AI** is an enterprise-grade **PII/PHI Document Intelligence & Automated Redaction Engine** built with FastAPI, PostgreSQL, Redis, and a 5-layer hybrid detection pipeline. It ingests healthcare records, medical summaries, EOBs, and financial documents, extracts text (via native parsing or OCR), detects sensitive entities, calibrates confidence, routes low-confidence entities to human review, and produces redacted output text files alongside JSON audit reports.
 
-## What It Does
+---
 
-- Accepts single and bulk document uploads.
-- Stores document and workflow state in PostgreSQL.
-- Queues background work in Redis.
-- Extracts text from TXT, DOCX, searchable PDFs, scanned PDFs, mixed PDFs, and images.
-- Detects sensitive PII/PHI entities with a routed detector pipeline.
-- Creates review rows for human approval/rejection.
-- Produces redacted text files and JSON audit reports.
-- Serves REST APIs, Swagger docs, and a static local UI.
+## Key Capabilities
 
-## Runtime Profiles
+* **Multi-Format Document Ingestion**: Supports `.pdf` (native vector & scanned), `.txt`, `.docx`, and images (`.png`, `.jpg`).
+* **5-Layer Hybrid Detection Pipeline**:
+  1. **Deterministic Regex Engine**: Mathematical precision for SSNs, Phone Numbers, ICD-10 Codes, CPT Codes, Dates, Zip Codes, and Insurance IDs.
+  2. **Clinical NLP Engine (MedSpaCy)**: Extraction of diseases, symptoms, lab tests (`Lipid Panel`, `HbA1c`), medications, and procedures.
+  3. **Statistical NER Engine (GLiNER & Presidio)**: Extraction of patient names, doctor names, facility locations, and healthcare organizations.
+  4. **Semantic LLM Layer (`gpt-5.4-mini` or `gemma4:e4b`)**: Contextual residual entity discovery and candidate validation.
+  5. **Central Quality Gate (`EntityValidator`)**: Form prefix label trimming (`"SSN: 123-45-6789"` $\rightarrow$ `"123-45-6789"`), mandatory phone digit validation ($\ge 7$ digits), and audit verb/sentence filtering.
+* **Confidence-Calibrated Human Review**: Entities with confidence $< 80\%$ (or flagged by risk heuristics) enter the Human Review queue for approval/rejection.
+* **Occurrence Expansion & Safety Verifier**: Expands confirmed entity occurrences across multi-page text and blocks file release if any un-redacted PII remains.
+* **Dual Runtime Profiles**: Supports both Local Python (`.env.local`, API `:8000`) and Docker Compose (`:8001`).
 
-Docker and local Python are intentionally separated. Do not mix their ports or environment files.
+---
 
-| Profile | API | PostgreSQL | Redis | Env source |
-| --- | --- | --- | --- | --- |
-| Docker | `http://localhost:8001` | `127.0.0.1:5433` | `127.0.0.1:6380` | values pinned in Compose |
-| Local Python | `http://localhost:8000` | `127.0.0.1:5432` | `127.0.0.1:6379` | `.env.local` via `DOCSHIELD_ENV_FILE` |
-
-Use Docker for the easiest full-system run. Use local Python when actively editing backend code.
-
-## Requirements
-
-- Windows PowerShell
-- Python 3.10
-- Docker Desktop
-- Ollama with `qwen3:4b`
-- PostgreSQL and Redis only when running the local Python profile
-- spaCy English model `en_core_web_sm` for local Presidio detection
-
-Install the required Ollama model:
-
-```powershell
-ollama pull qwen3:4b
-```
-
-Larger Qwen models are not used by this project.
-
-## Docker Quick Start
-
-Start the complete stack:
-
-```powershell
-cd E:\Office\DocShield-AI
-.\scripts\docker-up.ps1
-```
-
-Check status:
-
-```powershell
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml ps
-```
-
-Expected Docker Desktop group:
+## System Architecture & Pipeline Flow
 
 ```text
-docshield-ai-live
-  api        8001:8000
-  worker
-  migrate   exited 0 is OK
-  postgres  5433:5432 healthy
-  redis     6380:6379 healthy
+Upload → Classification → OCR/Extraction → Dynamic Detection Orchestration
+  ├── 1. Regex (Deterministic)
+  ├── 2. MedSpaCy (Clinical)
+  ├── 3. Presidio & GLiNER (Statistical NER)
+  └── 4. Azure OpenAI (gpt-5.4-mini) / Ollama (gemma4:e4b) (Semantic Residual)
+→ Quality Validation & Prefix Trimming (EntityValidator)
+→ Span Deduplication & Overlap Resolution
+→ Confidence Scoring & Calibration (ConfidenceCalculator)
+→ Human Review Trigger (Review Repository)
+→ Occurrence Expansion & Text Redaction
+→ Post-Redaction Verification Safety Check
+→ Output: Redacted .txt + JSON Audit Report
 ```
 
-Open the app:
+---
 
-```text
-http://localhost:8001/ui/
-```
+## Runtime Separation
 
-Health check:
+Docker and local Python environments are deliberately separated to prevent port collisions and credential leaks.
 
-```powershell
-Invoke-RestMethod http://localhost:8001/health/
-```
+| Profile | API URL | Web UI | PostgreSQL | Redis | Configuration Source |
+|---|---|---|---|---|---|
+| **Local Python** | `http://localhost:8000` | `http://localhost:8000/ui/` | `127.0.0.1:5432` | `127.0.0.1:6379` | `.env.local` |
+| **Docker** | `http://localhost:8001` | `http://localhost:8001/ui/` | `127.0.0.1:5433` | `127.0.0.1:6380` | `docker-compose.yml` |
 
-Watch logs:
+---
 
-```powershell
-.\scripts\docker-logs.ps1
-```
+## Quick Start (Local Python Profile)
 
-Stop Docker:
+### 1. Prerequisites
+- **Python 3.10**
+- **PowerShell** (Windows)
+- **PostgreSQL 15+** (running on port `5432`)
+- **Redis 7+** (running on port `6379`)
+- **Ollama** (if using local LLM provider):
+  ```powershell
+  ollama pull gemma4:e4b
+  ```
 
-```powershell
-.\scripts\docker-down.ps1
-```
-
-## Test Through UI
-
-Open:
-
-```text
-http://localhost:8001/ui/
-```
-
-Upload a `.txt` file with sample content:
-
-```text
-Patient Name: Jane Patient
-Email: jane.patient@example.com
-Phone: 9876543210
-Hospital: Farmington Medical Center
-Diagnosis: E11.9
-Medication: Metformin
-```
-
-Expected result:
-
-- Upload succeeds.
-- Document status moves through processing.
-- Extracted text appears.
-- Detected entities appear in review results.
-- Low-confidence results are sent to human review.
-- Redaction and report artifacts are created.
-
-## pgAdmin
-
-For Docker, register this server:
-
-```text
-Name: DocShield Docker
-Host name/address: 127.0.0.1
-Port: 5433
-Maintenance database: pii_phi_document_intelligence_poc
-Username: postgres
-Password: postgres
-```
-
-For local Python, use port `5432` and the password from `.env.local`.
-
-Expected tables under `public`:
-
-```text
-alembic_version
-confidence_scores
-documents
-entities
-ocr_results
-processing_jobs
-redactions
-reports
-reviews
-```
-
-## RedisInsight
-
-For Docker Redis:
-
-```text
-Name: DocShield Docker Redis
-Host: 127.0.0.1
-Port: 6380
-Username: empty
-Password: empty
-```
-
-Queue key:
-
-```text
-document_processing
-```
-
-The queue can be empty during normal operation because the worker consumes jobs quickly.
-
-## Local Python Setup
-
-Initialize local files and virtual environment:
+### 2. Initialization & Setup
+Run the local environment initialization script:
 
 ```powershell
 cd E:\Office\DocShield-AI
 .\scripts\local-init.ps1
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m spacy download en_core_web_sm
 ```
 
-Edit `.env.local` and make sure the PostgreSQL password is correct in both:
+Edit `.env.local` to configure your database and LLM provider:
 
-```text
-POSTGRES_PASSWORD=...
-DATABASE_URL=postgresql+psycopg2://postgres:...@127.0.0.1:5432/pii_phi_document_intelligence_poc
+```ini
+# Database & Redis Settings
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/pii_phi_document_intelligence_poc
+REDIS_HOST=127.0.0.1
+REDIS_PORT=6379
+
+# LLM Provider Configuration (azure -> gpt-5.4-mini | gemma -> gemma4:e4b)
+LLM_PROVIDER=azure
+AZURE_OPENAI_API_KEY=your_key_here
+AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5.4-mini
 ```
 
-Check local dependencies:
-
-```powershell
-.\scripts\local-check.ps1
-```
-
-Run migrations:
-
+### 3. Run Database Migrations
 ```powershell
 .\scripts\local-migrate.ps1
 ```
 
-Run the API:
+### 4. Start the Application
 
+**Terminal 1 (API Server):**
 ```powershell
 .\scripts\local-api.ps1
 ```
 
-Run the worker in a second terminal:
-
+**Terminal 2 (Background Worker):**
 ```powershell
-cd E:\Office\DocShield-AI
-.\.venv\Scripts\Activate.ps1
 .\scripts\local-worker.ps1
 ```
 
-Local UI:
+Open the web interface: **`http://localhost:8000/ui/`**
 
-```text
-http://localhost:8000/ui/
-```
+---
 
-## Detection Pipeline
+## Docker Quick Start
 
-Generic, financial, corporate, and legal documents:
-
-```text
-Regex -> Presidio -> GLiNER -> Qwen3:4b -> Human Review if still low confidence
-```
-
-Healthcare and mixed documents:
-
-```text
-Regex -> Presidio -> MedSpaCy -> GLiNER -> Qwen3:4b -> Human Review if still low confidence
-```
-
-Confidence rule:
-
-```text
-Detector confidence >= 80% -> keep result and do not escalate that span
-Detector confidence < 80%  -> route unresolved/low-confidence span to next detector
-Qwen3:4b confidence < 80%  -> send to human review
-```
-
-LLM validation is not used. Human review is the validation step.
-
-## Main API Endpoints
-
-| Method | Endpoint | Purpose |
-| --- | --- | --- |
-| GET | `/` | Root status |
-| GET | `/health/` | Service health |
-| POST | `/upload/` | Upload one document |
-| POST | `/upload/bulk` | Upload multiple documents |
-| GET | `/documents/{document_id}/status` | Document and job status |
-| GET | `/documents/{document_id}/text` | Extracted text |
-| GET | `/documents/{document_id}/reviews` | Review records |
-| PATCH | `/reviews/{review_id}` | Approve/reject review item |
-| GET | `/documents/{document_id}/redactions` | Redaction records |
-| GET | `/redactions/{redaction_id}/file` | Download redacted file |
-| GET | `/documents/{document_id}/reports` | Report list |
-| GET | `/reports/{report_id}` | Report metadata and JSON |
-| GET | `/reports/{report_id}/file` | Download report file |
-
-## Project Structure
-
-```text
-DocShield-AI/
-|-- api/                  FastAPI routes and schemas
-|-- core/                 App settings and shared infrastructure
-|-- database/             SQLAlchemy models, repositories, Alembic migrations
-|-- frontend/             Static UI served at /ui/
-|-- modules/              Upload, extraction, classification, detection logic
-|-- orchestration/        End-to-end document workflow
-|-- redis_queue/          Redis producer/consumer and worker
-|-- scripts/              Local and Docker helper scripts
-|-- docs/                 Extra runbooks
-|-- tests/                Pytest suite
-|-- storage/              Runtime artifacts, ignored by git
-|-- app.py                FastAPI entrypoint
-|-- docker-compose.yml
-|-- docker-compose.local-gui.yml
-|-- Dockerfile
-|-- requirements.txt
-```
-
-## Tests
-
-Run locally:
-
-```powershell
-python -m pytest -q
-```
-
-Run inside Docker API container:
-
-```powershell
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml exec api pytest -q
-```
-
-## Troubleshooting
-
-If Docker containers are not grouped correctly in Docker Desktop, always start with:
+Start the complete containerized stack:
 
 ```powershell
 .\scripts\docker-up.ps1
 ```
 
-If pgAdmin cannot connect to Docker Postgres:
+Access the Docker UI: **`http://localhost:8001/ui/`**
 
+Stop Docker containers:
 ```powershell
-Test-NetConnection 127.0.0.1 -Port 5433
+.\scripts\docker-down.ps1
 ```
 
-If RedisInsight cannot connect to Docker Redis:
+---
 
-```powershell
-Test-NetConnection 127.0.0.1 -Port 6380
+## Core API Endpoints
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health/` | Health check & system status |
+| `POST` | `/upload/` | Upload single document for processing |
+| `POST` | `/upload/bulk` | Upload bulk zip/folder of documents (max 100) |
+| `GET` | `/documents/{id}/status` | Check document & job execution status |
+| `GET` | `/documents/{id}/text` | Retrieve extracted raw/OCR text |
+| `GET` | `/documents/{id}/reviews` | Fetch pending/completed human review items |
+| `PATCH` | `/reviews/{id}` | Approve or reject an entity review finding |
+| `GET` | `/documents/{id}/redactions` | List entity redaction records |
+| `GET` | `/redactions/{id}/file` | Download redacted output file |
+| `GET` | `/documents/{id}/reports` | Retrieve JSON audit report |
+
+---
+
+## Repository Structure
+
+```text
+DocShield-AI/
+├── api/                  FastAPI endpoints, Pydantic schemas, and middleware
+├── core/                 App config, DB session setup, and security utilities
+├── database/             SQLAlchemy models, repository patterns, Alembic migrations
+├── docs/                 Technical Master Book (docs/doc.md) and developer runbooks
+├── frontend/             Vanilla JS/HTML/CSS dashboard served at /ui/
+├── modules/
+│   ├── classification/   Document domain classifier (healthcare vs generic)
+│   ├── detection/        Hybrid NER pipeline, LLM detectors, and EntityValidator
+│   ├── extraction/       PaddleOCR and PyMuPDF PDF extractors
+│   └── upload/           File validation, hashing, and storage layout
+├── orchestration/        Workflow state machine (DocumentProcessingWorkflow)
+├── redis_queue/          Async background worker and task queue
+├── scripts/              Local & Docker lifecycle management scripts
+├── storage/              Local uploads, extracted text, redacted files, and logs
+└── tests/                Pytest unit, integration, and regression suites
 ```
 
-If local Python check fails on Redis `6379`, start a local Redis instance or point `.env.local` to a running Redis service.
+---
 
-If the worker restarts after dependency changes, rebuild Docker:
+## Automated Testing & Reset Commands
+
+### Run Automated Pytest Suite
+Run the 30 unit, workflow, and quality regression tests:
 
 ```powershell
-docker compose -p docshield-ai-live -f docker-compose.yml -f docker-compose.local-gui.yml build --no-cache
+python -m pytest tests/test_document_workflow.py tests/test_detection_quality_regressions.py -v
 ```
 
-## More Detail
+### Full Database & Storage Truncation (Fresh Start)
+Reset database tables and clear local storage artifacts:
 
-Read `doc.md` for the detailed developer runbook and `docs/run_profiles.md` for the runtime-profile rules.
+```powershell
+python -c "import os, shutil, glob, sys; sys.path.insert(0, r'E:\Office\DocShield-AI'); import core.config; from database.session import engine; from sqlalchemy import text; conn = engine.connect(); tx = conn.begin(); conn.execute(text('TRUNCATE TABLE confidence_scores, reviews, reports, redactions, entities, ocr_results, processing_jobs, documents, runs RESTART IDENTITY CASCADE;')); tx.commit(); conn.close(); print('DB TRUNCATED'); [shutil.rmtree(os.path.join('storage/runs', d), ignore_errors=True) for d in os.listdir('storage/runs') if os.path.isdir(os.path.join('storage/runs', d))]; [os.remove(os.path.join('storage/uploads', f)) for f in os.listdir('storage/uploads') if os.path.isfile(os.path.join('storage/uploads', f)) and not f.endswith('.gitkeep')]; [open(log_f, 'w').close() for log_f in glob.glob('storage/logs/*.log')]; print('STORAGE CLEARED')"
+```
+
+---
+
+## Documentation
+
+For full end-to-end technical details, pipeline specifications, and challenge resolutions, see the **[Master Book Documentation (`docs/doc.md`)](file:///E:/Office/DocShield-AI/docs/doc.md)**.

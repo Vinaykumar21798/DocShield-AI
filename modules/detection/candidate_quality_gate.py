@@ -27,7 +27,7 @@ class QualityGateDecision:
 class CandidateQualityGate:
     """
     Multi-signal Candidate Quality Gate.
-    Evaluates detector candidates BEFORE sending them to Qwen contextual validation.
+    Evaluates detector candidates BEFORE sending them to Gemma contextual validation.
 
     Core Objectives:
     1. Filter out obvious table headers, transaction short-codes, database placeholders, and disclaimers.

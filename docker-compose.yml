@@ -13,7 +13,12 @@ services:
       BYPASS_LLM: "True"
       OLLAMA_REQUIRED: "False"
       OLLAMA_HOST: http://host.docker.internal:11434
-      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      OLLAMA_MODEL: gemma4:e4b
+      OLLAMA_NUM_CTX: "8192"
+      OLLAMA_NUM_PREDICT: "1024"
+      OLLAMA_DENSE_TABLE_NUM_PREDICT: "1536"
+      OLLAMA_TEMPERATURE: "0.10"
+      OLLAMA_REQUIRED_MODELS: gemma4:e4b
       GLINER_ALLOW_MODEL_DOWNLOAD: "True"
       HF_HOME: /root/.cache/huggingface
       DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"
@@ -43,7 +48,12 @@ services:
       BYPASS_LLM: "True"
       OLLAMA_REQUIRED: "False"
       OLLAMA_HOST: http://host.docker.internal:11434
-      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      OLLAMA_MODEL: gemma4:e4b
+      OLLAMA_NUM_CTX: "8192"
+      OLLAMA_NUM_PREDICT: "1024"
+      OLLAMA_DENSE_TABLE_NUM_PREDICT: "1536"
+      OLLAMA_TEMPERATURE: "0.10"
+      OLLAMA_REQUIRED_MODELS: gemma4:e4b
       GLINER_ALLOW_MODEL_DOWNLOAD: "True"
       HF_HOME: /root/.cache/huggingface
       DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"
@@ -80,7 +90,12 @@ services:
       BYPASS_LLM: "False"
       OLLAMA_REQUIRED: "True"
       OLLAMA_HOST: http://host.docker.internal:11434
-      OLLAMA_REQUIRED_MODELS: qwen3:4b
+      OLLAMA_MODEL: gemma4:e4b
+      OLLAMA_NUM_CTX: "8192"
+      OLLAMA_NUM_PREDICT: "1024"
+      OLLAMA_DENSE_TABLE_NUM_PREDICT: "1536"
+      OLLAMA_TEMPERATURE: "0.10"
+      OLLAMA_REQUIRED_MODELS: gemma4:e4b
       GLINER_ALLOW_MODEL_DOWNLOAD: "True"
       HF_HOME: /root/.cache/huggingface
       DETECTION_HIGH_CONFIDENCE_THRESHOLD: "0.80"

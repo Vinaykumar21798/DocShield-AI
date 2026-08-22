@@ -4,22 +4,22 @@ from modules.detection.analyzer.detector_selector import DetectorSelector
 def test_low_cost_routes_use_expensive_gliner_last_when_medspacy_applies():
     selector = DetectorSelector()
 
-    assert selector.route_for_domain("financial") == ("regex", "presidio", "gliner", "qwen3b")
-    assert selector.route_for_domain("corporate") == ("regex", "presidio", "gliner", "qwen3b")
-    assert selector.route_for_domain("generic") == ("regex", "presidio", "gliner", "qwen3b")
+    assert selector.route_for_domain("financial") == ("regex", "presidio", "gliner", "gemma")
+    assert selector.route_for_domain("corporate") == ("regex", "presidio", "gliner", "gemma")
+    assert selector.route_for_domain("generic") == ("regex", "presidio", "gliner", "gemma")
     assert selector.route_for_domain("healthcare") == (
         "regex",
         "medspacy",
         "presidio",
         "gliner",
-        "qwen3b",
+        "gemma",
     )
     assert selector.route_for_domain("mixed") == (
         "regex",
         "medspacy",
         "presidio",
         "gliner",
-        "qwen3b",
+        "gemma",
     )
 
 

@@ -42,7 +42,7 @@ def _serialize_report(
         generated_by=report.generated_by,
         processing_duration_ms=report.processing_duration_ms,
         detectors_used=report.detectors_used,
-        qwen_invoked=bool(report.qwen_invoked),
+        gemma_invoked=bool(report.gemma_invoked),
         total_pii=report.total_pii or 0,
         total_phi=report.total_phi or 0,
         review_completion=bool(report.review_completion),

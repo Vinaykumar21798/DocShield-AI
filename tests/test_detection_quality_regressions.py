@@ -3,7 +3,8 @@ from types import SimpleNamespace
 
 from modules.detection.detectors.base_detector import BaseDetector
 from modules.detection.detectors.medspacy_detector import MedSpaCyDetector
-from modules.detection.detectors.qwen_detector import Qwen3BDetector
+from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
+from modules.detection.detectors.azure_detector import AzureOpenAIDetector
 from modules.detection.detectors.regex_detector import RegexDetector
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
@@ -53,7 +54,7 @@ the Health Insurance Portability and Accountability Act (HIPAA)"""
 
 
 
-def _result(text, value, entity_type, confidence=0.95, detector="qwen3b"):
+def _result(text, value, entity_type, confidence=0.95, detector="gemma4e4b"):
     start = text.index(value)
     return DetectionResult(
         entity_type=entity_type,
@@ -288,7 +289,7 @@ def test_validator_normalizes_insurance_and_healthcare_organizations():
     }
 
 
-def test_qwen_policy_requires_policy_context():
+def test_gemma_policy_requires_policy_context():
     access_text = "Enroll using code: EHS-2025-04-BR"
     access_candidate = _result(
         access_text,
@@ -316,7 +317,7 @@ def test_qwen_policy_requires_policy_context():
     assert unrelated_result is None
 
 
-def test_validator_reclassifies_qwen_codes_and_rejects_false_dates():
+def test_validator_reclassifies_gemma_codes_and_rejects_false_dates():
     text = "CPT/HCPCS: 99214 Diagnosis: E11.9 Charge: $95.00 Date: 04/17/2024 Bad: 99/99/9999"
     candidates = [
         _result(text, "99214", "DATE"),
@@ -340,7 +341,7 @@ def test_validator_runs_before_masking():
     class BadDateDetector(BaseDetector):
         @property
         def name(self):
-            return "qwen3b"
+            return "gemma4e4b"
 
         def detect(self, text, page_number=1):
             return [_result(text, "$95.00", "DATE")]
@@ -419,7 +420,7 @@ def test_review_rule_uses_only_final_confidence_threshold():
     assert DocumentProcessingWorkflow._is_review_required(low_confidence) is True
 
 
-def test_qwen_recovery_uses_distinct_nearest_occurrences():
+def test_gemma_recovery_uses_distinct_nearest_occurrences():
     class FakeClient:
         def chat(self, **kwargs):
             payload = {
@@ -442,7 +443,7 @@ def test_qwen_recovery_uses_distinct_nearest_occurrences():
             }
             return {"message": {"content": json.dumps(payload)}}
 
-    detector = Qwen3BDetector()
+    detector = Gemma4E4BDetector()
     detector.client = FakeClient()
 
     results = detector.detect("I10 then I10")
@@ -551,7 +552,7 @@ def test_eob_regression_detects_deterministic_healthcare_entities(monkeypatch):
     assert "Keep this document" in redacted
 
 
-def test_validator_rejects_eob_table_labels_and_qwen_lab_fragments():
+def test_validator_rejects_eob_table_labels_and_gemma_lab_fragments():
     text = (
         "Plan Type: PPO\nDate of Service\nPatient, Level 4\nTOTALS\n"
         "CONFIDENTIAL HEALTH INFORMATION (PHI)\n"
@@ -564,9 +565,60 @@ def test_validator_rejects_eob_table_labels_and_qwen_lab_fragments():
         _result(text, "TOTALS", "ORGANIZATION", detector="presidio"),
         _result(text, "PHI", "ORGANIZATION", detector="presidio"),
         _result(text, "â€¢ Keep", "PERSON", detector="presidio"),
-        _result(text, "Comprehensive", "MEDICAL_FACILITY", detector="qwen3b"),
-        _result(text, "Metabolic", "MEDICAL_FACILITY", detector="qwen3b"),
-        _result(text, "Panel", "MEDICAL_FACILITY", detector="qwen3b"),
+        _result(text, "Comprehensive", "MEDICAL_FACILITY", detector="gemma4e4b"),
+        _result(text, "Metabolic", "MEDICAL_FACILITY", detector="gemma4e4b"),
+        _result(text, "Panel", "MEDICAL_FACILITY", detector="gemma4e4b"),
     ]
 
     assert EntityValidator.validate_candidates(candidates, text) == []
+
+
+def test_validator_rejects_amount_covered_and_field_headers():
+    text = "Amount Billed: $93.00\nAmountCovered: $176.00\nVisitDate: 2024-07-23\n"
+    candidates = [
+        _result(text, "Amount Billed", "ORGANIZATION", detector="gemma4e4b"),
+        _result(text, "AmountCovered", "ORGANIZATION", detector="gemma4e4b"),
+        _result(text, "VisitDate", "ORGANIZATION", detector="gemma4e4b"),
+    ]
+    assert EntityValidator.validate_candidates(candidates, text) == []
+
+
+def test_validator_rejects_bullet_labels_and_form_headers():
+    text = (
+        "• Patient Responsibility\n"
+        "EXCLUDED SERVICES & OTHER COVERED SERVICES Not Covered: Cosmetic\n"
+        "Weight Loss Programs\n"
+    )
+    candidates = [
+        _result(text, "• Patient", "ORGANIZATION", detector="presidio"),
+        _result(text, "EXCLUDED SERVICES & OTHER COVERED SERVICES Not Covered: Cosmetic", "ORGANIZATION", detector="presidio"),
+        _result(text, "Weight", "ORGANIZATION", detector="presidio"),
+    ]
+    assert EntityValidator.validate_candidates(candidates, text) == []
+
+    azure = AzureOpenAIDetector()
+    item1 = azure._heuristic_validate_candidate(_result(text, "• Patient", "ORGANIZATION"), text)
+    item2 = azure._heuristic_validate_candidate(_result(text, "Weight", "ORGANIZATION"), text)
+    assert item1.decision == "REJECT"
+    assert item2.decision == "REJECT"
+
+
+def test_validator_rejects_sentence_fragments_and_trims_prefixes():
+    text = (
+        "SSN: 123-45-6789\n"
+        "Contact Numbers: Listed in follow-up and provider sections\n"
+        "Full name repeated in multiple sections\n"
+        "Direct references to diagnosis, treatment, and outcomes\n"
+    )
+    candidates = [
+        _result(text, "Contact Numbers: Listed in follow-up and provider sections", "PHONE_NUMBER", detector="azure"),
+        _result(text, "Full name repeated in multiple sections", "PERSON", detector="azure"),
+        _result(text, "Direct references to diagnosis, treatment, and outcomes", "CLINICAL_NOTES", detector="azure"),
+    ]
+    assert EntityValidator.validate_candidates(candidates, text) == []
+
+    ssn_candidate = _result(text, "SSN: 123-45-6789", "SSN", detector="regex")
+    validated_ssn = EntityValidator.validate_candidate(ssn_candidate, text)
+    assert validated_ssn is not None
+    assert validated_ssn.entity_value == "123-45-6789"
+

@@ -4,6 +4,7 @@ import contextvars
 import json
 import logging
 import os
+import re
 import sys
 import time
 from contextlib import contextmanager
@@ -17,42 +18,74 @@ pipeline_context: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVa
 )
 
 
+class SensitiveDataLogFilter(logging.Filter):
+    """Defense-in-depth redaction for common sensitive values in logs."""
+
+    PATTERNS = (
+        re.compile(r"(?i)(\bvalue\s*=\s*)(?:'[^']*'|[^\s,|]+)"),
+        re.compile(r"(?i)(\bentity_value\s*=\s*)(?:'[^']*'|[^\s,|]+)"),
+        re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE),
+        re.compile(r"\b\d{3}-\d{2}-\d{4}\b"),
+        re.compile(r"(?<!\d)(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}(?!\d)"),
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        for index, pattern in enumerate(self.PATTERNS):
+            replacement = r"\1[REDACTED]" if index < 2 else "[REDACTED]"
+            message = pattern.sub(replacement, message)
+        record.msg = message
+        record.args = ()
+        return True
+
+
 class PipelineLogFormatter(logging.Formatter):
     """
     Formatter that injects pipeline context (document_id, job_id, stage)
-    into console and standard log lines.
+    and formats tracebacks cleanly for human readability.
     """
 
     COLOR_CODES = {
-        "DEBUG": "\033[36m",     # Cyan
-        "INFO": "\033[32m",      # Green
-        "WARNING": "\033[33m",   # Yellow
-        "ERROR": "\033[31m",     # Red
+        "DEBUG": "\033[36m",      # Cyan
+        "INFO": "\033[32m",       # Green
+        "WARNING": "\033[33m",    # Yellow
+        "ERROR": "\033[31m",      # Red
         "CRITICAL": "\033[1;31m", # Bold Red
     }
     RESET_CODE = "\033[0m"
 
     def __init__(self, fmt: str | None = None, use_colors: bool = False):
-        super().__init__(fmt or "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+        super().__init__(
+            fmt or "%(asctime)s | %(levelname)-8s | %(name)-24s | %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
         self.use_colors = use_colors and sys.stderr.isatty()
 
     def format(self, record: logging.LogRecord) -> str:
         ctx = pipeline_context.get()
         if ctx:
             prefix_parts = []
-            if "job_id" in ctx:
-                prefix_parts.append(f"job={ctx['job_id'][:8]}")
+            if "stage" in ctx:
+                prefix_parts.append(f"[{ctx['stage']}]")
             if "document_id" in ctx:
                 prefix_parts.append(f"doc={ctx['document_id'][:8]}")
-            if "stage" in ctx:
-                prefix_parts.append(f"stage={ctx['stage']}")
+            if "job_id" in ctx:
+                prefix_parts.append(f"job={ctx['job_id'][:8]}")
             if prefix_parts:
-                record.msg = f"[{' '.join(prefix_parts)}] {record.msg}"
+                record.msg = f"{' '.join(prefix_parts)} {record.msg}"
 
         formatted = super().format(record)
+
+        if record.exc_info and not record.exc_text:
+            record.exc_text = self.formatException(record.exc_info)
+
+        if record.exc_text:
+            formatted = f"{formatted}\n  └─► [ERROR DETAILS] {record.exc_text.replace(chr(10), chr(10) + '      ')}"
+
         if self.use_colors and record.levelname in self.COLOR_CODES:
             color = self.COLOR_CODES[record.levelname]
             formatted = f"{color}{formatted}{self.RESET_CODE}"
+
         return formatted
 
 
@@ -92,10 +125,15 @@ class DetectionAndWorkerOnlyFilter(logging.Filter):
     - core.logger
     """
     ALLOWED_PREFIXES = (
-        "modules.detection",
-        "redis_queue",
+        "api",
+        "app",
+        "core",
+        "database",
+        "modules",
         "orchestration",
-        "core.logger",
+        "redis_queue",
+        "uvicorn",
+        "DocShield",
     )
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -129,8 +167,10 @@ def setup_logging(
         root_logger.handlers.clear()
 
     # 1. Console Handler
+    sensitive_data_filter = SensitiveDataLogFilter()
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(log_level)
+    console_handler.addFilter(sensitive_data_filter)
     console_formatter = PipelineLogFormatter(
         fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
         use_colors=enable_console_colors,
@@ -138,10 +178,13 @@ def setup_logging(
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # 2. File Handlers (Rotating) - Filtered to ONLY Detection Pipeline & Redis Worker
+    # 2. File Handlers (Rotating)
     detection_worker_filter = DetectionAndWorkerOnlyFilter()
     try:
         log_path = Path(log_dir)
+        if not log_path.is_absolute():
+            project_root = Path(__file__).resolve().parent.parent
+            log_path = project_root / log_path
         log_path.mkdir(parents=True, exist_ok=True)
 
         # Standard file handler
@@ -154,8 +197,9 @@ def setup_logging(
         )
         file_handler.setLevel(log_level)
         file_handler.addFilter(detection_worker_filter)
+        file_handler.addFilter(sensitive_data_filter)
         file_formatter = PipelineLogFormatter(
-            fmt="%(asctime)s | %(levelname)-8s | %(name)s | %(filename)s:%(lineno)d | %(message)s",
+            fmt="%(asctime)s | %(levelname)-8s | %(name)-28s | %(message)s",
             use_colors=False,
         )
         file_handler.setFormatter(file_formatter)
@@ -171,6 +215,7 @@ def setup_logging(
         )
         json_handler.setLevel(log_level)
         json_handler.addFilter(detection_worker_filter)
+        json_handler.addFilter(sensitive_data_filter)
         json_handler.setFormatter(JSONLogFormatter())
         root_logger.addHandler(json_handler)
 

@@ -20,6 +20,7 @@ from modules.extraction.ocr import OCRDecision, OCREngine
 from modules.extraction.service import ExtractionService
 from modules.upload.storage import StorageService
 from orchestration.workflow import DocumentProcessingWorkflow
+from types import SimpleNamespace
 
 
 def create_document_with_job(
@@ -263,7 +264,7 @@ class FakeDetectionService:
                 "entity_type": "PERSON",
                 "decision": "CONFIRM",
                 "confidence": 0.91,
-                "detector": "Qwen3:4b",
+                "detector": "Gemma4:e4b",
                 "reasoning": "Synthetic context supports the candidate.",
             }
         ],
@@ -455,3 +456,125 @@ def test_workflow_uses_mixed_pdf_extractor(
     assert ocr_result.structured_output["searchable_pages"] == [1]
     assert ocr_result.structured_output["ocr_pages"] == [2]
     assert fake_detection.document_type == DocumentType.INVOICE.value
+
+
+def test_post_redaction_verification_passes_when_all_values_are_removed():
+    source = "Email: synthetic.user@example.test"
+    value = "synthetic.user@example.test"
+    start = source.index(value)
+    entity = SimpleNamespace(
+        entity_type="EMAIL",
+        entity_value=value,
+        start_char=start,
+        end_char=start + len(value),
+    )
+
+    redacted = DocumentProcessingWorkflow._apply_redactions(source, [entity])
+
+    assert DocumentProcessingWorkflow._redaction_verification_issues(
+        source,
+        redacted,
+        [entity],
+    ) == []
+
+
+def test_post_redaction_verification_blocks_an_unredacted_duplicate():
+    value = "synthetic.user@example.test"
+    source = f"Primary: {value}\nBackup: {value}"
+    start = source.index(value)
+    entity = SimpleNamespace(
+        entity_type="EMAIL",
+        entity_value=value,
+        start_char=start,
+        end_char=start + len(value),
+    )
+
+    redacted = DocumentProcessingWorkflow._apply_redactions(source, [entity])
+    issues = DocumentProcessingWorkflow._redaction_verification_issues(
+        source,
+        redacted,
+        [entity],
+    )
+
+    assert "DETECTED_VALUE_REMAINS" in issues
+    assert "DETERMINISTIC_PII_REMAINS" in issues
+
+
+def test_occurrence_expansion_redacts_all_three_occurrences():
+    value = "HealthGuard Insurance Company"
+    source = f"Header: {value}\nBody: {value}\nFooter: {value}"
+    start = source.index(value)
+    initial_det = DetectionResult(
+        entity_type="INSURANCE_PROVIDER",
+        entity_value=value,
+        start_char=start,
+        end_char=start + len(value),
+        confidence_score=0.95,
+        detector="presidio",
+        privacy_category="PHI",
+    )
+
+    expanded = DocumentProcessingWorkflow._expand_entity_occurrences(source, [initial_det])
+    assert len(expanded) == 3
+    spans = [(d.start_char, d.end_char) for d in expanded]
+    assert len(set(spans)) == 3
+
+    redacted = DocumentProcessingWorkflow._apply_redactions(source, expanded)
+    assert value not in redacted
+    issues = DocumentProcessingWorkflow._redaction_verification_issues(source, redacted, expanded)
+    assert "DETECTED_VALUE_REMAINS" not in issues
+
+
+def test_occurrence_expansion_preserves_span_deduplication():
+    value = "123-45-6789"
+    source = f"First: {value}\nSecond: {value}"
+    start1 = source.find(value)
+
+    det1 = DetectionResult(
+        entity_type="SSN",
+        entity_value=value,
+        start_char=start1,
+        end_char=start1 + len(value),
+        confidence_score=1.0,
+        detector="Regex",
+    )
+    det2 = DetectionResult(
+        entity_type="SSN",
+        entity_value=value,
+        start_char=start1,
+        end_char=start1 + len(value),
+        confidence_score=0.85,
+        detector="presidio",
+    )
+
+    expanded = DocumentProcessingWorkflow._expand_entity_occurrences(source, [det1, det2])
+    assert len(expanded) == 3
+    spans = [(d.start_char, d.end_char) for d in expanded]
+    assert len(set(spans)) == 2
+
+
+def test_occurrence_expansion_avoids_partial_word_matches():
+    source = "Patient Med requested Medical evaluation from Dr. Johnson (John)."
+    med_det = DetectionResult(
+        entity_type="MEDICATION",
+        entity_value="Med",
+        start_char=source.find("Med "),
+        end_char=source.find("Med ") + 3,
+        confidence_score=0.90,
+        detector="medspacy",
+    )
+    john_det = DetectionResult(
+        entity_type="PERSON",
+        entity_value="John",
+        start_char=source.find("John)"),
+        end_char=source.find("John)") + 4,
+        confidence_score=0.88,
+        detector="presidio",
+    )
+
+    expanded = DocumentProcessingWorkflow._expand_entity_occurrences(source, [med_det, john_det])
+    expanded_values = [d.entity_value for d in expanded]
+    assert "Medical" not in expanded_values
+    assert "Johnson" not in expanded_values
+    assert all(d.entity_value in {"Med", "John"} for d in expanded)
+

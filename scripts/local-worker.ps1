@@ -7,4 +7,8 @@ if (!(Test-Path ".env.local")) {
 }
 
 $env:DOCSHIELD_ENV_FILE = ".env.local"
-python redis_queue/worker.py
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+if (!(Test-Path $VenvPython)) {
+    throw "Missing .venv Python. Run .\scripts\local-init.ps1 first."
+}
+& $VenvPython redis_queue/worker.py

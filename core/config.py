@@ -11,6 +11,8 @@ DEFAULT_ENV_FILE = ".env"
 ENV_FILE = os.getenv("DOCSHIELD_ENV_FILE", DEFAULT_ENV_FILE)
 
 load_dotenv(dotenv_path=ENV_FILE)
+if os.path.exists(".env.local"):
+    load_dotenv(dotenv_path=".env.local", override=True)
 
 
 class Settings(BaseSettings):

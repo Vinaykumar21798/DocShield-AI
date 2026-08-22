@@ -144,7 +144,7 @@ with SessionLocal() as db:
         generated_by="SystemPipeline",
         processing_duration_ms=180,
         detectors_used=",".join(list(set(item.detector for item in results))),
-        qwen_invoked=False,
+        gemma_invoked=False,
         total_pii=total_pii,
         total_phi=total_phi,
         review_completion=True,

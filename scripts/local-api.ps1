@@ -7,4 +7,8 @@ if (!(Test-Path ".env.local")) {
 }
 
 $env:DOCSHIELD_ENV_FILE = ".env.local"
-python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
+$VenvPython = Join-Path $Root ".venv\Scripts\python.exe"
+if (!(Test-Path $VenvPython)) {
+    throw "Missing .venv Python. Run .\scripts\local-init.ps1 first."
+}
+& $VenvPython -m uvicorn app:app --reload --host 0.0.0.0 --port 8000

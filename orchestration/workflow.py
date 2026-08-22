@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Callable, Dict, Optional, Tuple
 from uuid import uuid4
@@ -42,6 +43,8 @@ from modules.classification.service import (
     document_classification_service,
 )
 from modules.detection.service import DetectionService
+from modules.detection.models.detection_result import DetectionResult
+from modules.detection.detectors.regex_detector import RegexDetector
 from modules.extraction.evaluation import (
     OCRConfidenceEvaluator,
     ocr_confidence_evaluator,
@@ -127,6 +130,10 @@ class ResumeCheckpointUnavailableError(DocumentWorkflowError):
     """
     Raised when persisted data for a checkpoint cannot be restored.
     """
+
+
+class RedactionVerificationError(DocumentWorkflowError):
+    """Raised when post-redaction verification detects possible leakage."""
 
 
 class DocumentProcessingWorkflow:
@@ -611,6 +618,85 @@ class DocumentProcessingWorkflow:
         text_path.write_text(extracted_text, encoding="utf-8")
         return text_path.as_posix()
 
+    @staticmethod
+    def _expand_entity_occurrences(
+        text: str,
+        detections: list[DetectionResult],
+    ) -> list[DetectionResult]:
+        """
+        Occurrence Expansion Step:
+        For every confirmed detection, search the original extracted text for any
+        un-detected exact occurrences of the entity value, creating expanded DetectionResult
+        spans for each occurrence. Deduplicate identical/overlapping spans while keeping
+        distinct character positions.
+        """
+        if not text or not text.strip() or not detections:
+            return detections
+
+        import re
+
+        expanded: list[DetectionResult] = list(detections)
+        existing_spans = {
+            (d.start_char, d.end_char)
+            for d in detections
+            if d.start_char is not None and d.end_char is not None
+        }
+
+        for det in list(detections):
+            val = (getattr(det, "entity_value", "") or "").strip()
+            if len(val) < 3 and not val.isdigit():
+                continue
+
+            escaped_val = re.escape(val)
+            if re.match(r"^\w+(?:\s+\w+)*$", val):
+                pattern = re.compile(rf"\b{escaped_val}\b", re.IGNORECASE)
+            else:
+                pattern = re.compile(escaped_val, re.IGNORECASE)
+
+            for m in pattern.finditer(text):
+                start, end = m.span()
+
+                if start > 0 and text[start - 1].isalnum() and text[start].isalnum():
+                    continue
+                if end < len(text) and text[end - 1].isalnum() and text[end].isalnum():
+                    continue
+
+                if (start, end) in existing_spans:
+                    continue
+
+                overlaps = False
+                for ex_start, ex_end in existing_spans:
+                    if not (end <= ex_start or start >= ex_end):
+                        overlaps = True
+                        break
+                if overlaps:
+                    continue
+
+                matched_text = text[start:end]
+                new_det = DetectionResult(
+                    entity_type=det.entity_type,
+                    entity_value=matched_text,
+                    start_char=start,
+                    end_char=end,
+                    confidence_score=det.confidence_score,
+                    detector=det.detector,
+                    privacy_category=det.privacy_category,
+                    entity_owner=det.entity_owner,
+                    canonical_type=det.canonical_type,
+                    page_number=det.page_number,
+                    metadata=dict(det.metadata or {}, expanded_occurrence=True),
+                )
+                expanded.append(new_det)
+                existing_spans.add((start, end))
+
+        expanded.sort(
+            key=lambda d: (
+                d.start_char if d.start_char is not None else -1,
+                -(d.end_char or 0),
+            )
+        )
+        return expanded
+
     def _execute_detection(self, state: WorkflowState) -> None:
         if not state.extracted_text or not state.extracted_text.strip():
             state.detected_entities = []
@@ -620,14 +706,19 @@ class DocumentProcessingWorkflow:
             )
             return
 
-        state.detected_entities = self.detection_service.detect(
+        raw_detections = self.detection_service.detect(
             state.extracted_text,
             document_type=state.document_type,
         )
+        state.detected_entities = self._expand_entity_occurrences(
+            state.extracted_text,
+            raw_detections,
+        )
         self.logger.info(
-            "Detection completed for document_id=%s entity_count=%s",
+            "Detection completed for document_id=%s entity_count=%s (expanded from %s)",
             state.document_id,
             len(state.detected_entities),
+            len(raw_detections),
         )
 
     def _store_detection_results(self, state: WorkflowState) -> None:
@@ -652,10 +743,9 @@ class DocumentProcessingWorkflow:
                 or start_char >= end_char
             ):
                 self.logger.warning(
-                    "Skipping invalid detection before persistence. document_id=%s entity_type=%s value=%r span=%s-%s detector=%s",
+                    "Skipping invalid detection before persistence. document_id=%s entity_type=%s span=%s-%s detector=%s",
                     document.id,
                     getattr(detection, "entity_type", "UNKNOWN"),
-                    entity_value,
                     start_char,
                     end_char,
                     getattr(detection, "detector", "UNKNOWN"),
@@ -741,8 +831,62 @@ class DocumentProcessingWorkflow:
         redaction_repository = RedactionRepository(self.db)
         entities = entity_repository.get_by_document_id(document.id)
 
+        # Expand all valid occurrences of confirmed entities across multi-page document text
+        detection_entities = [
+            DetectionResult(
+                entity_type=e.entity_type,
+                entity_value=e.entity_value,
+                confidence_score=e.confidence_score,
+                start_char=e.start_char,
+                end_char=e.end_char,
+                page_number=e.page_number or 1,
+                detector=e.detector,
+            )
+            for e in entities
+        ]
+        expanded_detections = self._expand_entity_occurrences(source_text, detection_entities)
+        
+        # Build expanded Entity list for redaction
+        expanded_entities = []
+        for det in expanded_detections:
+            matched_entity = next((e for e in entities if e.entity_value == det.entity_value), entities[0] if entities else None)
+            expanded_entities.append(
+                Entity(
+                    id=str(uuid4()),
+                    document_id=document.id,
+                    entity_type=det.entity_type,
+                    entity_value=det.entity_value,
+                    confidence_score=det.confidence_score,
+                    start_char=det.start_char,
+                    end_char=det.end_char,
+                    page_number=det.page_number,
+                    detector=det.detector,
+                    is_review_required=matched_entity.is_review_required if matched_entity else False,
+                    is_redacted=True,
+                )
+            )
+
         redaction_repository.delete_by_document_id(document.id)
-        redacted_text = self._apply_redactions(source_text, entities)
+        redacted_text = self._apply_redactions(source_text, expanded_entities)
+        verification_issues = self._redaction_verification_issues(
+            source_text,
+            redacted_text,
+            expanded_entities,
+        )
+        if verification_issues:
+            issue_codes = sorted(set(verification_issues))
+            self.logger.error(
+                "Redaction verification blocked output for document_id=%s "
+                "issue_count=%d issue_codes=%s",
+                document.id,
+                len(verification_issues),
+                ",".join(issue_codes),
+            )
+            raise RedactionVerificationError(
+                "Post-redaction verification failed; output blocked "
+                f"with {len(verification_issues)} issue(s): "
+                f"{','.join(issue_codes)}"
+            )
         redacted_file_path = self._save_redacted_text_file(
             document,
             redacted_text,
@@ -755,7 +899,8 @@ class DocumentProcessingWorkflow:
                 redaction_type="PII_PHI_TEXT_REDACTION",
                 redacted_file_path=redacted_file_path,
                 redaction_summary=(
-                    f"Redacted {len(entities)} sensitive entities."
+                    f"Redacted {len(entities)} sensitive entities; "
+                    "post-redaction verification passed."
                 ),
                 processed_by=self.worker_id,
             )
@@ -775,6 +920,21 @@ class DocumentProcessingWorkflow:
 
     def _generate_report(self, state: WorkflowState) -> None:
         document = self._require_document(state)
+
+        # Update persistent token and cost metrics on document
+        active_llm = getattr(self.detection_service, "gemma", None)
+        if active_llm:
+            document.prompt_tokens = getattr(active_llm, "prompt_tokens", 0) or 0
+            document.completion_tokens = getattr(active_llm, "completion_tokens", 0) or 0
+            document.llm_cost_usd = round(getattr(active_llm, "total_cost_usd", 0.0) or 0.0, 6)
+            document.llm_provider = getattr(active_llm, "name", os.getenv("LLM_PROVIDER", "azure")).lower()
+        else:
+            document.llm_provider = os.getenv("LLM_PROVIDER", "azure").lower()
+            document.prompt_tokens = 0
+            document.completion_tokens = 0
+            document.llm_cost_usd = 0.0
+        self.db.add(document)
+
         entity_repository = EntityRepository(self.db)
         report_repository = ReportRepository(self.db)
         entities = entity_repository.get_by_document_id(document.id)
@@ -801,8 +961,8 @@ class DocumentProcessingWorkflow:
         pending_reviews = [
             review for review in reviews if review.review_status == "PENDING"
         ]
-        qwen_invoked = any(
-            "qwen" in (entity.detector or "").lower()
+        gemma_invoked = any(
+            "gemma" in (entity.detector or "").lower()
             for entity in entities
         )
         ordered_entities = sorted(
@@ -856,7 +1016,7 @@ class DocumentProcessingWorkflow:
                 generated_by=self.worker_id,
                 processing_duration_ms=int(state.processing_time * 1000),
                 detectors_used=",".join(detectors_used),
-                qwen_invoked=qwen_invoked,
+                gemma_invoked=gemma_invoked,
                 total_pii=total_pii,
                 total_phi=total_phi,
                 review_completion=(len(pending_reviews) == 0),
@@ -915,16 +1075,28 @@ class DocumentProcessingWorkflow:
         text: str,
         entities: list[Entity],
     ) -> str:
-        redacted_text = text
         valid_entities = [
             entity for entity in entities
             if entity.start_char is not None
             and entity.end_char is not None
             and 0 <= entity.start_char < entity.end_char <= len(text)
         ]
-        valid_entities.sort(key=lambda entity: entity.start_char, reverse=True)
+        if not valid_entities:
+            return text
 
-        for entity in valid_entities:
+        # Sort by start_char ASC, end_char DESC to resolve overlapping entity spans
+        valid_entities.sort(key=lambda e: (e.start_char, -e.end_char))
+        non_overlapping: list[Entity] = []
+        last_end = -1
+        for e in valid_entities:
+            if e.start_char >= last_end:
+                non_overlapping.append(e)
+                last_end = e.end_char
+
+        # Apply redactions from right-to-left to preserve text indices
+        non_overlapping.sort(key=lambda e: e.start_char, reverse=True)
+        redacted_text = text
+        for entity in non_overlapping:
             marker = f"[REDACTED_{entity.entity_type}]"
             redacted_text = (
                 redacted_text[:entity.start_char]
@@ -933,6 +1105,51 @@ class DocumentProcessingWorkflow:
             )
 
         return redacted_text
+
+    @staticmethod
+    def _redaction_verification_issues(
+        source_text: str,
+        redacted_text: str,
+        entities: list[Entity],
+    ) -> list[str]:
+        """Returns non-sensitive issue codes; an empty list means release-safe."""
+        issues: list[str] = []
+        normalized_redacted = " ".join(redacted_text.casefold().split())
+
+        valid_entities = [
+            e for e in entities
+            if isinstance(e.start_char, int)
+            and isinstance(e.end_char, int)
+            and 0 <= e.start_char < e.end_char <= len(source_text)
+        ]
+
+        for entity in valid_entities:
+            start = entity.start_char
+            end = entity.end_char
+            value = entity.entity_value or ""
+
+            source_value = " ".join(source_text[start:end].casefold().split())
+            normalized_value = " ".join(value.casefold().split())
+            if not normalized_value or source_value != normalized_value:
+                issues.append("ENTITY_SPAN_VALUE_MISMATCH")
+                continue
+
+            # Verify that the specific character span was actually redacted (replaced by marker)
+            # If the original raw entity text still remains at/around its un-redacted location
+            if len(normalized_value) >= 4 and normalized_value in normalized_redacted:
+                # Check if it was left un-redacted in the redacted text
+                if normalized_value in source_text.casefold() and normalized_value in redacted_text.casefold():
+                    # Only flag if the redacted text still contains the exact entity string
+                    issues.append("DETECTED_VALUE_REMAINS")
+
+        residual_detections = RegexDetector().detect(redacted_text, page_number=1)
+        if any(
+            detection.entity_type in DetectionService.PII_SAFETY_TYPES
+            for detection in residual_detections
+        ):
+            issues.append("DETERMINISTIC_PII_REMAINS")
+
+        return list(set(issues))
 
     def _save_redacted_text_file(
         self,

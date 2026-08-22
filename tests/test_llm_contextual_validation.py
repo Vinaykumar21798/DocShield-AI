@@ -3,7 +3,7 @@ from modules.detection.pipeline_state import PipelineState
 from modules.detection.semantic_chunker import SemanticChunker
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.service import DetectionService
-from modules.detection.detectors.qwen_detector import Qwen3BDetector
+from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
 from modules.detection.detectors.regex_detector import RegexDetector
 from modules.detection.detectors.presidio_detector import PresidioDetector
 
@@ -41,7 +41,7 @@ def test_low_confidence_mail_order_rejected():
     3. Low-confidence 'Mail Order' in benefit context is rejected by contextual validation.
     """
     text = "PRESCRIPTION DRUG BENEFITS:\nMail Order: $20 Copay for 90-day supply."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunker = SemanticChunker()
     chunks = chunker.chunk_document(text)
 
@@ -55,7 +55,7 @@ def test_low_confidence_mail_order_rejected():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([mail_order_cand], chunks, document_type="Summary of Benefits and Coverage (SBC)")
+    validated = gemma.validate_candidates([mail_order_cand], chunks, document_type="Summary of Benefits and Coverage (SBC)")
     # 'Mail Order' must be REJECTED (empty validated results)
     assert len(validated) == 0
 
@@ -65,7 +65,7 @@ def test_low_confidence_preauth_rejected():
     4. Low-confidence 'Preauth' is rejected by contextual validation.
     """
     text = "Specialty drugs require Preauth before dispensing."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     preauth_cand = DetectionResult(
@@ -78,7 +78,7 @@ def test_low_confidence_preauth_rejected():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([preauth_cand], chunks, document_type="Insurance Policy / Benefit Summary")
+    validated = gemma.validate_candidates([preauth_cand], chunks, document_type="Insurance Policy / Benefit Summary")
     assert len(validated) == 0
 
 
@@ -87,7 +87,7 @@ def test_low_confidence_minimum_value_rejected():
     5. Low-confidence 'Minimum Value' is rejected.
     """
     text = "This coverage meets the Minimum Value standard under the Affordable Care Act."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     min_val_cand = DetectionResult(
@@ -100,7 +100,7 @@ def test_low_confidence_minimum_value_rejected():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([min_val_cand], chunks, document_type="Summary of Benefits and Coverage (SBC)")
+    validated = gemma.validate_candidates([min_val_cand], chunks, document_type="Summary of Benefits and Coverage (SBC)")
     assert len(validated) == 0
 
 
@@ -109,7 +109,7 @@ def test_low_confidence_hearing_rejected():
     6. Low-confidence 'Hearing' in 'Hearing aids' context is rejected.
     """
     text = "Coverage excludes Hearing aids and routine vision care."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     hearing_cand = DetectionResult(
@@ -122,7 +122,7 @@ def test_low_confidence_hearing_rejected():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([hearing_cand], chunks, document_type="Insurance Policy / Benefit Summary")
+    validated = gemma.validate_candidates([hearing_cand], chunks, document_type="Insurance Policy / Benefit Summary")
     assert len(validated) == 0
 
 
@@ -131,7 +131,7 @@ def test_westfield_contextually_reclassified():
     7. 'Westfield' in pharmacy context is contextually reclassified to ORGANIZATION.
     """
     text = "Prescription dispensed at Westfield Pharmacy on Main Street."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     westfield_cand = DetectionResult(
@@ -144,7 +144,7 @@ def test_westfield_contextually_reclassified():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([westfield_cand], chunks, document_type="Explanation of Benefits (EOB) / Medical Claim")
+    validated = gemma.validate_candidates([westfield_cand], chunks, document_type="Explanation of Benefits (EOB) / Medical Claim")
     assert len(validated) == 1
     assert validated[0].entity_type == "ORGANIZATION"
     assert validated[0].confidence_score >= 0.85
@@ -155,7 +155,7 @@ def test_valid_low_confidence_person_confirmed():
     8. A valid low-confidence person in real person context is CONFIRMED.
     """
     text = "Patient Eleanor Vance presented with symptoms of acute asthma."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     person_cand = DetectionResult(
@@ -168,15 +168,15 @@ def test_valid_low_confidence_person_confirmed():
         detector="presidio",
     )
 
-    validated = qwen.validate_candidates([person_cand], chunks, document_type="Medical Record / Clinical Note")
+    validated = gemma.validate_candidates([person_cand], chunks, document_type="Medical Record / Clinical Note")
     assert len(validated) == 1
     assert validated[0].entity_type == "PERSON"
     assert validated[0].confidence_score >= 0.85
 
 
-def test_qwen_residual_discovery_in_same_chunk():
+def test_gemma_residual_discovery_in_same_chunk():
     """
-    9. Qwen can discover missed MUST_HAVE entity in the same semantic chunk.
+    9. Gemma can discover missed MUST_HAVE entity in the same semantic chunk.
     """
     text = "Patient SSN: 123-45-6789. Clinical diagnosis: malignant hypertension."
     state = PipelineState(original_text=text)
@@ -194,22 +194,22 @@ def test_qwen_residual_discovery_in_same_chunk():
     )
     state.add_entities([ssn], detector_name="regex", mask_confidence_threshold=0.80)
 
-    # Qwen discovers missed diagnosis
+    # Gemma discovers missed diagnosis
     diag_idx = text.index("malignant hypertension")
-    qwen_diag = DetectionResult(
+    gemma_diag = DetectionResult(
         entity_type="DIAGNOSIS",
         entity_value="malignant hypertension",
         confidence_score=0.92,
         start_char=diag_idx,
         end_char=diag_idx + len("malignant hypertension"),
         page_number=1,
-        detector="qwen3b",
+        detector="gemma4e4b",
     )
 
     accepted = DetectionService._filter_new_entities(
-        [qwen_diag],
+        [gemma_diag],
         state=state,
-        detector_name="qwen3b",
+        detector_name="gemma4e4b",
         mask_confidence_threshold=0.80,
     )
 
@@ -219,7 +219,7 @@ def test_qwen_residual_discovery_in_same_chunk():
 
 def test_locked_high_confidence_entities_never_duplicated():
     """
-    10. Locked high-confidence entities are never duplicated by downstream detectors or Qwen.
+    10. Locked high-confidence entities are never duplicated by downstream detectors or Gemma.
     """
     text = "Patient SSN: 123-45-6789."
     state = PipelineState(original_text=text)
@@ -264,7 +264,7 @@ def test_spanish_disclaimers_rejected():
     11. Spanish disclaimer tokens ('Español', 'Para obtener', 'al 1-800-555-1234') are rejected.
     """
     text = "Language Access Services: Spanish (Español): Para obtener ayuda en Español, llame al 1-800-555-1234."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     cands = [
@@ -297,7 +297,7 @@ def test_spanish_disclaimers_rejected():
         ),
     ]
 
-    validated = qwen.validate_candidates(cands, chunks, document_type="Summary of Benefits and Coverage (SBC)")
+    validated = gemma.validate_candidates(cands, chunks, document_type="Summary of Benefits and Coverage (SBC)")
     assert len(validated) == 0
 
 
@@ -315,12 +315,12 @@ def test_doctor_visit_suffix_cleaning():
     assert "Dr. Robert Chen Office Visit" not in doc_names
 
 
-def test_confirmed_entities_attributed_to_qwen():
+def test_confirmed_entities_attributed_to_gemma():
     """
-    13. Validated entities are attributed to Qwen with upgraded confidence.
+    13. Validated entities are attributed to Gemma with upgraded confidence.
     """
     text = "Coverage members: Jane R. Smith, Robert Smith, Emma Smith, Noah Smith."
-    qwen = Qwen3BDetector()
+    gemma = Gemma4E4BDetector()
     chunks = SemanticChunker().chunk_document(text)
 
     cands = [
@@ -344,9 +344,9 @@ def test_confirmed_entities_attributed_to_qwen():
         ),
     ]
 
-    validated = qwen.validate_candidates(cands, chunks, document_type="Insurance Policy / Benefit Summary")
+    validated = gemma.validate_candidates(cands, chunks, document_type="Insurance Policy / Benefit Summary")
     assert len(validated) == 2
     for item in validated:
-        assert item.detector == "Qwen"
+        assert item.detector == "Gemma"
         assert item.confidence_score >= 0.85
 

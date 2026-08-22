@@ -109,12 +109,12 @@ class DetectorSelector:
     }
 
     DOMAIN_ROUTES = {
-        "financial": ("regex", "presidio", "gliner", "qwen3b"),
-        "healthcare": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
-        "corporate": ("regex", "presidio", "gliner", "qwen3b"),
-        "legal": ("regex", "presidio", "gliner", "qwen3b"),
-        "generic": ("regex", "presidio", "gliner", "qwen3b"),
-        "mixed": ("regex", "medspacy", "presidio", "gliner", "qwen3b"),
+        "financial": ("regex", "presidio", "gliner", "gemma"),
+        "healthcare": ("regex", "medspacy", "presidio", "gliner", "gemma"),
+        "corporate": ("regex", "presidio", "gliner", "gemma"),
+        "legal": ("regex", "presidio", "gliner", "gemma"),
+        "generic": ("regex", "presidio", "gliner", "gemma"),
+        "mixed": ("regex", "medspacy", "presidio", "gliner", "gemma"),
     }
 
     DOCUMENT_TYPE_DOMAINS = {
@@ -147,7 +147,7 @@ class DetectorSelector:
             use_presidio=True,
             use_gliner=True,
             use_medspacy=domain in {"healthcare", "mixed"},
-            use_qwen=True,
+            use_gemma=True,
         )
         strategy.selected_detectors = list(self.route_for_domain(domain))
         return strategy

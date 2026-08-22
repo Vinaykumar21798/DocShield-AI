@@ -2,6 +2,15 @@ import pytest
 from modules.detection.semantic_chunker import SemanticChunker, DocumentChunk
 from modules.detection.models.detection_result import DetectionResult
 
+
+def test_semantic_chunker_reliable_default_sizes():
+    chunker = SemanticChunker()
+
+    assert chunker.target_chunk_chars == 1500
+    assert chunker.max_chunk_chars == 2200
+    assert chunker.min_chunk_chars == 300
+    assert chunker.overlap_chars == 200
+
 def test_semantic_chunker_small_text():
     text = "Patient Name: Jane Doe. Diagnosis: Hypertension."
     chunker = SemanticChunker(max_chunk_chars=1000)

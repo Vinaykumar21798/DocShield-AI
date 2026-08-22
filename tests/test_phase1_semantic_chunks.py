@@ -129,7 +129,7 @@ def test_4_every_relevant_chunk_passed_to_gliner_when_routed(monkeypatch):
     tracking_gliner = TrackingDetector("gliner")
     service.gliner = tracking_gliner
 
-    # Financial domain route includes regex -> presidio -> gliner -> qwen3b
+    # Financial domain route includes regex -> presidio -> gliner -> gemma4e4b
     text = (
         "Statement 1: Account Holder: Nitish Kumar\nBranch: City Union Bank\n\n"
         "Statement 2: Beneficiary: Ramesh Patel\nIFSC: CIUB0000528\n\n"
@@ -153,7 +153,7 @@ def test_5_every_relevant_chunk_passed_to_medspacy_when_appropriate(monkeypatch)
     tracking_medspacy = TrackingDetector("medspacy")
     service.medspacy = tracking_medspacy
 
-    # Healthcare domain route includes regex -> medspacy -> presidio -> gliner -> qwen3b
+    # Healthcare domain route includes regex -> medspacy -> presidio -> gliner -> gemma4e4b
     text = (
         "Medical Section 1: Patient diagnosed with Hypertension and Type 2 Diabetes.\n\n"
         "Medical Section 2: Started on Metformin 500mg and Lisinopril 10mg daily.\n\n"

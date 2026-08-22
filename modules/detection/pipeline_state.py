@@ -269,7 +269,7 @@ class PipelineState:
         reasoning: str,
         start_char: int,
         end_char: int,
-        detector: str = "Qwen3:4b",
+        detector: str = "Gemma",
         original_type: str | None = None,
         page_number: int = 1,
     ) -> None:
@@ -448,7 +448,10 @@ class PipelineState:
         return {
             "count": len(candidates),
             "preview": [
-                candidate["text"]
+                (
+                    f"{candidate['kind']}@"
+                    f"{candidate['start']}:{candidate['end']}"
+                )
                 for candidate in candidates[:preview_limit]
             ],
             "total_chars": sum(

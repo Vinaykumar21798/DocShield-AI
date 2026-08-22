@@ -16,9 +16,16 @@ Setup:
 ```powershell
 cd E:\Office\DocShield-AI
 .\scripts\local-init.ps1
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
 ```
+
+Initialization installs dependencies and the Presidio spaCy English model
+inside `.venv`; all local run scripts invoke that interpreter explicitly.
+
+Gemma defaults to `gemma4:e4b` with `num_ctx=8192`, `num_predict=1024`
+(`1536` for dense tables), and temperature `0.10`. Semantic chunks target
+1,500 characters, are capped at 2,200, use a 300-character minimum and
+200-character overlap, and are sent one chunk per request with one retry after
+a timeout, truncated response, or invalid JSON.
 
 Edit `.env.local` and set the real PostgreSQL password in both `POSTGRES_PASSWORD` and `DATABASE_URL`.
 

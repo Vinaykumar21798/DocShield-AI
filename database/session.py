@@ -58,7 +58,7 @@ def run_startup_validation() -> None:
 
     PostgreSQL schema validation is strict because the API cannot safely serve
     document state without it. The Ollama startup model check is optional and
-    enabled with OLLAMA_REQUIRED=true for the Qwen detector runtime.
+    enabled with OLLAMA_REQUIRED=true for the Gemma detector runtime.
     """
     logger = logging.getLogger(__name__)
     logger.info("Initializing startup validation")
@@ -166,7 +166,7 @@ def run_startup_validation() -> None:
         model.strip()
         for model in os.getenv(
             "OLLAMA_REQUIRED_MODELS",
-            "qwen3:4b",
+            "gemma4:e4b",
         ).split(",")
         if model.strip()
     ]

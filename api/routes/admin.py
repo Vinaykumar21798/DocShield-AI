@@ -31,6 +31,10 @@ class RecentDocument(BaseModel):
     status: str
     entity_count: int
     created_at: Optional[datetime] = None
+    prompt_tokens: Optional[int] = None
+    completion_tokens: Optional[int] = None
+    llm_cost_usd: Optional[float] = None
+    llm_provider: Optional[str] = None
 
 
 class UserStats(BaseModel):
@@ -226,6 +230,10 @@ def get_stats(
                     .count()
                 ),
                 created_at=document.created_at,
+                prompt_tokens=document.prompt_tokens,
+                completion_tokens=document.completion_tokens,
+                llm_cost_usd=round(document.llm_cost_usd, 6) if document.llm_cost_usd is not None else None,
+                llm_provider=document.llm_provider,
             )
         )
 

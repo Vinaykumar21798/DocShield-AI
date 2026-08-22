@@ -4,7 +4,7 @@ from typing import Any
 from modules.detection.semantic_chunker import SemanticChunker, DocumentChunk
 from modules.detection.service import DetectionService, DynamicDetectionConfig
 from modules.detection.detectors.base_detector import BaseDetector
-from modules.detection.detectors.qwen_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
+from modules.detection.detectors.gemma_detector import GemmaDetector, ResidualEntityItem, ResidualDiscoveryResponse
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.pipeline_state import PipelineState
 
@@ -207,7 +207,7 @@ def test_4_locked_ssn_with_ordinary_label_only():
 
 
 def test_5_locked_ssn_with_unresolved_diagnosis():
-    """Test 5: Locked SSN exists, but diagnosis remains unresolved -> PARTIALLY_COVERED -> Sent to Gemma."""
+    """Test 5: Sparse SSN coverage with unresolved diagnosis is sent to Gemma."""
     text = "SSN: 999-88-7777\nDiagnosis: malignant hypertension"
     chunk = DocumentChunk(chunk_id=1, start_char=0, end_char=len(text), text=text, section_name="CLINICAL")
     resolved_entity = DetectionResult(
@@ -221,7 +221,7 @@ def test_5_locked_ssn_with_unresolved_diagnosis():
 
     eval_result = DetectionService.evaluate_chunk_coverage(chunk, [resolved_entity], text)
     assert eval_result["meaningful_unresolved_regions"] >= 1
-    assert eval_result["coverage_status"] == "PARTIALLY_COVERED"
+    assert eval_result["coverage_status"] == "INSUFFICIENTLY_COVERED"
     assert eval_result["skip_residual_detection"] is False
 
 

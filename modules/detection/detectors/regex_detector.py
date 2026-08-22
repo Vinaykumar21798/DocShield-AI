@@ -78,7 +78,13 @@ class RegexDetector(BaseDetector):
             r"\b[A-Z]{5}[0-9]{4}[A-Z]\b",
 
         "DRIVING_LICENSE":
-            r"(?im)^\s*(?:[-*][ \t]*)?(?:Driving License|Driver License|Driving Licence|Driver Licence)[ \t]*[:\-][ \t]*([A-Z]{2}\d{2}[ \t-]?\d{7,12})[ \t]*$",
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:Driving License|Driver License|Driver's License|Driving Licence|Driver Licence|DL)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$|\b[A-Z]{2}\d{2}[ \t-]?\d{7,12}\b",
+
+        "NATIONAL_ID":
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:National ID|NID|Military ID)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$",
+
+        "CRYPTO_WALLET":
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:Crypto Wallet|Wallet Address)[ \t]*[:\-][ \t]*([A-Za-z0-9]{32,64})[ \t]*$",
 
         "PASSPORT_NUMBER":
             r"\b[A-Z][0-9]{7,8}\b",
@@ -491,11 +497,15 @@ class RegexDetector(BaseDetector):
                         continue
 
                 # Avoid classifying bank account numbers as credit cards.
+                is_checksum_failed_candidate = False
                 if entity == "CREDIT_CARD":
                     if self.has_context("BANK_ACCOUNT", text, start_char):
                         continue
                     if not self.validate(entity, value):
-                        continue
+                        if self.has_context("CREDIT_CARD", text, start_char):
+                            is_checksum_failed_candidate = True
+                        else:
+                            continue
 
                 # Enforce contextual verification for ADDRESS to avoid masking placeholders.
                 if entity == "ADDRESS":
@@ -555,6 +565,8 @@ class RegexDetector(BaseDetector):
                     text,
                     start_char,
                 )
+                if is_checksum_failed_candidate:
+                    confidence = 0.40
 
                 detections.append(
                     DetectionResult(

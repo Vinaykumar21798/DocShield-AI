@@ -60,6 +60,7 @@ def _create_report(db_session, tmp_path, document, audit, suffix):
             document_id=document.id,
             report_type="AUDIT",
             report_path=relative_path,
+            gemma_invoked=True,
         )
     )
 
@@ -102,7 +103,7 @@ def test_audit_persists_reloads_across_sessions_roles_and_documents(
                 "entity_type": "PERSON",
                 "decision": "CONFIRM",
                 "confidence": 0.93,
-                "detector": "Qwen3:4b",
+                "detector": "Gemma4:e4b",
                 "reasoning": "Synthetic context supports a person entity.",
             }
         ],
@@ -112,7 +113,7 @@ def test_audit_persists_reloads_across_sessions_roles_and_documents(
                 "entity_type": "ORGANIZATION",
                 "decision": "REJECT",
                 "confidence": 0.31,
-                "detector": "Qwen3:4b",
+                "detector": "Gemma4:e4b",
                 "reasoning": "Synthetic context indicates a section label.",
             }
         ],
@@ -124,7 +125,7 @@ def test_audit_persists_reloads_across_sessions_roles_and_documents(
                 "entity_type": "ADDRESS",
                 "decision": "RECLASSIFY",
                 "confidence": 0.86,
-                "detector": "Qwen3:4b",
+                "detector": "Gemma4:e4b",
                 "reasoning": "Synthetic location context supports an address.",
             }
         ],
@@ -165,6 +166,7 @@ def test_audit_persists_reloads_across_sessions_roles_and_documents(
     assert first_response.status_code == 200
     first_payload = first_response.json()[0]
     assert first_payload["document_id"] == first_document.id
+    assert first_payload["gemma_invoked"] is True
     assert first_payload["llm_candidate_audit"] == first_audit
     assert first_payload["llm_candidate_accepted_count"] == 1
     assert first_payload["llm_candidate_rejected_count"] == 1
