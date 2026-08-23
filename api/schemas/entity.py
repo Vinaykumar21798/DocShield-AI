@@ -19,6 +19,9 @@ class EntityResponse(BaseModel):
     end_char: Optional[int] = None
     is_review_required: bool = False
     is_redacted: bool = False
+    ai_decision: Optional[str] = None
+    ai_reasoning: Optional[str] = None
+    is_accepted_by_ai: Optional[bool] = True
     created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)

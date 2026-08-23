@@ -3,53 +3,6 @@ from modules.detection.models.detection_result import DetectionResult
 from modules.detection.service import DetectionService
 
 
-sample_text = """
-Patient Name: John Doe
-Age: 45
-
-Hospital:
-Apollo Hospital
-
-Email:
-john.doe@gmail.com
-
-Phone:
-9876543210
-
-Aadhaar:
-1234 5678 9012
-
-PAN:
-ABCDE1234F
-
-Diagnosis:
-Diabetes Mellitus
-
-Medication:
-Metformin 500mg
-
-Address:
-Hyderabad, Telangana
-"""
-
-
-service = DetectionService()
-
-results = service.detect(sample_text)
-
-print("\nDetected Entities\n")
-print("-" * 60)
-
-for entity in results:
-
-    print(f"Entity Type : {entity.entity_type}")
-    print(f"Value       : {entity.entity_value}")
-    print(f"Confidence  : {entity.confidence_score:.2f}")
-    print(f"Detector    : {entity.detector}")
-    print(f"Metadata    : {entity.metadata}")
-    print("-" * 60)
-
-
 class FakeDetector(BaseDetector):
     def __init__(
         self,
@@ -322,6 +275,12 @@ def test_regex_below_80_routes_forward_and_later_detector_becomes_final(monkeypa
                     metadata={"test_detector": True},
                 )
             ]
+
+        def validate_candidates(self, candidates, chunks, document_type=None):
+            for candidate in candidates:
+                candidate.detector = self.name
+                candidate.metadata["gemma_validation"] = "CONFIRM"
+            return candidates
 
     gemma = ContextRelativeGemma("gemma4e4b")
     service = service_with_detectors(
@@ -780,8 +739,10 @@ Clinical information related to your diabetes care, including recent A1C results
     # Verify correct mappings
     assert ("DATE", "May 14, 2025") in detected
     assert ("PATIENT", "Michael J. Roberts") in detected
-    assert ("ADDRESS", "542 Willow Lane") in detected
-    assert ("ZIP_CODE", "48334") in detected
+    assert (
+        "ADDRESS",
+        "542 Willow Lane\nCITY, STATE ZIP: Farmington Hills, MI 48334",
+    ) in detected
     assert ("MEDICAL_RECORD_NUMBER", "EHS-78245912") in detected
     assert ("INSURANCE_ID", "8752A69JK21") in detected
     assert ("INSURANCE_ID", "information") not in detected

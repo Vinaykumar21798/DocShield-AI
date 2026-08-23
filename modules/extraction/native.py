@@ -67,12 +67,56 @@ class NativePDFExtractionService:
 
         for page_number in range(pdf_document.page_count):
             page = pdf_document.load_page(page_number)
-            page_text = page.get_text("text").strip()
+            page_text = self._extract_page_layout_text(page)
 
             if page_text:
                 page_texts.append(page_text)
 
         return "\n\n\f\n\n".join(page_texts).strip()
+
+    @staticmethod
+    def _extract_page_layout_text(page) -> str:
+        try:
+            tabs = page.find_tables()
+            if not tabs or not tabs.tables:
+                return page.get_text("text").strip()
+
+            import fitz
+            table_entries = []
+            table_rects = []
+            for tab in tabs:
+                t_rect = fitz.Rect(tab.bbox)
+                table_rects.append(t_rect)
+                try:
+                    md = tab.to_markdown().strip()
+                except Exception:
+                    extracted = tab.extract()
+                    md = "\n".join(["\t".join(str(c or "") for c in row) for row in extracted])
+                table_entries.append((t_rect.y0, md))
+
+            blocks = page.get_text("blocks")
+            elements = []
+            for b in blocks:
+                b_rect = fitz.Rect(b[:4])
+                b_text = b[4].strip()
+                if not b_text:
+                    continue
+                inside_table = False
+                for t_rect in table_rects:
+                    intersect = b_rect & t_rect
+                    if intersect.get_area() > 0.5 * b_rect.get_area():
+                        inside_table = True
+                        break
+                if not inside_table:
+                    elements.append((b_rect.y0, b_text))
+
+            for y0, md in table_entries:
+                elements.append((y0, md))
+
+            elements.sort(key=lambda item: item[0])
+            return "\n\n".join(item[1] for item in elements).strip()
+        except Exception:
+            return page.get_text("text").strip()
 
     def _get_file_path(self, document: Document) -> Path:
         if not document.storage_path:

@@ -275,8 +275,21 @@ class MedSpaCyDetector(BaseDetector):
             reverse=True,
         )
         for phrase, label in rules:
-            escaped_terms = [re.escape(term) for term in phrase.split()]
-            pattern = r"(?<!\w)" + r"\s+".join(escaped_terms) + r"(?!\w)"
+            raw_terms = phrase.split()
+
+            def _flex_term(term: str) -> str:
+                # Treat hyphens as an optional hyphen/space, both within and between tokens
+                # (e.g. "x-ray" also matches "xray" or "x ray").
+                parts = [re.escape(p) for p in term.split("-")]
+                return r"[-\s]?".join(parts)
+
+            flexed_terms = [_flex_term(term) for term in raw_terms]
+            joined = r"[-\s]+".join(flexed_terms)
+            # Allow a simple trailing plural on the last token (e.g. "medication" vs "medications").
+            last_term = raw_terms[-1]
+            if last_term.isalpha() and not last_term.endswith("s"):
+                joined += "s?"
+            pattern = r"(?<!\w)" + joined + r"(?!\w)"
             for match in re.finditer(pattern, text, flags=re.IGNORECASE):
                 if self._overlaps(match.start(), match.end(), detections):
                     continue

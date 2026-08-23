@@ -75,6 +75,7 @@ OCR_ENGINE_PLACEHOLDER = "PLACEHOLDER"
 OCR_PLACEHOLDER_TEXT = "TODO - OCR not implemented"
 DEFAULT_WORKER_ID = "document-processing-worker"
 HUMAN_REVIEW_THRESHOLD = 0.80
+MAX_REDACTION_SAFETY_PASSES = 3
 
 STARTUP_WORKFLOW_STEPS = {
     WorkflowStep.LOAD_DOCUMENT,
@@ -753,6 +754,16 @@ class DocumentProcessingWorkflow:
                 )
                 continue
 
+            is_rejected = (
+                detection.metadata.get("gemma_validation") == "REJECT"
+                or detection.metadata.get("azure_validation") == "REJECT"
+            )
+            raw_decision = detection.metadata.get("gemma_validation") or detection.metadata.get("azure_validation")
+            raw_reasoning = detection.metadata.get("gemma_reason") or detection.metadata.get("azure_reason")
+
+            ai_decision = raw_decision
+            ai_reasoning = raw_reasoning
+
             entity = Entity(
                 id=str(uuid4()),
                 document_id=document.id,
@@ -767,10 +778,13 @@ class DocumentProcessingWorkflow:
                 privacy_category=detection.privacy_category,
                 entity_owner=detection.entity_owner or detection.detector,
                 canonical_type=detection.canonical_type or detection.entity_type,
-                processing_stage="DETECTION",
-                is_review_required=self._is_review_required(detection),
+                processing_stage="REJECTED_BY_AI" if is_rejected else "DETECTION",
+                is_review_required=False if is_rejected else self._is_review_required(detection),
                 is_redacted=False,
                 final_confidence=detection.confidence_score,
+                ai_decision=ai_decision,
+                ai_reasoning=ai_reasoning,
+                is_accepted_by_ai=not is_rejected,
             )
             entity_repository.create(entity)
             state.persisted_entity_ids.append(entity.id)
@@ -831,6 +845,10 @@ class DocumentProcessingWorkflow:
         entity_repository = EntityRepository(self.db)
         redaction_repository = RedactionRepository(self.db)
         entities = entity_repository.get_by_document_id(document.id)
+        entities = [
+            e for e in entities
+            if getattr(e, "is_accepted_by_ai", True) and e.processing_stage != "REJECTED_BY_AI"
+        ]
 
         # Expand all valid occurrences of confirmed entities across multi-page document text
         detection_entities = [
@@ -869,6 +887,16 @@ class DocumentProcessingWorkflow:
 
         redaction_repository.delete_by_document_id(document.id)
         redacted_text = self._apply_redactions(source_text, expanded_entities)
+        safety_redacted_text = self._apply_deterministic_safety_redactions(
+            redacted_text,
+        )
+        if safety_redacted_text != redacted_text:
+            self.logger.warning(
+                "Applied deterministic residual-PII redactions for "
+                "document_id=%s",
+                document.id,
+            )
+        redacted_text = safety_redacted_text
         verification_issues = self._redaction_verification_issues(
             source_text,
             redacted_text,
@@ -1087,9 +1115,10 @@ class DocumentProcessingWorkflow:
         existing_spans = {(e.start_char, e.end_char) for e in entities if e.start_char is not None and e.end_char is not None}
 
         EXPANDABLE_TYPES = {
-            "SSN", "BANK_ACCOUNT", "BRANCH_CODE", "PHONE_NUMBER", "US_PHONE_NUMBER",
+            "SSN", "BANK_ACCOUNT", "BANK_ACCOUNT_NUMBER", "BRANCH_CODE", "PHONE_NUMBER", "US_PHONE_NUMBER",
             "EMAIL", "MRN", "PASSPORT_NUMBER", "CREDIT_CARD", "AADHAAR_NUMBER",
-            "PAN_NUMBER", "TAX_ID", "POLICY_NUMBER", "CLAIM_NUMBER", "MEMBER_ID"
+            "PAN_NUMBER", "TAX_ID", "POLICY_NUMBER", "CLAIM_NUMBER", "MEMBER_ID",
+            "EMPLOYEE_ID", "DOCUMENT_ID", "IFSC_CODE", "PATIENT_ID", "ACCOUNT_NUMBER", "CONFIDENTIAL_ID"
         }
 
         for entity in entities:
@@ -1136,24 +1165,29 @@ class DocumentProcessingWorkflow:
         if not valid_entities:
             return text
 
-        # Sort by start_char ASC, end_char DESC to resolve overlapping entity spans
+        # Sort by start_char ASC, end_char DESC
         valid_entities.sort(key=lambda e: (e.start_char, -e.end_char))
-        non_overlapping: list[Entity] = []
-        last_end = -1
+        merged_spans: list[tuple[int, int, str]] = []
         for e in valid_entities:
-            if e.start_char >= last_end:
-                non_overlapping.append(e)
-                last_end = e.end_char
+            if not merged_spans:
+                merged_spans.append((e.start_char, e.end_char, e.entity_type))
+            else:
+                prev_start, prev_end, prev_type = merged_spans[-1]
+                if e.start_char < prev_end:
+                    # Overlapping: extend previous span to cover both entities completely
+                    merged_spans[-1] = (prev_start, max(prev_end, e.end_char), prev_type)
+                else:
+                    merged_spans.append((e.start_char, e.end_char, e.entity_type))
 
         # Apply redactions from right-to-left to preserve text indices
-        non_overlapping.sort(key=lambda e: e.start_char, reverse=True)
+        merged_spans.sort(key=lambda s: s[0], reverse=True)
         redacted_text = text
-        for entity in non_overlapping:
-            marker = f"[REDACTED_{entity.entity_type}]"
+        for start, end, e_type in merged_spans:
+            marker = f"[REDACTED_{e_type}]"
             redacted_text = (
-                redacted_text[:entity.start_char]
+                redacted_text[:start]
                 + marker
-                + redacted_text[entity.end_char:]
+                + redacted_text[end:]
             )
 
         return redacted_text
@@ -1189,10 +1223,10 @@ class DocumentProcessingWorkflow:
             # Verify that the specific character span was actually redacted (replaced by marker)
             # If the original raw entity text still remains at/around its un-redacted location
             if len(normalized_value) >= 4 and normalized_value in normalized_redacted:
-                # Check if it was left un-redacted in the redacted text
+                # Check if it was left un-redacted in the redacted text as a standalone word match
                 if normalized_value in source_text.casefold() and normalized_value in redacted_text.casefold():
-                    # Only flag if the redacted text still contains the exact entity string
-                    issues.append("DETECTED_VALUE_REMAINS")
+                    if re.search(r"\b" + re.escape(normalized_value) + r"\b", redacted_text.casefold()):
+                        issues.append("DETECTED_VALUE_REMAINS")
 
         residual_detections = RegexDetector().detect(redacted_text, page_number=1)
         if any(
@@ -1202,6 +1236,36 @@ class DocumentProcessingWorkflow:
             issues.append("DETERMINISTIC_PII_REMAINS")
 
         return list(set(issues))
+
+    @classmethod
+    def _apply_deterministic_safety_redactions(
+        cls,
+        redacted_text: str,
+    ) -> str:
+        """Redact high-risk regex matches exposed by earlier replacements.
+
+        Replacing overlapping entities can reveal a broader deterministic
+        match on the partially redacted text (for example, the remainder of a
+        labeled address). A bounded fixed-point pass removes those residual
+        spans before the fail-closed verifier makes the release decision.
+        """
+        result = redacted_text
+
+        for _ in range(MAX_REDACTION_SAFETY_PASSES):
+            residual_detections = [
+                detection
+                for detection in RegexDetector().detect(result, page_number=1)
+                if detection.entity_type in DetectionService.PII_SAFETY_TYPES
+            ]
+            if not residual_detections:
+                break
+
+            updated = cls._apply_redactions(result, residual_detections)
+            if updated == result:
+                break
+            result = updated
+
+        return result
 
     def _save_redacted_text_file(
         self,

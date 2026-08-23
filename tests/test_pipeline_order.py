@@ -169,6 +169,7 @@ def create_mock_service(fake_gemma):
     service.gliner = MockDetector("gliner")
     service.medspacy = MockDetector("medspacy")
     service.gemma = fake_gemma
+    service.azure = fake_gemma
     return service
 
 
@@ -254,7 +255,9 @@ def test_4_residual_candidate_can_be_reclassified_by_validation(monkeypatch):
     )
     service = create_mock_service(fake_gemma)
 
-    results = service.detect(text, document_type="financial")
+    # This test exercises reclassification itself. A financial document policy
+    # may independently mark generic organizations as DROP.
+    results = service.detect(text)
     bank = next(r for r in results if r.entity_value == "City Union Bank")
     assert bank.entity_type == "ORGANIZATION"
 

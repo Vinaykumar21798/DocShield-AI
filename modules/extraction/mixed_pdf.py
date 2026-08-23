@@ -4,7 +4,10 @@ from time import perf_counter
 from typing import Any, Dict, List, Optional, Sequence
 
 from database.models import Document
-from modules.extraction.native import TextExtractionResult
+from modules.extraction.native import (
+    NativePDFExtractionService,
+    TextExtractionResult,
+)
 from modules.extraction.paddle import (
     OCRPageText,
     PaddleOCRExtractionService,
@@ -98,7 +101,7 @@ class MixedPDFExtractionService:
 
         for page_index in range(pdf_document.page_count):
             page = pdf_document.load_page(page_index)
-            page_text = page.get_text("text").strip()
+            page_text = NativePDFExtractionService._extract_page_layout_text(page)
             is_searchable = (
                 len(page_text) >= self.min_searchable_text_length
             )

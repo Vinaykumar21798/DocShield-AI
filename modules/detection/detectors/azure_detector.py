@@ -30,7 +30,7 @@ DEFAULT_MUST_HAVE = [
 DEFAULT_NICE_TO_HAVE = [
     "ADMISSION_DATE", "DATE_OF_SERVICE", "DISCHARGE_DATE", "IBAN",
     "PLACE_OF_BIRTH", "ROUTING_NUMBER", "ZIP_CODE", "PIN_CODE", "TAX_ID",
-    "MEMBER_ID", "GROUP_NUMBER", "CLAIM_NUMBER"
+    "MEMBER_ID", "GROUP_NUMBER", "CLAIM_NUMBER", "NATIONAL_ID", "SOCIAL_MEDIA_HANDLE"
 ]
 
 
@@ -58,6 +58,15 @@ class AzureOpenAIDetector(BaseDetector):
         "yours faithfully", "sincerely", "regards", "branch name", "branch code",
         "account transfer", "home branch", "arrange", "understand", "caption",
         "dear", "sir", "madam", "please", "thank", "thanks", "hello", "hi",
+        "statement", "statement notices", "account summary", "holder", "notices",
+        "sb", "rd", "info", "details", "period", "balance", "amount", "total", "ending",
+        "logo", "logo placeholder", "placeholder", "field discrepancy", "discrepancy",
+        "field", "form title", "header", "footer", "page", "signature", "stamp", "label",
+        # Communication / email / document structure noise
+        "email thread", "email correspondence", "thread", "quoted replies", "original message",
+        "retail loans division", "loans division", "loan application follow-up", "documents pending",
+        "banking email thread", "confidential email record", "confidential record", "synthetic data",
+        "not a real record", "page 1 of 1", "document type", "report no", "subject",
     }
 
     def __init__(self):
@@ -116,6 +125,7 @@ class AzureOpenAIDetector(BaseDetector):
     ) -> list[DetectionResult]:
         """
         Phase 5: Contextual LLM candidate validation (CONFIRM / RECLASSIFY / REJECT).
+        Uses structured JSON Chain-of-Thought reasoning for compliance verification.
         """
         if not candidates:
             return []
@@ -131,41 +141,95 @@ class AzureOpenAIDetector(BaseDetector):
 
             prompt_estimate = max(50, len(chunk_text or candidate.entity_value) // 4 + 80)
             completion_estimate = 30
+            llm_item: Optional[CandidateValidationItem] = None
+
             if self.client:
                 try:
+                    system_prompt = (
+                        "You are an elite PII/PHI Compliance Validation Engine for legal, healthcare, and enterprise documents, "
+                        "operating under a zero-false-negative mandate. "
+                        "Your mission is to evaluate candidate text spans in context against strict global privacy regulations (HIPAA, GDPR, PCI-DSS, GLBA, CCPA).\n\n"
+                        "A wrongly REJECTed real entity is a compliance breach (the sensitive value ships unredacted). "
+                        "A wrongly CONFIRMed candidate is low-cost -- it is only reviewed later. "
+                        "For this reason, resolve any genuine ambiguity toward CONFIRM or RECLASSIFY, and reserve REJECT "
+                        "for candidates you are clearly and specifically certain are non-sensitive noise.\n\n"
+                        "For each candidate, analyze its surrounding context and decide:\n"
+                        "1. 'CONFIRM': The candidate is a genuine sensitive personal, health, or financial entity matching the proposed type.\n"
+                        "2. 'RECLASSIFY': The candidate is a genuine sensitive entity, but belongs to a different canonical type (specify in corrected_type).\n"
+                        "3. 'REJECT': The candidate is NOT sensitive PII/PHI (e.g. document headers, email thread titles, form field labels, common English words, template noise) -- use only when certain, not merely unsure.\n\n"
+                        "STRICT REJECTION RULES (Must return 'REJECT' -- these are the ONLY grounds for rejecting; anything else defaults to CONFIRM):\n"
+                        "- Document/email structure headers (e.g. 'Email Thread', 'Retail Loans Division', 'Quoted Replies', 'Loan Application Follow-up', 'Documents Pending', 'Discharge Summary', 'Medical Record').\n"
+                        "- Form labels and field names (e.g. 'Customer Name:', 'Patient ID:', 'Account No:', 'Date of Birth:', 'Signature').\n"
+                        "- Generic English verbs, nouns, and greetings (e.g. 'Request', 'Transfer', 'Enclosed', 'Captioned', 'Dear', 'Sincerely', 'Regards').\n"
+                        "- Document metadata and pagination (e.g. 'Page 1 of 1', 'Confidential Record', 'Synthetic Data', 'Report No').\n\n"
+                        "CANONICAL ENTITY TYPES:\n"
+                        "PERSON, PATIENT, DOCTOR, ORGANIZATION, HOSPITAL, ADDRESS, LOCATION, PHONE_NUMBER, EMAIL, DOCUMENT_ID, POLICY_NUMBER, BANK_ACCOUNT_NUMBER, PAN_NUMBER, SSN, DATE_TIME, FINANCIAL_AMOUNT, DIAGNOSIS, MEDICATION, PROCEDURE.\n\n"
+                        "You MUST respond ONLY with a valid JSON object matching this schema:\n"
+                        "{\n"
+                        '  "thought": "Brief step-by-step reasoning evaluating the candidate and its context.",\n'
+                        '  "decision": "CONFIRM" | "RECLASSIFY" | "REJECT",\n'
+                        '  "corrected_type": "<CANONICAL_TYPE or null>",\n'
+                        '  "confidence_score": 0.0 to 1.0,\n'
+                        '  "reasoning": "Clear 1-sentence compliance audit rationale."\n'
+                        "}"
+                    )
+
+                    user_content = (
+                        f"Candidate Entity: '{candidate.entity_value}'\n"
+                        f"Proposed Type: '{candidate.entity_type}'\n"
+                        f"Surrounding Document Context:\n\"\"\"{chunk_text[:500]}\"\"\"\n\n"
+                        "Return your validation decision in strict JSON format."
+                    )
+
                     resp = self.client.chat.completions.create(
                         model=self.deployment,
                         messages=[
-                            {
-                                "role": "system",
-                                "content": (
-                                    "You are a strict PII/PHI compliance validation classifier. "
-                                    "Confirm if candidate is genuinely sensitive personal, health, or financial data. "
-                                    "Reject generic English verbs/nouns (e.g. 'request', 'transfer', 'captioned', 'enclosed', 'notice')."
-                                ),
-                            },
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"Candidate Entity: '{candidate.entity_value}' (Proposed Type: {candidate.entity_type})\n"
-                                    f"Context: \"\"\"{chunk_text[:400]}\"\"\"\n\n"
-                                    "Decide: CONFIRM, RECLASSIFY, or REJECT."
-                                ),
-                            },
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content},
                         ],
                         temperature=0.0,
                     )
                     if hasattr(resp, "usage") and resp.usage:
                         prompt_estimate = getattr(resp.usage, "prompt_tokens", prompt_estimate) or prompt_estimate
                         completion_estimate = getattr(resp.usage, "completion_tokens", completion_estimate) or completion_estimate
+
+                    raw_resp = (resp.choices[0].message.content or "").strip()
+                    json_match = re.search(r"\{.*\}", raw_resp, re.DOTALL)
+                    if json_match:
+                        data = json.loads(json_match.group(0))
+                        dec = str(data.get("decision", "")).strip().upper()
+                        if dec in {"CONFIRM", "RECLASSIFY", "REJECT"}:
+                            corr_type = data.get("corrected_type")
+                            conf = float(data.get("confidence_score", 0.88))
+                            reason = str(data.get("reasoning") or data.get("thought") or f"Validated '{candidate.entity_value}' via Azure OpenAI.").strip()
+                            llm_item = CandidateValidationItem(
+                                candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                                decision=dec,
+                                corrected_type=corr_type if dec == "RECLASSIFY" and corr_type else candidate.entity_type,
+                                confidence_score=min(1.0, max(0.0, conf)),
+                                reasoning=reason,
+                            )
                 except Exception as exc:
-                    logger.debug("Azure OpenAI chat completion skipped (%s); using token estimate", exc)
+                    logger.debug("Azure OpenAI chat completion failed/skipped (%s); falling back to heuristic", exc)
 
             self.prompt_tokens += prompt_estimate
             self.completion_tokens += completion_estimate
             self.total_cost_usd += (prompt_estimate * 0.00000015) + (completion_estimate * 0.00000060)
 
-            item = self._heuristic_validate_candidate(candidate, chunk_text, document_type)
+            # Use LLM decision if available; fallback to deterministic heuristic
+            item = llm_item or self._heuristic_validate_candidate(candidate, chunk_text, document_type)
+
+            # Deterministic Safety Gate: Hardcoded noise words MUST be rejected even if LLM confirmed them
+            from modules.detection.validators.entity_validator import EntityValidator
+            val_clean = candidate.entity_value.lower().strip(" ,;:.[](){}\"'\t\n-")
+            if val_clean in self.COMMON_FORM_NOISE or EntityValidator._is_rejected_semantic_value(candidate.entity_type, candidate.entity_value):
+                item = CandidateValidationItem(
+                    candidate_id=str(getattr(candidate, "entity_id", "cand")),
+                    decision="REJECT",
+                    confidence_score=0.10,
+                    reasoning=f"Rejected '{candidate.entity_value}' as generic form header or document noise.",
+                )
+
             if item.decision in {"CONFIRM", "RECLASSIFY"}:
                 if item.decision == "RECLASSIFY" and item.corrected_type:
                     candidate.entity_type = item.corrected_type
@@ -250,12 +314,12 @@ class AzureOpenAIDetector(BaseDetector):
 
         # 5. Person Name validation
         if any(kw in norm_type for kw in ["PERSON", "PATIENT", "DOCTOR", "PHYSICIAN"]):
-            if val_lower in self.COMMON_FORM_NOISE or (len(val.split()) == 1 and val.islower()):
+            if val_lower in self.COMMON_FORM_NOISE or (len(val.split()) == 1 and (val.islower() or val_lower in self.COMMON_FORM_NOISE or len(val) <= 2)):
                 return CandidateValidationItem(
                     candidate_id=str(getattr(candidate, "entity_id", "cand")),
                     decision="REJECT",
                     confidence_score=0.10,
-                    reasoning=f"Rejected '{val}' as non-name word.",
+                    reasoning=f"Rejected '{val}' as document form label or non-person word.",
                 )
             if len(val) >= 2 and any(c.isalpha() for c in val):
                 return CandidateValidationItem(
@@ -268,12 +332,12 @@ class AzureOpenAIDetector(BaseDetector):
 
         # 6. Organizations, Clinics & Facilities
         if any(kw in norm_type for kw in ["ORGANIZATION", "HOSPITAL", "CLINIC", "PROVIDER", "INSURANCE"]):
-            if val_lower in self.COMMON_FORM_NOISE or len(val) < 3:
+            if val_lower in self.COMMON_FORM_NOISE or len(val) < 3 or (len(val.split()) == 1 and val_lower in self.COMMON_FORM_NOISE):
                 return CandidateValidationItem(
                     candidate_id=str(getattr(candidate, "entity_id", "cand")),
                     decision="REJECT",
                     confidence_score=0.10,
-                    reasoning=f"Rejected '{val}' as non-organization word.",
+                    reasoning=f"Rejected '{val}' as document form label or non-organization word.",
                 )
             return CandidateValidationItem(
                 candidate_id=str(getattr(candidate, "entity_id", "cand")),
@@ -348,14 +412,26 @@ class AzureOpenAIDetector(BaseDetector):
 
         prompt = f"""You are an elite PII, PHI, Financial, and Government Data Protection Security Auditor.
 Your primary mission is ZERO MISSED SENSITIVE ENTITIES across all global privacy regulations (HIPAA, PCI-DSS, GLBA, GDPR, CCPA/CPRA, State Privacy Laws, International Standards).
+A missed sensitive entity is a compliance breach; a flagged candidate that turns out to be borderline
+costs nothing since it is reviewed downstream. When you are unsure whether something qualifies, INCLUDE
+it with a lower confidence_score rather than leaving it out. Read the chunk more than once: once for
+clearly labeled values, and again for entities with no explicit label, values split across a line
+break, abbreviated/shorthand forms, and repeated occurrences of an entity you already found elsewhere
+in the same chunk (report every occurrence, not just the first).
 
 EXHAUSTIVE 6-DOMAIN TAXONOMY TARGETS:
 1. HEALTHCARE & PHI: Patient Names, Date of Birth, Medical Record # (MRN), Health Plan/Member IDs, Diagnoses, Procedures, Medications, Prescriptions (Rx), Doctors, Hospitals, Medical Device Serials, Implant IDs.
 2. FINANCIAL & PAYMENT CARDS: Credit & Debit Card Numbers (all formats/networks: Visa, Mastercard, Amex, Discover, RuPay, etc.), CVV/CVC, Expiration Dates, Bank Account Numbers (all country formats/spacings), IBAN, SWIFT/BIC, Branch Codes, Routing Numbers, Sort Codes, Crypto Wallet Addresses, Financial Balances.
 3. GOVERNMENT, TAX & MILITARY: SSN, ITIN, EIN, Military ID / DoD ID / CAC, State Driver's Licenses, Passports, Aadhaar Numbers, PAN (India), Canadian SIN, UK NINO, EU National IDs, Tax IDs worldwide.
-4. DIRECT & CONTACT PII: Full Names, Aliases, Street/Mailing Addresses, Phone Numbers (all country formats), Email Addresses, Employee IDs.
+4. DIRECT & CONTACT PII: Full Names, Aliases, Street/Mailing Addresses, Phone Numbers (all country formats), Email Addresses, Employee IDs, Online Handles/Usernames/Social Media IDs.
 5. STATE-LAW SENSITIVE SPI: Precise Geolocation, Biometric Templates, Genetic Data, Racial/Ethnic Identifiers.
 6. TECHNICAL CREDENTIALS: Passwords, API Keys, Access Tokens, Session Cookies, IP Addresses.
+
+ORGANIZATION NAMES: extract company/organization names even when they have NO corporate suffix
+(Inc, LLC, Corp, Ltd, etc.) and even when they look like a plain personal-name-style business name
+(e.g. "Landry-Butler", "Mcdonald, Richardson and Johnson", "Alvarez Group") -- these are still
+organizations, most often appearing after labels like "Insurance Info:", "Provider Info:",
+"Employer:", or "Work History:". Do not require a suffix as a precondition to extract ORGANIZATION.
 
 CRITICAL INSTRUCTIONS:
 1. Review the entire chunk for sensitive entities. Pay special attention to key-value pairs (e.g. "A/c No: <val>", "Branch Code: <val>", "Card No: <val>", "DoD ID: <val>", "Rx: <val>", "Tax ID: <val>").
@@ -364,6 +440,9 @@ CRITICAL INSTRUCTIONS:
 4. DO NOT RE-EXTRACT ALREADY RESOLVED ENTITIES:
 {known_entities_text}
 5. VERBATIM SUBSTRING MANDATE: You MUST extract the EXACT raw substring from the text as the 'value'. Do NOT reformat, strip spaces, or alter punctuation.
+6. LABEL vs VALUE: for a "Label: value" pair, the entity is the VALUE after the colon/dash, never the
+   label word itself. Do not extract field-label text (e.g. "Crypto Wallet", "Password", "Account
+   Number") as if it were the sensitive value -- the label is metadata, not PII/PHI.
 
 Text to Inspect:
 \"\"\"{chunk_text}\"\"\"
@@ -445,5 +524,3 @@ Return a valid JSON object with the "entities" key containing items with "value"
             chunk_end=len(text),
             page_number=page_number,
         )
-
-

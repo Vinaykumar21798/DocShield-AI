@@ -15,7 +15,10 @@ from database.repositories.processing_job_repository import (
     ProcessingJobRepository,
     processing_job_repository,
 )
-from orchestration.workflow import DocumentProcessingWorkflow
+from orchestration.workflow import (
+    DocumentProcessingWorkflow,
+    RedactionVerificationError,
+)
 from redis_queue.consumer import RedisConsumer
 from redis_queue.job_schema import DocumentJob
 from redis_queue.producer import RedisProducer
@@ -102,6 +105,13 @@ class Worker:
 
                     workflow = self.workflow_factory(db)
                     workflow.execute(str(job.document_id))
+
+                except RedactionVerificationError:
+                    logger.exception(
+                        "Worker failed redaction verification for "
+                        "document_id=%s; not retrying deterministic failure",
+                        job.document_id,
+                    )
 
                 except Exception:
                     logger.exception(

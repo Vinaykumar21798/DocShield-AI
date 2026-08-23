@@ -420,7 +420,9 @@ def test_review_rule_uses_only_final_confidence_threshold():
     assert DocumentProcessingWorkflow._is_review_required(low_confidence) is True
 
 
-def test_gemma_recovery_uses_distinct_nearest_occurrences():
+def test_gemma_recovery_uses_distinct_nearest_occurrences(monkeypatch):
+    monkeypatch.setenv("BYPASS_LLM", "false")
+
     class FakeClient:
         def chat(self, **kwargs):
             payload = {
@@ -621,4 +623,19 @@ def test_validator_rejects_sentence_fragments_and_trims_prefixes():
     validated_ssn = EntityValidator.validate_candidate(ssn_candidate, text)
     assert validated_ssn is not None
     assert validated_ssn.entity_value == "123-45-6789"
-
+
+
+def test_validator_keeps_neighborhood_names_as_locations():
+    text = "Office Location: Jubilee Hills"
+    candidate = _result(
+        text,
+        "Jubilee Hills",
+        "LOCATION",
+        detector="gliner",
+    )
+
+    validated = EntityValidator.validate_candidates([candidate], text)
+
+    assert len(validated) == 1
+    assert validated[0].entity_type == "LOCATION"
+

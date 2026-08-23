@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import os
@@ -23,9 +23,9 @@ class GLiNERDetector(BaseDetector):
     locally, with deterministic healthcare role rules as a safe fallback.
     """
 
-    MIN_CONFIDENCE = 0.70
+    MIN_CONFIDENCE = 0.60
     FALLBACK_CONFIDENCE = 0.76
-    MODEL_ID = "urchade/gliner_medium-v2.1"
+    MODEL_ID = "urchade/gliner_small-v2.1"
 
     INVALID_VALUES = {
         "address",
@@ -93,6 +93,7 @@ class GLiNERDetector(BaseDetector):
         self._model = None
 
         self.labels = [
+            "person",
             "patient",
             "doctor",
             "hospital",
@@ -101,6 +102,9 @@ class GLiNERDetector(BaseDetector):
             "healthcare staff",
             "medical facility",
             "healthcare organization",
+            "organization",
+            "company",
+            "bank",
         ]
 
     def should_run(self, text: str, state: "PipelineState") -> bool:
@@ -124,6 +128,8 @@ class GLiNERDetector(BaseDetector):
             "doctor", "physician", "surgeon", "consultant", "specialist", "md",
             "patient", "admitted", "discharged", "hospital", "clinic", "healthcare",
             "ward", "icu", "nursing", "hospice", "referred", "mrn", "clinical",
+            "attending", "referring", "resident", "intern", "practitioner", "np", "pa",
+            "nurse", "staff", "provider", "facility", "outpatient", "inpatient",
         }
 
         return not words.isdisjoint(gliner_keywords)

@@ -46,13 +46,13 @@ class RegexDetector(BaseDetector):
     PATTERNS = {
 
         "DOCUMENT_ID":
-            r"(?im)^\s*(?:Agreement ID|Document ID|Reference Number)[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9-]{5,})[ \t]*$",
+            r"(?im)^\s*(?:Agreement ID|Document ID|Reference Number)[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9-]{5,})",
 
         "REPORT_ID":
-            r"(?im)^\s*Report ID[ \t]*[:#\-][ \t]*([A-Z0-9][A-Z0-9-]{5,40})[ \t]*$",
+            r"(?im)^\s*Report ID[ \t]*[:#\-][ \t]*([A-Z0-9][A-Z0-9-]{5,40})",
 
         "DATE":
-            rf"(?im)^\s*Date[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
+            rf"(?im)^\s*Date[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})",
 
         "DATE_RANGE":
             rf"\b{DATE_RANGE_VALUE_PATTERN}\b",
@@ -65,14 +65,14 @@ class RegexDetector(BaseDetector):
         "EMAIL":
             r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b",
 
-        "PHONE_NUMBER":
-            r"\b(?:\+91[-\s]?)?[6-9]\d{9}\b",
-
         "AADHAAR_NUMBER":
             r"\b\d{4}\s?\d{4}\s?\d{4}\b",
 
         "EMPLOYEE_ID":
-            r"(?im)^\s*(?:[-*][ \t]*)?Employee ID[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)[ \t]*$",
+            r"(?im)^\s*(?:[-*][ \t]*)?Employee ID[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)",
+
+        "SOCIAL_MEDIA_HANDLE":
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:Social Media ID|Social Media Handle|Online Handle|Username|User Name|Handle)[ \t]*[:\-][ \t]*([A-Za-z0-9_.\-]{3,30})",
 
         "PAN_NUMBER":
             r"\b[A-Z]{5}[0-9]{4}[A-Z]\b",
@@ -81,17 +81,17 @@ class RegexDetector(BaseDetector):
             r"(?im)^\s*(?:[-*][ \t]*)?(?:Driving License|Driver License|Driver's License|Driving Licence|Driver Licence|DL)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$|\b[A-Z]{2}\d{2}[ \t-]?\d{7,12}\b",
 
         "NATIONAL_ID":
-            r"(?im)^\s*(?:[-*][ \t]*)?(?:National ID|NID)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})[ \t]*$",
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:National ID|NID)[ \t]*[:\-][ \t]*([A-Za-z0-9-]{5,20})",
 
         "MILITARY_ID":
             r"(?im)\b(?:Military[ \t]+ID|DoD[ \t]+ID|DoD[ \t]+Number|DoD[ \t]+#|CAC[ \t]+ID|Geneva[ \t]+Convention[ \t]+ID)[ \t]*[:\-]?[ \t]*([A-Za-z0-9-]{7,20})\b",
 
         "TAX_ID":
-            r"(?im)\b(?:EIN|Employer[ \t]+ID|ITIN|Tax[ \t]+ID)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*(\d{2}-\d{7}|9\d{2}-\d{2}-\d{4}|\d{9})\b"
+            r"(?im)\b(?:EIN|Employer[ \t]+ID|ITIN|Tax[ \t]+ID|TIN)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*(\d{2}-\d{7}|9\d{2}-\d{2}-\d{4}|\d{3}-\d{2}-\d{4}|\d{9})\b"
             r"|\b(?:SIN|Social[ \t]+Insurance)[ \t]*(?:Number|No|#)?[:\-]?[ \t]*(\d{3}[ -]\d{3}[ -]\d{3})\b",
 
         "CRYPTO_WALLET":
-            r"(?im)^\s*(?:[-*][ \t]*)?(?:Crypto Wallet|Wallet Address)[ \t]*[:\-][ \t]*([A-Za-z0-9]{32,64})[ \t]*$",
+            r"(?im)^\s*(?:[-*][ \t]*)?(?:Crypto Wallet|Wallet Address)[ \t]*[:\-][ \t]*([A-Za-z0-9]{32,64})",
 
         "PASSPORT_NUMBER":
             r"\b[A-Z][0-9]{7,8}\b",
@@ -120,6 +120,21 @@ class RegexDetector(BaseDetector):
         "IFSC_CODE":
             r"\b[A-Z]{4}0[A-Z0-9]{6}\b",
 
+        "PF_NUMBER":
+            r"\bPF-[A-Z0-9]{2,5}-[A-Z0-9]{2,5}-\d{6,10}\b",
+
+        "ORGANIZATION":
+            r"(?im:^\s*(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{2,60})[ \t]*$)"
+            r"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z0-9][A-Za-z0-9&.', -]{2,60})(?=\s+and\b|\r?\n|\Z))"
+            r"|(?im:\b[A-Z][A-Za-z0-9.&'-]+(?:\s+[A-Z][A-Za-z0-9.&'-]+){0,4}\s+(?:Pvt\.?\s*Ltd\.?|Ltd\.?|Inc\.?|LLC|Corp\.?|Corporation|Solutions|Technologies|Services|Bank|Trust|Trust\s+Bank|Financial|Finance|Credit\s+Union|Securities|Holdings|Assurance|GmbH|S\.A\.?|S\.A\.S\.?|B\.V\.?|N\.V\.?|PLC|Pty\.?\s*Ltd\.?|K\.K\.?)\b)"
+            r"|(?im:^\s*\[(?:Org|Company|Corporate)\s+Logo\s+Placeholder\][ \t]+([A-Z][A-Za-z0-9.&' -]{2,60})(?:\r?$|\s+[A-Z]))",
+
+        "EMAIL_HEADER_PERSON":
+            r"(?im)^\s*(?:From|To|Cc|Bcc)\s*[:\-]?[ \t]*(?:\r?\n[ \t]*)?([A-Za-z][A-Za-z\s.'\-]{2,50}?)\s*<[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}>",
+
+        "ENTERPRISE_ID":
+            r"\b(?:LN|LOAN|APP|CUST|REF|REQ|ORD|CASE|FILE|ACCT|TICKET|SR|INC|CHG|PRB)[-_/][A-Za-z0-9][-A-Za-z0-9_/]{3,30}\b",
+
         "UPI_ID":
             r"\b[a-zA-Z0-9._-]{2,}@(ybl|ibl|okicici|oksbi|okaxis|paytm|apl|axl|upi)\b",
 
@@ -137,8 +152,10 @@ class RegexDetector(BaseDetector):
             r"|\b(?:\d{3}|[Xx*]{3})[-\s](?:\d{2}|[Xx*]{2})[-\s]\d{4}\b",
 
         "PERSON":
-            rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?({LABELED_NAME_PATTERN})[ \t]*$)"
+            rf"(?im:^\s*(?:Customer Name|Witness|Authorized Signatory|Emergency Contact)[ \t]*[:\-]?[ \t]*(?:\r?\n[ \t]*)?(?:(?:_{3,}|\[Signature\])[ \t]*(?:\r?\n[ \t]*)*)?({LABELED_NAME_PATTERN})[ \t]*$)"
+            rf"|(?ims:^\s*Issued By\b.*?(?:\[Signature\]|___+)[ \t]*(?:\r?\n[ \t]*)+({LABELED_NAME_PATTERN})\b)"
             rf"|(?ims:\bagreement\s+is\s+signed\s+between\b[^\r\n]*(?:\r?\n)[ \t]*and[ \t]+({LABELED_NAME_PATTERN})\.?)",
+
         "PATIENT":
             rf"(?i:\bPatient(?:[ \t]+Name)?[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b)"
             rf"|(?im:\bPatient Information[ \t]*:[ \t]*(?:\r?\n)[ \t]*[•*\-]?[ \t]*Name[ \t]*[:\-][ \t]*({LABELED_NAME_PATTERN})\b)",
@@ -153,7 +170,7 @@ class RegexDetector(BaseDetector):
             rf"(?i:\b(?:DOB|Date of Birth|Birth Date)[ \t]*[:\-]?[ \t]*(?:\([ \t]*)?({DATE_VALUE_PATTERN})\b)",
 
         "START_DATE":
-            rf"(?im)\b(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})[ \t]*$",
+            rf"(?im)\b(?:Start Date|Joining Date|Hire Date)[ \t]*[:\-][ \t]*({DATE_VALUE_PATTERN})",
 
         "VISIT_DATE":
             rf"\b(?:Visit Date|Service Date|Date of Service|Collection Date|Admission Date|Discharge Date)[ \t]*[:\-]?[ \t]*({DATE_VALUE_PATTERN})\b",
@@ -163,37 +180,34 @@ class RegexDetector(BaseDetector):
             rf"|\bDr\.?[ \t]+{LABELED_NAME_PATTERN}\b",
 
         "PROVIDER":
-            rf"(?im)^\s*(?:Billing[ \t]+)?Provider[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$"
+            rf"(?im)^\s*(?:Billing[ \t]+)?Provider[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.,'()/ -]{{2,80}})"
             rf"|^\s*Provider[ \t]*[:\-][ \t]*((?:Dr\.?[ \t]+)?{LABELED_NAME_PATTERN})\b",
 
         "HOSPITAL":
-            rf"(?im)^\s*Hospital[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+            rf"(?im)^\s*Hospital[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.,'()/ -]{{2,80}})",
 
         "DIAGNOSIS":
-            rf"(?im)^\s*Diagnosis[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+            rf"(?im)^\s*Diagnosis[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.,'()/ -]{{2,80}})",
 
         "MEDICATION":
-            rf"(?im)^\s*Medication[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+            rf"(?im)^\s*Medication[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.,'()/% -]{{2,80}})",
 
         "PROCEDURE":
-            rf"(?im)^\s*Procedure[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$",
+            rf"(?im)^\s*Procedure[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.,'()/ -]{{2,80}})",
 
         "INSURANCE_PROVIDER":
-            rf"(?im)^\s*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}}?\b(?:Insurance Company|Assurance Company|Health Plan|Mutual)\b)[ \t]*$",
-
-        "ORGANIZATION":
-            rf"(?im)^\s*(?:Organization|Company|Insurance Company)[ \t]*[:\-][ \t]*([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})[ \t]*$"
-            rf"|(?ims:\bagreement\s+is\s+signed\s+between\s+([A-Z0-9][A-Za-z0-9&.', -]{{2,60}})(?=\s+and\b|\r?\n|\Z))",
+            rf"(?im)^\s*([A-Z0-9][A-Za-z0-9&.,'()/ -]{{2,80}}?\b(?:Insurance Company|Assurance Company|Health Plan|Mutual)\b)",
 
         "ADDRESS":
-            r"(?ims:^[^\r\n]*\S[ \t]+(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*([^\r\n]+)[ \t]*$"
-            r"|^\s*(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*(?:[A-Z][A-Za-z0-9&.', -]{2,30}[ \t]*[:\-#]|\r?\n)|\Z))",
+            r"(?ims)^[^\r\n]*\S[ \t]+(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*([^\r\n]+)[ \t]*$"
+            r"|^\s*(?:Address|Home Address|Mailing Address|Office Address)[ \t]*[:\-][ \t]*(.+?)(?=\r?\n\s*(?:[A-Z][A-Za-z0-9&.', -]{2,30}[ \t]*[:\-#]|\r?\n)|\Z)"
+            r"|\b(?:address(?:\s+for\s+correspondence)?(?:\s+is)?|residing\s+at|living\s+at|current\s+address\s+is)\s*[:\-]?\s*([A-Za-z0-9][A-Za-z0-9\s,.'\-\/>]+?\d{5,6})",
 
         "ZIP_CODE":
             r"\b\d{5}(?:-\d{4})?\b",
 
         "BANK_ACCOUNT":
-            r"(?im)\b(?:Bank[ \t]+Account|Account|Acct|A/c)[ \t]*(?:Number|No|#)?[ \t]*[:\.]?[ \t]*([A-Z0-9]{2,4}(?:[ \t\-]?[A-Z0-9]{2,6}){2,8})\b"
+            r"(?im)\b(?:Bank[ \t]+Account|Account|Acct|A/c)[ \t]*(?:Number|No|#)?[:\.]?[ \t]*((?:\d[0-9 \t-]{4,30}\d))\b"
             r"|\b[A-Z]{2}\d{2}(?:[ \t]?[A-Z0-9]{4}){2,7}\b"
             r"|\bBank Account(?: Number)?[ \t]*[:\-][ \t]*([A-Z0-9][A-Z0-9 \t-]{7,30})[ \t]*$",
 
@@ -201,14 +215,14 @@ class RegexDetector(BaseDetector):
             r"(?im)\b(?:Branch[ \t]+(?:Code|ID|Number|No|#)|SWIFT(?:-BIC)?|BIC)[ \t]*[:\-][ \t]*([A-Z0-9-]{4,20})\b",
 
         "MRN":
-            r"(?im)\b(?:Medical Record #|MRN|Medical Record Number)[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)\b"
+            r"(?im)\b(?:Medical Record #|MRN|Medical Record Number|Medical Record No)[ \t]*[:\-][ \t]*([A-Z]{2,}-?[A-Z0-9-]+)\b"
             r"|\bMRN[-: \t]?\d+\b",
 
         "INVOICE_NUMBER":
-            r"(?im)\b(?:Invoice Number|Invoice No|Invoice ID)[ \t]*[:\-][ \t]*([A-Z]{2,}-[A-Z0-9-]+)[ \t]*$",
+            r"(?im)\b(?:Invoice Number|Invoice No|Invoice ID)[ \t]*[:\-][ \t]*([A-Z]{2,}-[A-Z0-9-]+)",
 
         "POLICY_NUMBER":
-            r"(?im)\b(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)[ \t]*$",
+            r"(?im)\b(?:Policy Number|Policy No)[ \t]*[:\-][ \t]*(POL[-: \t]?[A-Z0-9-]+)",
 
         "ACCESS_CODE":
             r"(?im)\b(?:using|access|activation|enrollment|security)[ \t]+code[ \t]*[:#\-][ \t]*([A-Z0-9][A-Z0-9-]{5,30})\b",
@@ -224,7 +238,7 @@ class RegexDetector(BaseDetector):
             r"|(?im:(?:Medicare|Insurance|Policy|Id)[ \t]*#?[ \t]*((?=[A-Z0-9]*\d)(?!(?:box|p\.?\s*o\.?\s*box)\b)[A-Z0-9]{8,15})\b)",
 
         "SALARY":
-            r"(?im)\bSalary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)[ \t]*$",
+            r"(?im)\bSalary[ \t]*[:\-][ \t]*(\$?[ \t]*\d[\d,]*(?:\.\d{2})?)",
 
         "CPT_CODE":
             r"\b(?:CPT[-: \t]?)?(?:\d{5}|\d{4}[A-Z]|[A-Z]\d{4})\b",
@@ -240,9 +254,6 @@ class RegexDetector(BaseDetector):
 
         "GROUP_NUMBER":
             r"(?im)\bGroup[ \t]*(?:Number|No|#|ID|Id)[ \t]*[:\-]?[ \t]*((?=[A-Za-z0-9-]{4,20}\b)(?=[A-Za-z0-9-]*\d)[A-Za-z0-9-]{4,20})\b",
-
-        "TAX_ID":
-            r"\b\d{2}-\d{7}\b|(?im:\b(?:Tax ID|TIN|EIN)[ \t]*[:\-]?[ \t]*(\d{2}-\d{7}|\d{9})\b)",
 
         "EOB_NUMBER":
             r"(?im)\b(?:EOB|Explanation of Benefits)[ \t]*(?:Number|No|#)[ \t]*[:\-]?[ \t]*((?=[A-Z0-9-]{6,24}\b)(?=[A-Z0-9-]*\d)[A-Z0-9-]{6,24})\b",
@@ -273,8 +284,10 @@ class RegexDetector(BaseDetector):
         "BRANCH_CODE": 100,
         "CVV": 100,
         "MILITARY_ID": 98,
+        "NATIONAL_ID": 98,
+        "CRYPTO_WALLET": 97,
+        "TAX_ID": 97,
         "SSN": 96,
-        "TAX_ID": 95,
         "DOCUMENT_ID": 94,
         "REPORT_ID": 94,
         "TRACKING_NUMBER": 93,
@@ -287,6 +300,7 @@ class RegexDetector(BaseDetector):
         "INSURANCE_ID": 90,
         "PASSPORT_NUMBER": 90,
         "EMPLOYEE_ID": 89,
+        "SOCIAL_MEDIA_HANDLE": 89,
         "GSTIN": 88,
         "DRIVING_LICENSE": 87,
         "EXPIRATION_DATE": 86,
@@ -302,7 +316,7 @@ class RegexDetector(BaseDetector):
         "PROVIDER": 88,
         "ADDRESS": 82,
         "CITY_STATE_ZIP": 80,
-        "ZIP_CODE": 85,
+        "ZIP_CODE": 6,
         "PO_BOX": 82,
         "DIAGNOSIS": 82,
         "MEDICATION": 82,
@@ -323,6 +337,8 @@ class RegexDetector(BaseDetector):
         "US_PHONE_NUMBER": 45,
         "PHONE_NUMBER": 40,
         "EMAIL": 30,
+        "EMAIL_HEADER_PERSON": 89,
+        "ENTERPRISE_ID": 88,
         "INVOICE_NUMBER": 30,
         "CPT_CODE": 25,
         "ICD10_CODE": 24,
@@ -331,9 +347,9 @@ class RegexDetector(BaseDetector):
         "DOSAGE": 20,
         "URL": 20,
         "IP_ADDRESS": 10,
-        "ZIP_CODE": 6,
         "PIN_CODE": 5,
     }
+
     CONTEXT = {
         "DOCUMENT_ID": ["agreement id", "document id", "reference number"],
         "REPORT_ID": ["report id"],
@@ -365,7 +381,10 @@ class RegexDetector(BaseDetector):
         "IP_ADDRESS": ["ip"],
         "PIN_CODE": ["pin", "zipcode", "postal"],
         "SSN": ["ssn", "social security"],
-        "PERSON": ["customer name", "witness", "authorized signatory", "emergency contact"],
+        "PF_NUMBER": ["provident", "fund", "pf", "account"],
+        "PERSON": ["customer name", "witness", "authorized signatory", "emergency contact", "issued by", "signature", "signed by", "executive"],
+        "EMAIL_HEADER_PERSON": ["from", "to", "cc", "bcc", "sent"],
+        "ENTERPRISE_ID": ["loan", "application", "case", "reference", "request", "order", "ticket", "incident", "app", "cust", "customer id"],
         "PATIENT": ["patient", "patient name"],
         "DATE_OF_BIRTH": ["dob", "date of birth"],
         "START_DATE": ["start date", "joining date", "hire date"],
@@ -404,6 +423,8 @@ class RegexDetector(BaseDetector):
         "BANK_ACCOUNT",
         "BRANCH_CODE",
         "MILITARY_ID",
+        "NATIONAL_ID",
+        "CRYPTO_WALLET",
         "TAX_ID",
         "CREDIT_CARD",
         "CVV",
@@ -421,6 +442,7 @@ class RegexDetector(BaseDetector):
         "ACCESS_CODE",
         "DRIVING_LICENSE",
         "EMPLOYEE_ID",
+        "SOCIAL_MEDIA_HANDLE",
         "HOSPITAL",
         "INSURANCE_ID",
         "INSURANCE_PROVIDER",
@@ -430,6 +452,7 @@ class RegexDetector(BaseDetector):
         "ORGANIZATION",
         "PATIENT",
         "PERSON",
+        "EMAIL_HEADER_PERSON",
         "POLICY_NUMBER",
         "PROCEDURE",
         "PROVIDER",
@@ -708,9 +731,9 @@ class RegexDetector(BaseDetector):
         ):
             return 1.0
 
-        score = 0.40
+        score = 0.50
         if entity == "DATE_TIME":
-            score = 0.55
+            score = 0.60
 
         if self.has_context(entity, text, start):
             score += 0.30
@@ -727,7 +750,7 @@ class RegexDetector(BaseDetector):
         start: int,
     ) -> bool:
 
-        window = 160 if entity == "CPT_CODE" else 40
+        window = 160 if entity in {"CPT_CODE", "PERSON", "PF_NUMBER", "ORGANIZATION"} else 40
 
         if entity == "CPT_CODE":
             line_start = text.rfind("\n", 0, start) + 1

@@ -153,7 +153,7 @@ class Gemma4E4BDetector(BaseDetector):
             from ollama import Client
 
             timeout_val = float(os.getenv("OLLAMA_TIMEOUT", "600.0"))
-            custom_timeout = httpx.Timeout(timeout_val, connect=30.0, read=timeout_val, write=60.0)
+            custom_timeout = httpx.Timeout(timeout_val, connect=2.0, read=timeout_val, write=60.0)
             self.client = Client(host=ollama_host, timeout=custom_timeout)
         except (ImportError, Exception):
             try:
@@ -315,9 +315,23 @@ This input is structured data (JSON, CSV/table rows, or key-value records), not 
 """
 
         return f"""You are a senior PII/PHI redaction and compliance extraction engine operating under a
-ZERO-FALSE-NEGATIVE mandate using {self.MODEL_NAME}.
+ZERO-FALSE-NEGATIVE mandate using {self.MODEL_NAME}. A missed sensitive entity is a compliance
+breach; a low-confidence extraction that a human or downstream validator later discards costs
+nothing. When in doubt, EXTRACT and assign a lower confidence_score rather than omitting the span.
 
 {structured_guidance}
+
+RECALL CHECKLIST -- read the text at least twice before answering:
+1. First pass: obvious, clearly-labeled identifiers (e.g. "SSN: 123-45-6789", "Patient: Jane Doe").
+2. Second pass: entities without an explicit label, inferred from context (e.g. a name mentioned in
+   running prose with no "Name:" prefix, a number that matches an ID format even if unlabeled).
+3. Also check for: values split or wrapped across a line break; abbreviated or shorthand forms
+   (initials, "DOB" instead of "Date of Birth"); values embedded inside a longer sentence, footer,
+   signature block, or table cell; international formats that don't match a US pattern; and any
+   second/third occurrence of the same entity elsewhere in the text (each occurrence needs its own
+   span, don't stop after the first).
+4. Do not silently narrow a MUST_HAVE or NICE_TO_HAVE type to only its most common surface form --
+   if a variant plausibly matches the category in context, include it.
 
 Taxonomy Target Entities:
 MUST_HAVE:
@@ -361,7 +375,7 @@ entity_type, entity_value, confidence_score, start_char, end_char.
             known_entities_text=known_entities_text,
         )
 
-        if self.client is None:
+        if self.client is None or os.getenv("BYPASS_LLM", "false").strip().lower() in {"1", "true", "yes", "on"}:
             return []
 
         response = None
@@ -457,7 +471,7 @@ entity_type, entity_value, confidence_score, start_char, end_char.
         document_type: str | None = None,
     ) -> list[DetectionResult]:
         """
-        Phase 4: Low-confidence candidate validation using Gemma context.
+        Phase 4: Low-confidence candidate validation using Gemma context with structured JSON reasoning.
         """
         if not candidates:
             return []
@@ -471,7 +485,65 @@ entity_type, entity_value, confidence_score, start_char, end_char.
                     chunk_text = c_text
                     break
 
-            item = self._heuristic_validate_candidate(candidate, chunk_text, document_type)
+            llm_item: Optional[CandidateValidationItem] = None
+            if self.client and os.getenv("BYPASS_LLM", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+                try:
+                    system_prompt = (
+                        "You are an elite PII/PHI Compliance Validation Engine. "
+                        "Evaluate candidate text in context against global privacy regulations (HIPAA, GDPR, CCPA, PCI-DSS).\n\n"
+                        "Decide: CONFIRM, RECLASSIFY, or REJECT.\n"
+                        "This system runs under a zero-false-negative mandate: a wrongly REJECTed real entity is a "
+                        "compliance breach, while a wrongly CONFIRMed candidate is just reviewed later at no real cost. "
+                        "Resolve any genuine ambiguity toward CONFIRM or RECLASSIFY, never toward REJECT.\n"
+                        "Only REJECT when you are clearly and specifically certain the candidate is non-sensitive noise: "
+                        "an empty/unlabeled document header, an email thread title, a bare form field label with no "
+                        "filled-in value, a generic English verb/greeting, or template/placeholder boilerplate. "
+                        "If the candidate could plausibly be a real instance of any PII/PHI type in this context, CONFIRM "
+                        "it (RECLASSIFY if a different canonical type fits better) rather than rejecting it.\n\n"
+                        "Respond ONLY in valid JSON:\n"
+                        '{"thought": "...", "decision": "CONFIRM"|"RECLASSIFY"|"REJECT", "corrected_type": "<TYPE or null>", "confidence_score": 0.85, "reason": "..."}'
+                    )
+                    user_msg = (
+                        f"Candidate: '{candidate.entity_value}' (Proposed Type: {candidate.entity_type})\n"
+                        f"Context:\n\"\"\"{chunk_text[:400]}\"\"\"\n\n"
+                        "Return your validation decision in strict JSON format."
+                    )
+                    resp = self.client.chat(
+                        model=self.MODEL_NAME,
+                        messages=[
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_msg},
+                        ],
+                        format="json",
+                        options={"temperature": 0.0},
+                    )
+                    raw_content = resp.get("message", {}).get("content", "")
+                    if raw_content:
+                        json_m = re.search(r"\{.*\}", raw_content, re.DOTALL)
+                        if json_m:
+                            d = json.loads(json_m.group(0))
+                            dec = str(d.get("decision", "")).strip().upper()
+                            if dec in {"CONFIRM", "RECLASSIFY", "REJECT"}:
+                                corr = d.get("corrected_type")
+                                conf = float(d.get("confidence_score", 0.85))
+                                r_reason = str(d.get("reason") or d.get("thought") or f"Validated '{candidate.entity_value}' via Gemma.").strip()
+                                llm_item = CandidateValidationItem(
+                                    id=str(getattr(candidate, "entity_id", "cand")),
+                                    decision=dec,
+                                    corrected_type=corr if dec == "RECLASSIFY" and corr else candidate.entity_type,
+                                    confidence_score=min(1.0, max(0.0, conf)),
+                                    reason=r_reason,
+                                )
+                except Exception as exc:
+                    logger.debug("Gemma chat completion failed/skipped (%s); falling back to heuristic", exc)
+
+            item = llm_item or self._heuristic_validate_candidate(candidate, chunk_text, document_type)
+            logger.info(
+                "GemmaValidation: mode=VALIDATION decision=%s type=%s confidence=%.2f",
+                item.decision,
+                candidate.entity_type,
+                item.confidence_score,
+            )
             if item.decision in {"CONFIRM", "RECLASSIFY"}:
                 if item.decision == "RECLASSIFY" and item.corrected_type:
                     candidate.entity_type = item.corrected_type
@@ -547,10 +619,15 @@ entity_type, entity_value, confidence_score, start_char, end_char.
         nice_to_have_str = "\n".join(f"- {e}" for e in nice_to_have[:25])
 
         prompt = f"""You are a specialized PII/PHI compliance high-recall security reviewer using {self.MODEL_NAME}.
-Your primary security mission is: DO NOT MISS IMPORTANT SENSITIVE ENTITIES.
+Your primary security mission is: DO NOT MISS IMPORTANT SENSITIVE ENTITIES. This is a residual pass
+over text that earlier detectors already scanned once and likely missed something -- assume there is
+at least one more entity hiding here and look harder, including partial, unlabeled, or oddly-formatted
+values. A borderline candidate reported with a lower confidence_score is far preferable to silence.
 
 CRITICAL INSTRUCTIONS:
-1. Review the entire chunk for sensitive entities.
+1. Review the entire chunk for sensitive entities, including values with no explicit field label,
+   values split across a line break, abbreviated forms, and any repeated occurrence of an entity
+   already found elsewhere in this chunk (report every occurrence, not just the first).
 2. DO NOT RE-EXTRACT ALREADY RESOLVED ENTITIES:
 {known_entities_text}
 
@@ -567,7 +644,7 @@ Semantic Chunk to Inspect:
 Return JSON format with "entities" key containing items with value, entity_type, confidence_score.
 """
 
-        if self.client is None:
+        if self.client is None or os.getenv("BYPASS_LLM", "false").strip().lower() in {"1", "true", "yes", "on"}:
             return []
 
         response = None
@@ -764,20 +841,35 @@ Return JSON format with "entities" key containing items with value, entity_type,
                 confidence_score=0.90,
             )
 
-        if candidate.entity_type == "PERSON":
+        if candidate.entity_type in {"PERSON", "LOCATION", "ORGANIZATION"}:
             words = candidate.entity_value.strip().split()
-            if len(words) == 1 and val_lower in {"patient", "doctor", "physician", "provider", "nurse", "member", "subscriber", "admin", "preauth", "hearing", "vision", "dental"}:
+            LABEL_NOISE_TERMS = {
+                "patient", "doctor", "physician", "provider", "nurse", "member", "subscriber",
+                "admin", "preauth", "hearing", "vision", "dental", "request", "requests",
+                "transfer", "cif", "sb", "rd", "statement", "holder", "summary", "notices",
+                "info", "details", "period", "balance", "amount", "total", "ending",
+                "logo", "logo placeholder", "placeholder", "field discrepancy", "discrepancy",
+                "field", "form title", "header", "footer", "page", "signature", "stamp", "label"
+            }
+            if val_lower in LABEL_NOISE_TERMS or val_lower in REJECT_TERMS:
                 return CandidateValidationItem(
                     id=1,
                     decision="REJECT",
-                    reason="Single generic role or benefit token is not a specific person.",
+                    reason=f"Term '{candidate.entity_value}' is a document field header or non-sensitive label, not a {candidate.entity_type}.",
                     confidence_score=0.95,
                 )
-            if len(words) >= 2 and all(w[0].isupper() for w in words if w.isalpha()):
+            if len(words) == 1 and (val_lower in LABEL_NOISE_TERMS or len(candidate.entity_value.strip()) <= 2 or candidate.entity_value.islower()):
+                return CandidateValidationItem(
+                    id=1,
+                    decision="REJECT",
+                    reason=f"Single-token '{candidate.entity_value}' is not a valid {candidate.entity_type} entity.",
+                    confidence_score=0.95,
+                )
+            if len(words) >= 2 and all(w[0].isupper() for w in words if w.strip(".").isalpha()):
                 return CandidateValidationItem(
                     id=1,
                     decision="CONFIRM",
-                    reason=f"'{candidate.entity_value}' is a multi-token capitalized person name in context.",
+                    reason=f"'{candidate.entity_value}' is a multi-token capitalized person/organization name in context.",
                     confidence_score=0.88,
                 )
 

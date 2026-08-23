@@ -16,20 +16,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.alter_column(
-        "documents",
-        "file_type",
-        existing_type=sa.String(length=50),
-        type_=sa.String(length=255),
-        existing_nullable=False,
-    )
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.alter_column(
+            "file_type",
+            existing_type=sa.String(length=50),
+            type_=sa.String(length=255),
+            existing_nullable=False,
+        )
 
 
 def downgrade() -> None:
-    op.alter_column(
-        "documents",
-        "file_type",
-        existing_type=sa.String(length=255),
-        type_=sa.String(length=50),
-        existing_nullable=False,
-    )
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.alter_column(
+            "file_type",
+            existing_type=sa.String(length=255),
+            type_=sa.String(length=50),
+            existing_nullable=False,
+        )

@@ -1,4 +1,4 @@
-# PII PHI entites research - accpeted across GDPR/OECD/NIST/HIPAA-style privacy programs.
+# PII/PHI entity research - accepted across GDPR/OECD/NIST/HIPAA-style privacy programs
 
 PII = identifies or can identify a natural person.
 PHI = health-related personal data, or identifiable health/payment/care data.

@@ -13,6 +13,7 @@ class EntityMapper:
         # PERSON
         # ==========================
         "PERSON": "PERSON",
+        "EMAIL_HEADER_PERSON": "PERSON",
         "PATIENT": "PATIENT",
         "DOCTOR": "DOCTOR",
         "PHYSICIAN": "PHYSICIAN",
@@ -25,6 +26,8 @@ class EntityMapper:
         "START_DATE": "START_DATE",
         "SALARY": "SALARY",
         "POLICY_NUMBER": "POLICY_NUMBER",
+        "PF_NUMBER": "POLICY_NUMBER",
+        "PROVIDENT_FUND": "POLICY_NUMBER",
         "ACCESS_CODE": "ACCESS_CODE",
         "TRACKING_NUMBER": "TRACKING_NUMBER",
 
@@ -60,6 +63,7 @@ class EntityMapper:
         # ==========================
         "EMAIL": "EMAIL",
         "EMAIL_ADDRESS": "EMAIL",
+        "ENTERPRISE_ID": "DOCUMENT_ID",
 
         # ==========================
         # CONTACT
@@ -316,6 +320,9 @@ class PrivacyMapper:
         "GSTIN": "PII",
         "INVOICE_NUMBER": "PII",
         "START_DATE": "PII",
+        "POLICY_NUMBER": "PII",
+        "PF_NUMBER": "PII",
+        "PROVIDENT_FUND": "PII",
         "SALARY": "PII",
         "FINANCIAL_AMOUNT": "PII",
         "AMOUNT": "PII",

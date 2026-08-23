@@ -45,6 +45,10 @@ class Entity(Base):
     is_redacted = Column(Boolean, default=False)
     final_confidence = Column(Float)
 
+    ai_decision = Column(String, nullable=True)
+    ai_reasoning = Column(Text, nullable=True)
+    is_accepted_by_ai = Column(Boolean, default=True, server_default="true")
+
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

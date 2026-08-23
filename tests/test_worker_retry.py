@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 from database.models import Document, ProcessingJob
+from orchestration.workflow import RedactionVerificationError
 from redis_queue.job_schema import DocumentJob
 from redis_queue.worker import Worker
 
@@ -22,6 +23,13 @@ class FakeProducer:
     def publish(self, job):
         self.published.append(job)
         return True
+
+
+class RedactionVerificationFailureWorkflow:
+    def execute(self, document_id):
+        raise RedactionVerificationError(
+            "Post-redaction verification failed"
+        )
 
 
 def create_missing_file_job(session_factory, retry_count=0):
@@ -109,4 +117,24 @@ def test_worker_leaves_failed_job_when_retry_budget_is_exhausted(
     assert processing_job.last_completed_stage == "DOCUMENT_CLASSIFICATION"
     assert processing_job.retry_count == 1
     assert "Stored document file not found" in processing_job.error_message
+    assert producer.published == []
+
+
+def test_worker_does_not_retry_redaction_verification_failure(
+    session_factory,
+):
+    document_id = create_missing_file_job(session_factory, retry_count=0)
+    producer = FakeProducer()
+    worker = Worker(
+        consumer=FakeConsumer([DocumentJob(document_id=document_id)]),
+        producer=producer,
+        session_factory=session_factory,
+        workflow_factory=lambda db: RedactionVerificationFailureWorkflow(),
+        max_retries=4,
+    )
+
+    assert worker.process_next_job() is True
+
+    processing_job = get_processing_job(session_factory, document_id)
+    assert processing_job.retry_count == 0
     assert producer.published == []

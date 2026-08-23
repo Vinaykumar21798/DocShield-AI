@@ -49,6 +49,16 @@ class EntityValidator:
         "branch",
         "branch code",
         "branch name",
+        "statement",
+        "holder",
+        "summary",
+        "notices",
+        "period",
+        "details",
+        "balance",
+        "amount",
+        "total",
+        "ending",
     }
     GENERIC_SEMANTIC_TYPES = {
         "PERSON",
@@ -73,6 +83,11 @@ class EntityValidator:
         "protected health information",
         "secured",
         "the health insurance portability",
+        "statement",
+        "statement notices",
+        "account summary",
+        "holder",
+        "notices",
         "ppo",
         "hmo",
         "epo",
@@ -86,6 +101,17 @@ class EntityValidator:
         "keep",
         "patient",
         "weight",
+        "height",
+        "diagnosis",
+        "prescription",
+        "distinguishing features",
+        "access credential",
+        "relationship",
+        "child",
+        "spouse",
+        "scar on left cheek",
+        "flagged record",
+        "strategic plans",
         "excluded services",
         "excluded services & other covered services",
         "excluded services & other covered services not covered: cosmetic",
@@ -227,6 +253,29 @@ class EntityValidator:
         "language access services",
         "assistance services",
         "language assistance",
+        # Communication / email / document structure noise
+        "email thread",
+        "email correspondence",
+        "thread",
+        "quoted replies",
+        "original message",
+        "retail loans division",
+        "loans division",
+        "loan application follow-up",
+        "documents pending",
+        "banking email thread",
+        "confidential email record",
+        "confidential record",
+        "synthetic data",
+        "not a real record",
+        "page 1 of 1",
+        "page 1",
+        "document type",
+        "report no",
+        "subject",
+        "re:",
+        "fwd:",
+        "sent:",
     }
     CLINICAL_VALUE_TYPES = {
         "abdominal pain": "SYMPTOM",
@@ -343,6 +392,20 @@ class EntityValidator:
                 candidate.entity_value = lines[0]
                 candidate.end_char = candidate.start_char + len(lines[0])
 
+        # Smart label prefix stripping: prevent form labels from being included in the extracted entity value
+        label_match = re.match(
+            r"^(?:Customer(?:\s+Name)?|Patient(?:\s+Name)?|Doctor|Physician|Attending|Account(?:\s+Number|\s+No)?|Phone(?:\s+Number)?|Mobile|Tel|Email(?:\s+Address)?|Address|Home\s+Address|Mailing\s+Address|DOB|Date\s+of\s+Birth|Date|Report\s+No|Document\s+ID|Claim(?:\s+No|\s+Number)?|Member\s+ID|Subscriber\s+ID|Policy(?:\s+No|\s+Number)?|Issued\s+By)\s*[:\-]\s*",
+            candidate.entity_value,
+            re.IGNORECASE,
+        )
+        if label_match:
+            prefix_len = len(label_match.group(0))
+            trimmed_val = candidate.entity_value[prefix_len:].strip()
+            if trimmed_val:
+                candidate.start_char += prefix_len
+                candidate.entity_value = trimmed_val
+                candidate.end_char = candidate.start_char + len(trimmed_val)
+
         value = candidate.entity_value.strip()
         original_type = entity_type
         structurally_validated = False
@@ -369,10 +432,12 @@ class EntityValidator:
                 entity_type = "HEALTHCARE_ORGANIZATION"
                 structurally_validated = True
 
-        if entity_type == "POLICY_NUMBER" and not cls.has_label_context(
+        if entity_type == "PF_NUMBER":
+            structurally_validated = True
+        elif entity_type == "POLICY_NUMBER" and not cls.has_label_context(
             source_text,
             candidate.start_char,
-            "policy",
+            r"(?:policy|provident|fund|pf|account|plan)",
         ):
             if cls.has_label_context(
                 source_text,
@@ -509,8 +574,20 @@ class EntityValidator:
         clean_value = re.sub(r"^(?:[•*\-]|â€¢|\d+\.|\w\.)\s*", "", value.strip(), flags=re.IGNORECASE)
         clean_semantic_key = clean_value.lower()
 
-        # Reject single-word vague noise
-        if clean_semantic_key in {"info", "patient info", "provider info"}:
+        # Reject single-word vague noise or bad identifier values
+        if (
+            clean_semantic_key
+            in {"info", "patient info", "provider info", "height", "weight", "cm", "kg"}
+            or clean_semantic_key in cls.BAD_IDENTIFIER_VALUES
+        ):
+            return True
+
+        # Reject physical traits / features misclassified as people
+        if entity_type in {"PERSON", "PATIENT", "DOCTOR"} and re.search(r"\b(?:scar|cheek|distinguishing|features|height|weight|child|spouse|relative)\b", clean_semantic_key):
+            return True
+
+        # Reject measurement units or header labels misclassified as document IDs
+        if entity_type in {"DOCUMENT_ID", "RX_NUMBER", "DEVICE_ID"} and (re.search(r"^\d+\s*(?:cm|kg|mm|lbs|mg|ml)$", clean_semantic_key) or clean_semantic_key in {"access credential", "diagnosis", "prescription", "confidential record"}):
             return True
 
         # Reject audit report verb phrases or multi-word sentence fragments for any entity candidate
@@ -518,7 +595,7 @@ class EntityValidator:
             return True
 
         norm_type = entity_type.strip().upper().replace(" ", "_")
-        if len(clean_value.split()) > 4 and norm_type != "ADDRESS":
+        if len(clean_value.split()) > 4 and norm_type not in {"ADDRESS", "LOCATION"}:
             return True
 
         norm_type = entity_type.strip().upper().replace(" ", "_")

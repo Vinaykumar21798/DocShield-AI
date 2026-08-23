@@ -1,6 +1,6 @@
 ﻿# DocShield-AI — Current PoC Technical Context
 
-## 1. Executive Summary
+## 1. Executive summary
 DocShield-AI is a specialized PII/PHI redaction system designed for healthcare and enterprise documents. It currently implements a multi-stage pipeline that transforms uploaded documents into redacted text files with associated audit reports.
 
 **PoC Objective**: To provide a high-precision, deterministic, and verifiable pipeline for identifying and masking sensitive health and personal information using a hybrid approach of rules, statistical models, and LLMs.
@@ -13,7 +13,7 @@ DocShield-AI is a specialized PII/PHI redaction system designed for healthcare a
 **Main Technologies**:
 - **Backend**: Python (FastAPI), SQLAlchemy.
 - **OCR**: PaddleOCR, PyMuPDF (fitz).
-- **Detection**: Regex, Microsoft Presidio, GLiNER, MedSpaCy, Qwen3:4b (via Ollama).
+- **Detection**: Regex, Microsoft Presidio, GLiNER, MedSpaCy, and Gemma4:e4b (via Ollama), with Azure OpenAI available as an alternative LLM provider.
 - **Infrastructure**: Redis (Queue), PostgreSQL (Database), Local Storage.
 
 **Current Maturity**: Functional PoC.
@@ -61,7 +61,7 @@ Orchestration Workflow (DocumentProcessingWorkflow)
    ├── Deterministic (Regex)
    ├── Statistical (Presidio, GLiNER)
    ├── Clinical (MedSpaCy)
-   └── Semantic (Qwen3:4b)
+   └── Semantic (Gemma4:e4b or Azure OpenAI)
            ↓
    Entity Post-Processing (EntityValidator $\rightarrow$ Deduplicator $\rightarrow$ Overlap Resolver)
            ↓
@@ -132,9 +132,9 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 | **Presidio** | MS Presidio | Person, Location, Org | Text | `DetectionResult` | Domain Route | Statistical | N/A | Yes |
 | **GLiNER** | GLiNER Model | Healthcare roles, Facilities | Text | `DetectionResult` | Domain Route | Model score | N/A | Yes |
 | **MedSpaCy** | MedSpaCy | Symptoms, Lab, Medication | Text | `DetectionResult` | Healthcare Domain | 0.95 (Capped) | N/A | Yes |
-| **Qwen3:4b** | Ollama / Qwen | Semantic PII/PHI | Bounded Context | `DetectionResult` | Unresolved Spans | Model score | N/A | Yes |
+| **Gemma4:e4b** | Ollama / Gemma | Semantic PII/PHI | Bounded Context | `DetectionResult` | Unresolved Spans | Model score | N/A | Yes |
 
-**Qwen Orchestration**: Runs on "bounded contexts" (80 chars around unresolved candidates or low-confidence entities), limited to max 3 contexts per page to optimize latency.
+**LLM orchestration**: Runs on bounded contexts of approximately 80 characters around unresolved candidates or low-confidence entities, limited to at most three prioritized contexts per page.
 
 ---
 
@@ -155,8 +155,8 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 **Logic**: 
 1. **Domain Classification**: `DetectorSelector` classifies text into `financial`, `healthcare`, `corporate`, `legal`, `generic`, or `mixed`.
 2. **Route Selection**:
-   - `healthcare` $\rightarrow$ `regex` $\rightarrow$ `medspacy` $\rightarrow$ `presidio` $\rightarrow$ `gliner` $\rightarrow$ `qwen3b`.
-   - `generic` $\rightarrow$ `regex` $\rightarrow$ `presidio` $\rightarrow$ `gliner` $\rightarrow$ `qwen3b`.
+   - `healthcare` $\rightarrow$ `regex` $\rightarrow$ `medspacy` $\rightarrow$ `presidio` $\rightarrow$ `gliner` $\rightarrow$ `gemma4e4b`.
+   - `generic` $\rightarrow$ `regex` $\rightarrow$ `presidio` $\rightarrow$ `gliner` $\rightarrow$ `gemma4e4b`.
 3. **Dynamic Execution**: Detectors are executed sequentially. If a high-confidence entity is found, the span is "masked" for subsequent detectors (though `allow_claimed_spans=True` is often used in current logic).
 4. **Stopping Condition**: Stops if no unresolved candidates remain and no low-confidence entities need verification.
 
@@ -187,13 +187,13 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 - **Mechanism**: Text-based replacement in `DocumentProcessingWorkflow._apply_redactions`.
 - **Operation**: Replaces identified spans with `[REDACTED_{ENTITY_TYPE}]`.
 - **Output**: Saves a new `.txt` file in `storage/redacted/`.
-- **Verification**: Not explicitly implemented as a post-redaction scan; it relies on the correctness of the detection pipeline.
+- **Verification**: A bounded fixed-point safety pass reruns deterministic high-risk detection, followed by span/value and residual-PII checks. Verification failure raises `RedactionVerificationError`.
 
 ---
 
 ## 13. Redaction Verification & Release Decision
-- **Implementation**: Not found in codebase. The system currently generates a report and a redacted file.
-- **Release Decision**: No automated "APPROVE/BLOCK" logic exists; the system marks entities as `is_redacted = True` and creates a `Review` object for those below the threshold.
+- **Implementation**: Deterministic residual checks and span/value integrity checks run before successful completion.
+- **Release Decision**: Verification fails closed, but human-review records do not pause redaction or create a separate reviewer-controlled approve/block release gate.
 
 ---
 
@@ -262,16 +262,17 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 | Model | Provider | Purpose | Location | Input | Output |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Qwen3:4b** | Ollama | Semantic NER | `qwen_detector.py` | Text Context | JSON Results |
+| **Gemma4:e4b** | Ollama | Semantic NER | `gemma_detector.py` | Text Context | JSON Results |
+| **Azure OpenAI** | Azure | Alternative semantic NER provider | `azure_detector.py` | Text Context | JSON Results |
 | **GLiNER** | Local Model | Zero-shot NER | `gliner_detector.py` | Text | `DetectionResult` |
 | **MedSpaCy** | Local Model | Clinical NER | `medspacy_detector.py` | Text | `DetectionResult` |
 
-- **Qwen Config**: Temperature 0.1, Top-P 0.9, Format: JSON.
+- **LLM behavior**: Structured JSON output is validated and mapped back to bounded source contexts.
 
 ---
 
 ## 20. Configuration & Environment
-- **AI**: `OLLAMA_HOST`, `BYPASS_LLM`.
+- **AI**: `LLM_PROVIDER`, `BYPASS_LLM`, `OLLAMA_HOST`, `OLLAMA_MODEL`, `AZURE_OPENAI_ENDPOINT`, `AZURE_OPENAI_API_KEY`, `AZURE_OPENAI_DEPLOYMENT`, `AZURE_OPENAI_API_VERSION`.
 - **Database**: `DATABASE_URL`.
 - **Redis**: `REDIS_HOST`, `REDIS_PORT`.
 - **Tuning**: `DETECTION_HIGH_CONFIDENCE_THRESHOLD`, `DETECTION_MIN_CANDIDATE_CHARS`.
@@ -280,13 +281,15 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 
 ## 21. Security & Privacy
 - **Implemented**:
+  - Bearer session authentication with hashed passwords and tokens.
+  - Role-based access for `USER`, `REVIEWER`, and `ADMIN`.
+  - Document ownership checks and storage-root-confined artifact downloads.
   - File type validation on upload.
   - PII/PHI separation in taxonomy.
   - Redaction of spans from extracted text.
 - **Missing**:
-  - User authentication/authorization (currently open API).
   - Encryption for stored documents at rest.
-  - Full audit trail of who viewed which document.
+  - Formal compliance certification and production security hardening.
 
 ---
 
@@ -328,9 +331,9 @@ Orchestration Workflow (DocumentProcessingWorkflow)
 ## 25. Current PoC Weaknesses
 1. **Redaction Target**: Only redacts extracted `.txt` files, not original PDFs.
 2. **OCR Pipeline**: Basic extraction; lacks advanced layout analysis.
-3. **LLM Latency**: Sequential context processing in Qwen is slow for large docs.
-4. **Auth**: Lack of API security.
-5. **Verification**: No automated post-redaction scan.
+3. **LLM Latency**: Sequential bounded-context processing can be slow for large documents.
+4. **Security**: Authentication exists, but encryption at rest and formal production hardening are not implemented.
+5. **Verification**: Residual text checks exist, but there is no coordinate-based verification against the original PDF.
 
 ---
 
@@ -360,7 +363,7 @@ flowchart TD
     I --> J[Deduplicator/Overlap Resolver]
     J --> K[Confidence Calculator]
     K --> L{Confidence < 0.8?}
-    L -- Yes --> M[Human Review Queue]
+    L -- Yes --> M[Create Human Review Record]
     L -- No --> N[Redaction Engine]
     M --> N
     N --> O[Redacted Text File]
@@ -376,7 +379,7 @@ flowchart TD
 | **Orchestrator** | `orchestration/workflow.py` | `DocumentProcessingWorkflow` | Main state machine |
 | **Detection** | `modules/detection/service.py` | `DetectionService` | Pipeline orchestration |
 | **Router** | `modules/detection/analyzer/detector_selector.py` | `DetectorSelector` | Domain-based routing |
-| **LLM Detector** | `modules/detection/detectors/qwen_detector.py` | `Qwen3BDetector` | Semantic extraction |
+| **LLM Detector** | `modules/detection/detectors/gemma_detector.py` | `Gemma4E4BDetector` | Semantic extraction |
 | **OCR Engine** | `modules/extraction/ocr.py` | `OCRDecisionEngine` | Engine selection |
 | **Validation** | `modules/detection/validators/entity_validator.py` | `EntityValidator` | Filtering & Reclassification |
 | **Classification** | `modules/classification/service.py` | `DocumentClassificationService` | Doc type identification |
@@ -401,13 +404,13 @@ flowchart TD
 ## 30. One-Page Technical Summary
 1. **What does it do?** Detects and redacts PII/PHI from documents.
 2. **Document Flow**: Upload $\rightarrow$ Classify $\rightarrow$ OCR $\rightarrow$ Detect $\rightarrow$ Validate $\rightarrow$ Redact $\rightarrow$ Report.
-3. **Detectors**: Regex, Presidio, GLiNER, MedSpaCy, Qwen3:4b.
+3. **Detectors**: Regex, Presidio, GLiNER, MedSpaCy, and Gemma4:e4b or Azure OpenAI for bounded semantic detection.
 4. **Combination**: Sequential execution with overlap resolution based on priority and confidence.
 5. **Confidence**: Calibrated per detector; Regex uses context/validation; others use model scores.
-6. **LLM Execution**: Qwen runs on bounded contexts around unresolved candidates.
+6. **LLM Execution**: The configured semantic provider runs on bounded contexts around unresolved candidates.
 7. **Redaction**: String replacement in extracted text files.
-8. **Verification**: None (relies on pipeline confidence).
+8. **Verification**: Deterministic residual and span/value integrity checks fail closed; original-PDF coordinate verification is not implemented.
 9. **Human Review**: Triggered for entities with confidence $< 0.80$.
 10. **Risks**: OCR line-break splits, label collisions, and PDF-native redaction absence.
-11. **Implementation**: All core pipeline stages active; PDF-native redaction and API auth are planned/missing.
+11. **Implementation**: All core pipeline stages and API authentication are active; PDF-native redaction and production hardening remain future work.
 12. **Next Steps**: Implement PDF coordinate redaction and automated post-redaction verification.

@@ -41,22 +41,24 @@ def upgrade() -> None:
     op.create_index("ix_runs_run_id", "runs", ["run_id"], unique=True)
 
     # Add run_id to documents with Foreign Key
-    op.add_column(
-        "documents", 
-        sa.Column("run_id", sa.String(length=36), nullable=True)
-    )
-    op.create_foreign_key(
-        "fk_documents_run_id", 
-        "documents", "runs", 
-        ["run_id"], ["id"]
-    )
-    op.create_index("ix_documents_run_id", "documents", ["run_id"])
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.add_column(
+            sa.Column("run_id", sa.String(length=36), nullable=True)
+        )
+        batch_op.create_foreign_key(
+            "fk_documents_run_id",
+            "runs",
+            ["run_id"],
+            ["id"],
+        )
+        batch_op.create_index("ix_documents_run_id", ["run_id"])
 
 
 def downgrade() -> None:
-    op.drop_constraint("fk_documents_run_id", "documents", type_="foreignkey")
-    op.drop_index("ix_documents_run_id", table_name="documents")
-    op.drop_column("documents", "run_id")
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.drop_index("ix_documents_run_id")
+        batch_op.drop_constraint("fk_documents_run_id", type_="foreignkey")
+        batch_op.drop_column("run_id")
     op.drop_index("ix_runs_run_id", table_name="runs")
     op.drop_table("runs")
     op.drop_table("run_sequence")

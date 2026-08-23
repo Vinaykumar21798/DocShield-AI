@@ -10,9 +10,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEFAULT_ENV_FILE = ".env"
 ENV_FILE = os.getenv("DOCSHIELD_ENV_FILE", DEFAULT_ENV_FILE)
 
-load_dotenv(dotenv_path=ENV_FILE)
-if os.path.exists(".env.local"):
-    load_dotenv(dotenv_path=".env.local", override=True)
+if ENV_FILE == DEFAULT_ENV_FILE and os.path.exists(".env.local"):
+    load_dotenv(dotenv_path=".env.local", override=False)
+load_dotenv(dotenv_path=ENV_FILE, override=False)
 
 
 class Settings(BaseSettings):

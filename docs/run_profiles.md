@@ -1,91 +1,98 @@
 # Run Profiles
 
-DocShield-AI has two separate runtime profiles.
+DocShield-AI provides separate local Python and Docker Compose profiles. Keep their ports and configuration sources separate.
 
 ## Local Python
 
-Local Python uses private `.env.local` generated from `.env.example` and local service ports:
+Local endpoints:
 
-- API: `http://localhost:8000/ui/`
+- UI/API: `http://localhost:8000/ui/`
 - PostgreSQL: `127.0.0.1:5432`
 - Redis: `127.0.0.1:6379`
-- Ollama: `http://localhost:11434`
+- Ollama, when used: `http://localhost:11434`
 
-Setup:
+Initialize:
 
 ```powershell
-cd E:\Office\DocShield-AI
+cd <path-to-repo>
 .\scripts\local-init.ps1
 ```
 
-Initialization installs dependencies and the Presidio spaCy English model
-inside `.venv`; all local run scripts invoke that interpreter explicitly.
+Initialization creates `.venv`, copies `.env.example` to `.env.local` when needed, installs dependencies, and installs a spaCy English model. Local scripts invoke the virtual-environment interpreter explicitly and set `DOCSHIELD_ENV_FILE=.env.local`.
 
-Gemma defaults to `gemma4:e4b` with `num_ctx=8192`, `num_predict=1024`
-(`1536` for dense tables), and temperature `0.10`. Semantic chunks target
-1,500 characters, are capped at 2,200, use a 300-character minimum and
-200-character overlap, and are sent one chunk per request with one retry after
-a timeout, truncated response, or invalid JSON.
+Edit `.env.local` and replace all placeholders, especially `DATABASE_URL`. Do not commit `.env.local`.
 
-Edit `.env.local` and set the real PostgreSQL password in both `POSTGRES_PASSWORD` and `DATABASE_URL`.
+For Ollama:
 
-Check dependencies:
+```ini
+LLM_PROVIDER=gemma
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gemma4:e4b
+BYPASS_LLM=false
+```
+
+For Azure OpenAI:
+
+```ini
+LLM_PROVIDER=azure
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=replace_me
+AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
+AZURE_OPENAI_API_VERSION=2024-12-01-preview
+BYPASS_LLM=false
+```
+
+The LLM residual path uses bounded candidate contexts and a maximum of three prioritized contexts. `BYPASS_LLM=true` disables both residual discovery and LLM validation.
+
+Check dependencies and service connectivity:
 
 ```powershell
 .\scripts\local-check.ps1
 ```
 
-Run migrations:
+Apply migrations:
 
 ```powershell
 .\scripts\local-migrate.ps1
 ```
 
-Run API:
+Start the API and worker in separate terminals:
 
 ```powershell
 .\scripts\local-api.ps1
-```
-
-Run worker in a second terminal:
-
-```powershell
 .\scripts\local-worker.ps1
 ```
 
 ## Docker
 
-Docker Compose does not use `.env.local` or `.env.example`. Container environment values are pinned in `docker-compose.yml` so local host credentials do not leak into Docker.
+Docker Compose uses environment values defined in `docker-compose.yml`, not `.env.local`.
 
-Docker host ports:
+Host endpoints:
 
-- API: `http://localhost:8001/ui/`
+- UI/API: `http://localhost:8001/ui/`
 - PostgreSQL: `127.0.0.1:5433`
 - Redis: `127.0.0.1:6380`
 - Ollama from containers: `http://host.docker.internal:11434`
 
-Start Docker:
+Start, inspect logs, and stop:
 
 ```powershell
 .\scripts\docker-up.ps1
-```
-
-Watch API and worker logs:
-
-```powershell
 .\scripts\docker-logs.ps1
-```
-
-Stop Docker:
-
-```powershell
 .\scripts\docker-down.ps1
 ```
 
+The Compose credentials and port mappings are development defaults. Review and replace them before any shared or non-local deployment.
+
+## Configuration precedence
+
+Process environment variables take precedence. When the default environment-file profile is used, `.env.local` is loaded before `.env`. When `DOCSHIELD_ENV_FILE` names a custom file, `.env.local` is not loaded automatically.
+
 ## Rules
 
-- Do not use `.env` for normal development. Use `.env.local` for local Python.
-- Do not expose Docker Postgres on `5432`; Docker uses `5433` on the host.
-- Do not expose Docker Redis on `6379`; Docker uses `6380` on the host.
-- Do not add fixed `container_name` values back into Compose; they cause stale-container conflicts.
+- Never commit `.env`, `.env.local`, credentials, tokens, or connection strings.
+- Keep local PostgreSQL on `5432`; Docker publishes PostgreSQL on `5433`.
+- Keep local Redis on `6379`; Docker publishes Redis on `6380`.
+- Do not add fixed `container_name` values to Compose.
 - Keep runtime files under `storage/` ignored except `.gitkeep` placeholders.
+- Run API and worker with the same intended database, Redis, and LLM settings.

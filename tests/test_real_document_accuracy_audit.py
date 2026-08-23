@@ -103,7 +103,14 @@ class MockGemmaPipelineDetector(BaseDetector):
         **kwargs,
     ) -> list[DetectionResult]:
         self.residual_calls += 1
-        findings = self.residual_findings.get(chunk_text, [])
+        findings = []
+        for configured_text, configured_findings in self.residual_findings.items():
+            if (
+                configured_text == chunk_text
+                or chunk_text in configured_text
+                or configured_text in chunk_text
+            ):
+                findings.extend(configured_findings)
         results = []
         for f in findings:
             val = f["entity_value"]

@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import or_
 
 from api.dependencies import (
     DatabaseSession,
@@ -55,6 +56,9 @@ def _serialize_entity(entity: Entity) -> EntityResponse:
         end_char=entity.end_char,
         is_review_required=bool(entity.is_review_required),
         is_redacted=bool(entity.is_redacted),
+        ai_decision=getattr(entity, "ai_decision", None),
+        ai_reasoning=getattr(entity, "ai_reasoning", None),
+        is_accepted_by_ai=getattr(entity, "is_accepted_by_ai", True),
         created_at=entity.created_at,
     )
 
@@ -147,6 +151,7 @@ def get_document_status(
 )
 def list_document_entities(
     document_id: str,
+    include_rejected: bool = False,
     db: DatabaseSession = None,
     current_user: User = Depends(require_roles("REVIEWER", "ADMIN")),
 ) -> List[EntityResponse]:
@@ -159,11 +164,19 @@ def list_document_entities(
 
     require_document_access(db, current_user, document)
 
-    entities = (
-        db.query(Entity)
-        .filter(Entity.document_id == document_id)
-        .all()
-    )
+    query = db.query(Entity).filter(Entity.document_id == document_id)
+    if not include_rejected:
+        query = query.filter(
+            or_(
+                Entity.is_accepted_by_ai.is_(True),
+                Entity.is_accepted_by_ai.is_(None),
+            ),
+            or_(
+                Entity.processing_stage.is_(None),
+                Entity.processing_stage != "REJECTED_BY_AI",
+            ),
+        )
+    entities = query.all()
     entities.sort(
         key=lambda entity: (
             int(entity.page_number)

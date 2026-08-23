@@ -70,15 +70,15 @@ class BaseDetector(ABC):
             "history", "symptom", "procedure", "vital signs", "lab", "laboratory", "results",
             "date", "time", "location", "organization", "person", "gender", "age", "sex"
         ]
-        
+
         # Replace labels with spaces (matching whole words only)
         cleaned = text_lower
         for label in labels_to_remove:
             cleaned = re.sub(rf'\b{re.escape(label)}\b', ' ', cleaned)
-            
+
         # Remove non-alphabetic tokens and numbers
         cleaned = re.sub(r'[\W\d_]+', ' ', cleaned)
-        
+
         # Filter out words shorter than 3 characters (e.g. leftover punctuation, short label words, single letters)
         words = [w for w in cleaned.split() if len(w) >= 3]
         if not words:
@@ -103,4 +103,3 @@ class BaseDetector(ABC):
                     val -= 9
             total += val
         return total % 10 == 0
-

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -6,7 +7,7 @@ from fastapi.testclient import TestClient
 from api.dependencies import get_db
 from app import app
 from core.security import hash_token
-from database.models import AuthSession, Document, User
+from database.models import AuthSession, Document, Entity, User
 from database.repositories.user_repository import UserRepository
 
 
@@ -276,6 +277,76 @@ def test_reviewer_can_access_reviews(api_client):
         f"/documents/{document_id}/reviews",
         headers=reviewer_headers,
     ).status_code == 200
+
+
+def test_reviewer_entity_list_filters_rejected_and_keeps_legacy_rows(
+    api_client,
+    db_session,
+):
+    reviewer_token, reviewer = signup_user(
+        api_client,
+        "Entity Reviewer",
+        role="REVIEWER",
+    )
+    document = Document(
+        id=str(uuid4()),
+        filename="synthetic.txt",
+        stored_filename=f"{uuid4()}.txt",
+        file_type="text/plain",
+        file_size=10,
+        storage_path="synthetic.txt",
+        owner_id=reviewer["id"],
+    )
+    accepted = Entity(
+        id=str(uuid4()),
+        document_id=document.id,
+        entity_type="EMAIL",
+        entity_value="synthetic.user@example.test",
+        processing_stage="DETECTION",
+        is_accepted_by_ai=True,
+    )
+    rejected = Entity(
+        id=str(uuid4()),
+        document_id=document.id,
+        entity_type="PERSON",
+        entity_value="Synthetic Header",
+        processing_stage="REJECTED_BY_AI",
+        ai_decision="REJECT",
+        is_accepted_by_ai=False,
+    )
+    legacy = Entity(
+        id=str(uuid4()),
+        document_id=document.id,
+        entity_type="DOCUMENT_ID",
+        entity_value="SYNTHETIC-LEGACY",
+    )
+    db_session.add_all([document, accepted, rejected, legacy])
+    db_session.commit()
+    legacy.processing_stage = None
+    legacy.is_accepted_by_ai = None
+    db_session.commit()
+
+    headers = auth_headers(reviewer_token)
+    default_response = api_client.get(
+        f"/documents/{document.id}/entities",
+        headers=headers,
+    )
+    all_response = api_client.get(
+        f"/documents/{document.id}/entities?include_rejected=true",
+        headers=headers,
+    )
+
+    assert default_response.status_code == 200
+    assert {item["entity_id"] for item in default_response.json()} == {
+        accepted.id,
+        legacy.id,
+    }
+    assert all_response.status_code == 200
+    assert {item["entity_id"] for item in all_response.json()} == {
+        accepted.id,
+        rejected.id,
+        legacy.id,
+    }
 
 
 # ============================================================

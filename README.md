@@ -1,185 +1,200 @@
 # DocShield-AI
 
-**DocShield-AI** is an enterprise-grade **PII/PHI Document Intelligence & Automated Redaction Engine** built with FastAPI, PostgreSQL, Redis, and a 5-layer hybrid detection pipeline. It ingests healthcare records, medical summaries, EOBs, and financial documents, extracts text (via native parsing or OCR), detects sensitive entities, calibrates confidence, routes low-confidence entities to human review, and produces redacted output text files alongside JSON audit reports.
+DocShield-AI is a functional proof of concept for detecting and redacting PII and PHI in healthcare and enterprise documents. It combines deterministic rules, statistical and clinical NLP, and an optional bounded-context LLM pass. Processing runs asynchronously through Redis, persists workflow state in PostgreSQL, and produces a redacted text artifact plus a JSON audit report.
 
----
+> This repository is not production-hardened. Redaction currently targets extracted text, not the original PDF, and the PoC does not provide encryption at rest or a post-review release gate.
 
-## Key Capabilities
+## Capabilities
 
-* **Multi-Format Document Ingestion**: Supports `.pdf` (native vector & scanned), `.txt`, `.docx`, and images (`.png`, `.jpg`).
-* **5-Layer Hybrid Detection Pipeline**:
-  1. **Deterministic Regex Engine**: Mathematical precision for SSNs, Phone Numbers, ICD-10 Codes, CPT Codes, Dates, Zip Codes, and Insurance IDs.
-  2. **Clinical NLP Engine (MedSpaCy)**: Extraction of diseases, symptoms, lab tests (`Lipid Panel`, `HbA1c`), medications, and procedures.
-  3. **Statistical NER Engine (GLiNER & Presidio)**: Extraction of patient names, doctor names, facility locations, and healthcare organizations.
-  4. **Semantic LLM Layer (`gpt-5.4-mini` or `gemma4:e4b`)**: Contextual residual entity discovery and candidate validation.
-  5. **Central Quality Gate (`EntityValidator`)**: Form prefix label trimming (`"SSN: 123-45-6789"` $\rightarrow$ `"123-45-6789"`), mandatory phone digit validation ($\ge 7$ digits), and audit verb/sentence filtering.
-* **Confidence-Calibrated Human Review**: Entities with confidence $< 80\%$ (or flagged by risk heuristics) enter the Human Review queue for approval/rejection.
-* **Occurrence Expansion & Safety Verifier**: Expands confirmed entity occurrences across multi-page text and blocks file release if any un-redacted PII remains.
-* **Dual Runtime Profiles**: Supports both Local Python (`.env.local`, API `:8000`) and Docker Compose (`:8001`).
+- Upload one file or up to 100 files per run.
+- Accept PDF, TXT, DOCX, PNG, JPG/JPEG, TIFF, and BMP files; the current validator enforces a 20 MB per-file limit.
+- Extract searchable PDF text with PyMuPDF and route scanned or mixed PDFs through OCR.
+- Classify document type and select a domain-aware detector route.
+- Detect sensitive spans with Regex, Presidio, GLiNER, MedSpaCy, and an optional Azure OpenAI or Ollama detector.
+- Validate, normalize, deduplicate, and resolve overlapping spans.
+- Create human-review records for entities with final confidence below `0.80`.
+- Expand repeat occurrences before redaction.
+- Run bounded deterministic safety passes and fail closed if residual deterministic PII remains.
+- Store redacted `.txt` output and a JSON report with detector and LLM decision audit data.
+- Authenticate users with bearer sessions and role checks for `USER`, `REVIEWER`, and `ADMIN`.
 
----
-
-## System Architecture & Pipeline Flow
+## Processing flow
 
 ```text
-Upload → Classification → OCR/Extraction → Dynamic Detection Orchestration
-  ├── 1. Regex (Deterministic)
-  ├── 2. MedSpaCy (Clinical)
-  ├── 3. Presidio & GLiNER (Statistical NER)
-  └── 4. Azure OpenAI (gpt-5.4-mini) / Ollama (gemma4:e4b) (Semantic Residual)
-→ Quality Validation & Prefix Trimming (EntityValidator)
-→ Span Deduplication & Overlap Resolution
-→ Confidence Scoring & Calibration (ConfidenceCalculator)
-→ Human Review Trigger (Review Repository)
-→ Occurrence Expansion & Text Redaction
-→ Post-Redaction Verification Safety Check
-→ Output: Redacted .txt + JSON Audit Report
+Upload
+  -> Run/document creation and Redis enqueue
+  -> Classification
+  -> Native extraction, OCR, or mixed-PDF extraction
+  -> Domain detector route
+       healthcare: Regex -> MedSpaCy -> Presidio -> GLiNER -> LLM
+       generic:    Regex -> Presidio -> GLiNER -> LLM
+  -> EntityValidator -> normalization -> deduplication -> overlap resolution
+  -> Confidence calibration and human-review creation
+  -> Occurrence expansion and text redaction
+  -> Deterministic residual-PII cleanup and fail-closed verification
+  -> Redacted text and JSON audit report
 ```
 
----
+The LLM stage is optional. Candidate contexts are bounded to approximately 80 characters around unresolved candidates and limited to three prioritized contexts per page/document pass. High-risk account, identity, policy, medical-record, and card cues are prioritized within that limit.
 
-## Runtime Separation
+## Technology
 
-Docker and local Python environments are deliberately separated to prevent port collisions and credential leaks.
+- Python 3.10, FastAPI, Pydantic
+- PostgreSQL, SQLAlchemy, Alembic
+- Redis and a custom Redis worker
+- PyMuPDF and PaddleOCR
+- Presidio, GLiNER, MedSpaCy
+- Azure OpenAI or Ollama (`gemma4:e4b` by default)
+- Vanilla JavaScript, HTML, and CSS
 
-| Profile | API URL | Web UI | PostgreSQL | Redis | Configuration Source |
-|---|---|---|---|---|---|
-| **Local Python** | `http://localhost:8000` | `http://localhost:8000/ui/` | `127.0.0.1:5432` | `127.0.0.1:6379` | `.env.local` |
-| **Docker** | `http://localhost:8001` | `http://localhost:8001/ui/` | `127.0.0.1:5433` | `127.0.0.1:6380` | `docker-compose.yml` |
+## Local setup on Windows
 
----
+Prerequisites:
 
-## Quick Start (Local Python Profile)
+- Python 3.10
+- PostgreSQL 15 or newer on `127.0.0.1:5432`
+- Redis 7 or newer on `127.0.0.1:6379`
+- PowerShell
+- Ollama only when using the local LLM profile
 
-### 1. Prerequisites
-- **Python 3.10**
-- **PowerShell** (Windows)
-- **PostgreSQL 15+** (running on port `5432`)
-- **Redis 7+** (running on port `6379`)
-- **Ollama** (if using local LLM provider):
-  ```powershell
-  ollama pull gemma4:e4b
-  ```
-
-### 2. Initialization & Setup
-Run the local environment initialization script:
+Initialize the environment:
 
 ```powershell
-cd E:\Office\DocShield-AI
+cd <path-to-repo>
 .\scripts\local-init.ps1
 ```
 
-Edit `.env.local` to configure your database and LLM provider:
+The script creates `.venv`, copies `.env.example` to `.env.local` when needed, installs Python dependencies, and installs the spaCy English model. Edit `.env.local` before continuing. Do not commit `.env` or `.env.local`.
 
-```ini
-# Database & Redis Settings
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/pii_phi_document_intelligence_poc
-REDIS_HOST=127.0.0.1
-REDIS_PORT=6379
+For Ollama:
 
-# LLM Provider Configuration (azure -> gpt-5.4-mini | gemma -> gemma4:e4b)
-LLM_PROVIDER=azure
-AZURE_OPENAI_API_KEY=your_key_here
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT_NAME=gpt-5.4-mini
+```powershell
+ollama pull gemma4:e4b
 ```
 
-### 3. Run Database Migrations
+Example LLM settings:
+
+```ini
+# Local Ollama
+LLM_PROVIDER=gemma
+OLLAMA_HOST=http://localhost:11434
+OLLAMA_MODEL=gemma4:e4b
+BYPASS_LLM=false
+
+# Or Azure OpenAI
+LLM_PROVIDER=azure
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=replace_me
+AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
+AZURE_OPENAI_API_VERSION=2024-12-01-preview
+BYPASS_LLM=false
+```
+
+Check dependencies and services, migrate the database, and start both processes:
+
 ```powershell
+.\scripts\local-check.ps1
 .\scripts\local-migrate.ps1
 ```
 
-### 4. Start the Application
-
-**Terminal 1 (API Server):**
 ```powershell
+# Terminal 1
 .\scripts\local-api.ps1
-```
 
-**Terminal 2 (Background Worker):**
-```powershell
+# Terminal 2
 .\scripts\local-worker.ps1
 ```
 
-Open the web interface: **`http://localhost:8000/ui/`**
+Open `http://localhost:8000/ui/`.
 
----
+Configuration precedence is: process environment, then the explicitly selected `DOCSHIELD_ENV_FILE`; for the default profile, `.env.local` is loaded before `.env`. The local scripts explicitly select `.env.local`.
 
-## Docker Quick Start
-
-Start the complete containerized stack:
+## Docker setup
 
 ```powershell
 .\scripts\docker-up.ps1
 ```
 
-Access the Docker UI: **`http://localhost:8001/ui/`**
+Open `http://localhost:8001/ui/`. Docker publishes PostgreSQL on `5433` and Redis on `6380` while containers use their internal service ports. Stop the stack with:
 
-Stop Docker containers:
 ```powershell
 .\scripts\docker-down.ps1
 ```
 
----
+Docker defaults are defined in `docker-compose.yml`; review them before any non-local deployment.
 
-## Core API Endpoints
+## API overview
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/health/` | Health check & system status |
-| `POST` | `/upload/` | Upload single document for processing |
-| `POST` | `/upload/bulk` | Upload bulk zip/folder of documents (max 100) |
-| `GET` | `/documents/{id}/status` | Check document & job execution status |
-| `GET` | `/documents/{id}/text` | Retrieve extracted raw/OCR text |
-| `GET` | `/documents/{id}/reviews` | Fetch pending/completed human review items |
-| `PATCH` | `/reviews/{id}` | Approve or reject an entity review finding |
-| `GET` | `/documents/{id}/redactions` | List entity redaction records |
-| `GET` | `/redactions/{id}/file` | Download redacted output file |
-| `GET` | `/documents/{id}/reports` | Retrieve JSON audit report |
+Most endpoints require `Authorization: Bearer <token>`.
 
----
+| Method | Endpoint | Access | Purpose |
+|---|---|---|---|
+| `POST` | `/auth/signup` | Public | Create a user and session |
+| `POST` | `/auth/login` | Public | Create a session |
+| `POST` | `/auth/logout` | Authenticated | Invalidate the current session |
+| `GET` | `/health/` | Public | Health check |
+| `POST` | `/upload/` | User, Reviewer, Admin | Upload one document |
+| `POST` | `/upload/bulk` | User, Reviewer, Admin | Upload up to 100 documents |
+| `GET` | `/documents/runs/{run_id}` | User, Reviewer, Admin | Run progress |
+| `GET` | `/documents/{id}/status` | Authorized owner/role | Processing status |
+| `GET` | `/documents/{id}/text` | Authorized owner/role | Extracted text and OCR metadata |
+| `GET` | `/documents/{id}/entities` | Reviewer, Admin | Detected entities |
+| `GET` | `/documents/{id}/reviews` | Reviewer, Admin | Review records |
+| `PATCH` | `/reviews/{review_id}` | Reviewer, Admin | Submit a review decision |
+| `GET` | `/documents/{id}/redactions` | Authorized owner/role | Redaction metadata |
+| `GET` | `/redactions/{id}/file` | Authorized owner/role | Download redacted text |
+| `GET` | `/documents/{id}/reports` | Authorized owner/role | List audit reports |
+| `GET` | `/reports/{id}` | Authorized owner/role | Report metadata and optional payload |
 
-## Repository Structure
+Interactive API documentation is available at `/docs` when the application is running.
+
+## Tests and validation
+
+Run the full suite:
+
+```powershell
+python -m pytest -q
+```
+
+Current repository audit on August 23, 2026:
+
+- `303 passed, 1 skipped`
+- Python compilation passed
+- Frontend JavaScript syntax passed
+- `pip check` passed
+- Alembic fresh-database upgrade and downgrade round-trip passed on SQLite
+
+The skipped test depends on the optional PyMuPDF import in that environment. Test counts will change as coverage grows; use the command output as the source of truth.
+
+## Repository layout
 
 ```text
-DocShield-AI/
-├── api/                  FastAPI endpoints, Pydantic schemas, and middleware
-├── core/                 App config, DB session setup, and security utilities
-├── database/             SQLAlchemy models, repository patterns, Alembic migrations
-├── docs/                 Technical Master Book (docs/doc.md) and developer runbooks
-├── frontend/             Vanilla JS/HTML/CSS dashboard served at /ui/
-├── modules/
-│   ├── classification/   Document domain classifier (healthcare vs generic)
-│   ├── detection/        Hybrid NER pipeline, LLM detectors, and EntityValidator
-│   ├── extraction/       PaddleOCR and PyMuPDF PDF extractors
-│   └── upload/           File validation, hashing, and storage layout
-├── orchestration/        Workflow state machine (DocumentProcessingWorkflow)
-├── redis_queue/          Async background worker and task queue
-├── scripts/              Local & Docker lifecycle management scripts
-├── storage/              Local uploads, extracted text, redacted files, and logs
-└── tests/                Pytest unit, integration, and regression suites
+api/                 FastAPI routes and schemas
+core/                Configuration, database engine, and security
+database/            Models, repositories, and Alembic migrations
+docs/                Architecture and runtime documentation
+frontend/            Browser dashboard
+modules/              Classification, detection, extraction, and upload
+orchestration/        Document workflow and redaction
+redis_queue/          Producer, consumer, and worker
+scripts/              Local and Docker helper scripts
+storage/              Local runtime artifacts; sensitive content is ignored by Git
+tests/                Unit, integration, and regression tests
 ```
 
----
+## Current limitations
 
-## Automated Testing & Reset Commands
-
-### Run Automated Pytest Suite
-Run the 30 unit, workflow, and quality regression tests:
-
-```powershell
-python -m pytest tests/test_document_workflow.py tests/test_detection_quality_regressions.py -v
-```
-
-### Full Database & Storage Truncation (Fresh Start)
-Reset database tables and clear local storage artifacts:
-
-```powershell
-python -c "import os, shutil, glob, sys; sys.path.insert(0, r'E:\Office\DocShield-AI'); import core.config; from database.session import engine; from sqlalchemy import text; conn = engine.connect(); tx = conn.begin(); conn.execute(text('TRUNCATE TABLE confidence_scores, reviews, reports, redactions, entities, ocr_results, processing_jobs, documents, runs RESTART IDENTITY CASCADE;')); tx.commit(); conn.close(); print('DB TRUNCATED'); [shutil.rmtree(os.path.join('storage/runs', d), ignore_errors=True) for d in os.listdir('storage/runs') if os.path.isdir(os.path.join('storage/runs', d))]; [os.remove(os.path.join('storage/uploads', f)) for f in os.listdir('storage/uploads') if os.path.isfile(os.path.join('storage/uploads', f)) and not f.endswith('.gitkeep')]; [open(log_f, 'w').close() for log_f in glob.glob('storage/logs/*.log')]; print('STORAGE CLEARED')"
-```
-
----
+- Redaction output is extracted text, not a coordinate-redacted PDF.
+- No encryption at rest is implemented for stored documents.
+- Human-review records are created, but the PoC does not enforce a separate approve/block release gate.
+- OCR line breaks and complex tables remain difficult cases.
+- Handwriting and highly structured layouts require additional evaluation.
+- No production monitoring or formal compliance certification is included.
 
 ## Documentation
 
-For full end-to-end technical details, pipeline specifications, and challenge resolutions, see the **[Master Book Documentation (`docs/doc.md`)](file:///E:/Office/DocShield-AI/docs/doc.md)**.
+- [Technical architecture](docs/doc.md)
+- [Run profiles](docs/run_profiles.md)
+- [Presentation preparation](docs/preparation.md)
+- [Current PoC context](docs/current-poc-context.md)
+- [PII/PHI entity reference](docs/pii-phi-entities.md)

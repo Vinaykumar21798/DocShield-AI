@@ -500,6 +500,29 @@ def test_post_redaction_verification_blocks_an_unredacted_duplicate():
     assert "DETERMINISTIC_PII_REMAINS" in issues
 
 
+def test_deterministic_safety_redaction_removes_address_exposed_by_markers():
+    partially_redacted = (
+        "Address: Synthetic Research Operations North Campus, "
+        "[REDACTED_ADDRESS] [REDACTED_ZIP_CODE], Test X, "
+        "[REDACTED_LOCATION]"
+    )
+
+    cleaned = (
+        DocumentProcessingWorkflow._apply_deterministic_safety_redactions(
+            partially_redacted,
+        )
+    )
+
+    assert cleaned == "Address: [REDACTED_ADDRESS]"
+    assert "DETERMINISTIC_PII_REMAINS" not in (
+        DocumentProcessingWorkflow._redaction_verification_issues(
+            partially_redacted,
+            cleaned,
+            [],
+        )
+    )
+
+
 def test_occurrence_expansion_redacts_all_three_occurrences():
     value = "HealthGuard Insurance Company"
     source = f"Header: {value}\nBody: {value}\nFooter: {value}"

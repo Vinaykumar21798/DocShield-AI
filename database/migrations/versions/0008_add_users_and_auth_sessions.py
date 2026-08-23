@@ -67,24 +67,24 @@ def upgrade() -> None:
         "ix_auth_sessions_user_id", "auth_sessions", ["user_id"]
     )
 
-    op.add_column(
-        "documents",
-        sa.Column("owner_id", sa.String(length=36), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_documents_owner_id",
-        "documents",
-        "users",
-        ["owner_id"],
-        ["id"],
-    )
-    op.create_index("ix_documents_owner_id", "documents", ["owner_id"])
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.add_column(
+            sa.Column("owner_id", sa.String(length=36), nullable=True),
+        )
+        batch_op.create_foreign_key(
+            "fk_documents_owner_id",
+            "users",
+            ["owner_id"],
+            ["id"],
+        )
+        batch_op.create_index("ix_documents_owner_id", ["owner_id"])
 
 
 def downgrade() -> None:
-    op.drop_index("ix_documents_owner_id", table_name="documents")
-    op.drop_constraint("fk_documents_owner_id", "documents", type_="foreignkey")
-    op.drop_column("documents", "owner_id")
+    with op.batch_alter_table("documents") as batch_op:
+        batch_op.drop_index("ix_documents_owner_id")
+        batch_op.drop_constraint("fk_documents_owner_id", type_="foreignkey")
+        batch_op.drop_column("owner_id")
     op.drop_index("ix_auth_sessions_user_id", table_name="auth_sessions")
     op.drop_index("ix_auth_sessions_token_hash", table_name="auth_sessions")
     op.drop_table("auth_sessions")

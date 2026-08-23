@@ -185,7 +185,14 @@ class DetectionService:
         "gemma": 6,
     }
 
-    LLM_DETECTOR_NAMES = {"gemma", "qwen3b", "qwen3:4b", "qwen"}
+    LLM_DETECTOR_NAMES = {
+        "gemma",
+        "gemma4e4b",
+        "gemma4:e4b",
+        "qwen3b",
+        "qwen3:4b",
+        "qwen",
+    }
 
     PII_SAFETY_TYPES = {
         "ACCESS_CODE",
@@ -1631,6 +1638,28 @@ class DetectionService:
         if not semantic_chunks:
             return []
 
+        remaining_candidates = state.remaining_candidate_summary(
+            min_chars=config.min_candidate_chars,
+        )
+        bounded_contexts = self._qwen_contexts(
+            state,
+            remaining_candidates,
+            config,
+        )
+        if not bounded_contexts:
+            return []
+
+        semantic_chunks = [
+            DocumentChunk(
+                chunk_id=index,
+                text=context["text"],
+                start_char=context["start"],
+                end_char=context["end"],
+                metadata={"bounded_llm_context": True},
+            )
+            for index, context in enumerate(bounded_contexts, start=1)
+        ]
+
         start_residual = time.perf_counter()
         total_chunks = len(semantic_chunks)
         fully_covered = 0
@@ -1902,6 +1931,7 @@ class DetectionService:
 
                 orig_det = match.detector or cand.metadata.get("original_detector") or cand.detector
                 orig_mode = cand.metadata.get("llm_mode", "VALIDATION")
+                llm_model_name = getattr(detector, "MODEL_NAME", None) or getattr(detector, "name", "AzureOpenAI")
                 state.record_llm_candidate(
                     candidate_value=match.entity_value,
                     entity_type=match.entity_type,
@@ -1911,7 +1941,7 @@ class DetectionService:
                     reasoning=reason,
                     start_char=match.start_char,
                     end_char=match.end_char,
-                    detector=orig_det,
+                    detector=llm_model_name,
                     page_number=match.page_number,
                 )
 
@@ -1933,6 +1963,7 @@ class DetectionService:
                     rejection_reason = f"Rejected '{cand.entity_value}' as non-sensitive text fragment or structural noise."
 
                 orig_det = cand.metadata.get("original_detector") or cand.detector
+                llm_model_name = getattr(detector, "MODEL_NAME", None) or getattr(detector, "name", "AzureOpenAI")
                 state.record_llm_candidate(
                     candidate_value=cand.entity_value,
                     entity_type=cand.entity_type,
@@ -1941,7 +1972,7 @@ class DetectionService:
                     reasoning=rejection_reason,
                     start_char=cand.start_char,
                     end_char=cand.end_char,
-                    detector=orig_det,
+                    detector=llm_model_name,
                     page_number=cand.page_number,
                 )
                 logger.info(
@@ -2083,7 +2114,37 @@ class DetectionService:
         contexts: list[dict] = []
         seen_ranges: set[tuple[int, int]] = set()
 
-        for candidate in candidates[: self.QWEN_MAX_CONTEXTS]:
+        high_risk_cues = re.compile(
+            r"\b(?:account|acct|beneficiary|routing|ssn|social security|"
+            r"passport|tax|member|policy|claim|mrn|medical record|dob|"
+            r"date of birth|card|cvv|bank)\b",
+            re.IGNORECASE,
+        )
+
+        def priority(candidate: dict) -> tuple[int, int]:
+            start = int(candidate.get("start", 0))
+            end = int(candidate.get("end", start))
+            surrounding = state.original_text[
+                max(0, start - self.QWEN_CONTEXT_WINDOW):
+                min(len(state.original_text), end + 20)
+            ]
+            score = 0
+            if high_risk_cues.search(surrounding):
+                score += 100
+            value = str(candidate.get("text", ""))
+            if re.search(r"(?i)(?=.*\d)[A-Z0-9][A-Z0-9_-]{7,}", value):
+                score += 20
+            if candidate.get("kind") == "label_value":
+                score += 5
+            return score, -start
+
+        prioritized_candidates = sorted(
+            candidates,
+            key=priority,
+            reverse=True,
+        )
+
+        for candidate in prioritized_candidates[: self.QWEN_MAX_CONTEXTS]:
             start = max(0, candidate["start"] - self.QWEN_CONTEXT_WINDOW)
             end = min(
                 len(state.original_text),
@@ -2321,6 +2382,19 @@ class DetectionService:
                     current.entity_type = "ADDRESS"
                     current.canonical_type = "ADDRESS"
                     current.confidence_score = 1.0
+                elif re.search(r",[ \t]*[A-Z]{2}$", current.entity_value.strip()):
+                    trailing_zip = re.match(
+                        r"^[ \t]+\d{5}(?:-\d{4})?\b",
+                        after_text,
+                    )
+                    if trailing_zip:
+                        match_end = current.end_char + trailing_zip.end()
+                        current.end_char = match_end
+                        current.entity_value = text[current.start_char:match_end].strip()
+                        current.text = current.entity_value
+                        current.entity_type = "ADDRESS"
+                        current.canonical_type = "ADDRESS"
+                        current.confidence_score = 1.0
 
             merged.append(current)
 
@@ -2639,7 +2713,7 @@ class DetectionService:
     @staticmethod
     def _display_detector_name(detector: str) -> str:
         llm_provider = os.getenv("LLM_PROVIDER", "").lower()
-        active_llm_label = "gpt-5.4-mini" if llm_provider in {"azure", "azure_openai", "azureopenai"} else "gemma4:e4b"
+        active_llm_label = "gpt-5.4-mini" if llm_provider in {"azure", "azure_openai", "azureopenai"} else "Gemma4:e4b"
 
         llm_keys = {
             "azure", "azureopenai", "azure_openai", "azure_detector",
