@@ -336,21 +336,47 @@ class DetectionService:
         provider = os.getenv("LLM_PROVIDER", "gemma").lower().strip()
         if provider == "azure":
             if getattr(self, "_azure_llm", None) is None:
-                logger.info("Loading Azure OpenAI (gpt-5.4-mini)...")
                 from modules.detection.detectors.azure_detector import AzureOpenAIDetector
                 self._azure_llm = AzureOpenAIDetector()
+                provider_name, model_name = self._llm_log_context(self._azure_llm)
+                logger.info(
+                    "Loading LLM provider=%s model=%s",
+                    provider_name,
+                    model_name,
+                )
             return self._azure_llm
         else:
             if getattr(self, "_gemma4e4b", None) is None:
-                logger.info("Loading gemma4:e4b...")
                 from modules.detection.detectors.gemma_detector import Gemma4E4BDetector
                 self._gemma4e4b = Gemma4E4BDetector()
+                provider_name, model_name = self._llm_log_context(self._gemma4e4b)
+                logger.info(
+                    "Loading LLM provider=%s model=%s",
+                    provider_name,
+                    model_name,
+                )
             return self._gemma4e4b
 
     @gemma.setter
     def gemma(self, value):
         self._gemma4e4b = value
         self._azure_llm = value
+
+    @staticmethod
+    def _llm_log_context(detector: BaseDetector) -> tuple[str, str]:
+        """Return provider and model labels from the active detector instance."""
+        raw_provider = str(getattr(detector, "name", "") or "").strip()
+        provider_name = " ".join(
+            token[:1].upper() + token[1:]
+            for token in re.split(r"[_\s-]+", raw_provider)
+            if token
+        ) or "LLM"
+        model_name = (
+            getattr(detector, "deployment", None)
+            or getattr(detector, "MODEL_NAME", None)
+            or "unspecified"
+        )
+        return provider_name, str(model_name)
 
     def _detector_getters(self) -> dict[str, Callable[[], BaseDetector]]:
         return {
@@ -1289,7 +1315,7 @@ class DetectionService:
         reduction_pct = (saved / total_low * 100.0) if total_low > 0 else 0.0
 
         logger.info("==================================================")
-        logger.info("GEMMA USAGE SUMMARY")
+        logger.info("LLM USAGE SUMMARY")
         logger.info("==================================================")
         logger.info("validation_candidates=%d", m.get("sent_to_llm_validation", 0))
         logger.info("residual_detection_chunks=%d", len(getattr(state, "detection_history", [])))
@@ -1436,15 +1462,21 @@ class DetectionService:
                 len(route),
             )
 
-        # PHASE 4: High-Recall Residual Entity Discovery with Gemma
+        # PHASE 4: High-Recall Residual Entity Discovery with the active LLM
         # (Runs on uncovered / partially covered chunks to recover missed entities BEFORE validation)
         bypass_llm = os.getenv("BYPASS_LLM", "false").lower() in {"1", "true", "yes"}
+        llm_detector = None
         if not bypass_llm:
+            llm_detector = self.gemma
+            provider_name, model_name = self._llm_log_context(llm_detector)
             logger.info(
-                ">>> [PHASE 4: RESIDUAL ENTITY DISCOVERY] Running coverage analysis and residual discovery with Gemma..."
+                ">>> [PHASE 4: RESIDUAL ENTITY DISCOVERY] Running coverage analysis "
+                "and residual discovery provider=%s model=%s",
+                provider_name,
+                model_name,
             )
             self._execute_gemma_residual_discovery(
-                detector=self.gemma,
+                detector=llm_detector,
                 state=state,
                 semantic_chunks=semantic_chunks,
                 config=config,
@@ -1456,11 +1488,15 @@ class DetectionService:
         # (Validates all existing low-confidence detector candidates + new Phase 4 residual candidates)
         if state.pending_candidates and not bypass_llm:
             logger.info(
-                ">>> [PHASE 5: LLM CANDIDATE VALIDATION] Validating %d combined candidate(s) with Gemma (CONFIRM / RECLASSIFY / REJECT)...",
+                ">>> [PHASE 5: LLM CANDIDATE VALIDATION] Validating %d combined "
+                "candidate(s) provider=%s model=%s "
+                "(CONFIRM / RECLASSIFY / REJECT)",
                 len(state.pending_candidates),
+                provider_name,
+                model_name,
             )
             self._execute_qwen_candidate_validation(
-                detector=self.gemma,
+                detector=llm_detector,
                 state=state,
                 config=config,
                 document_type=document_type,
@@ -1649,6 +1685,8 @@ class DetectionService:
         if not bounded_contexts:
             return []
 
+        provider_name, model_name = self._llm_log_context(detector)
+
         semantic_chunks = [
             DocumentChunk(
                 chunk_id=index,
@@ -1700,7 +1738,10 @@ class DetectionService:
                 uncovered += 1
 
             logger.info(
-                "ResidualCoverage: doc_id=doc chunk_id=%d coverage=%.1f%% status=%s resolved_spans=%d unresolved_regions=%d meaningful_unresolved_regions=%d high_risk_context=%s action=%s reason=%r",
+                "ResidualCoverage: doc_id=doc chunk_id=%d coverage=%.1f%% "
+                "status=%s resolved_spans=%d unresolved_regions=%d "
+                "meaningful_unresolved_regions=%d high_risk_context=%s "
+                "action=%s llm_provider=%s llm_model=%s reason=%r",
                 chunk.chunk_id,
                 coverage_eval["coverage_percentage"],
                 coverage_status,
@@ -1708,7 +1749,9 @@ class DetectionService:
                 coverage_eval["unresolved_regions"],
                 coverage_eval["meaningful_unresolved_regions"],
                 coverage_eval["high_risk_context"],
-                "SKIP" if coverage_eval["skip_residual_detection"] else "SEND_TO_GEMMA",
+                "SKIP" if coverage_eval["skip_residual_detection"] else "SEND_TO_LLM",
+                provider_name,
+                model_name,
                 coverage_eval["reason"],
             )
 
@@ -1781,8 +1824,8 @@ class DetectionService:
                     duplicates_suppressed += 1
                     continue
 
-                active_model_name = getattr(detector, "MODEL_NAME", getattr(detector, "name", "AzureOpenAI"))
-                item.detector = getattr(detector, "name", "azure")
+                active_model_name = model_name
+                item.detector = getattr(detector, "name", "llm")
                 item.metadata["llm_mode"] = "RESIDUAL_DETECTION"
                 item.metadata["original_detector"] = active_model_name
                 item.metadata["validator"] = active_model_name
@@ -1841,14 +1884,14 @@ class DetectionService:
 
         logger.info(
             "==================================================\n"
-            "Gemma Residual Discovery Summary\n"
+            "%s Residual Discovery Summary\n"
             "==================================================\n"
             "Total chunks: %d\n"
             "Fully covered: %d\n"
             "Partially covered: %d\n"
             "Insufficiently covered: %d\n"
             "Uncovered: %d\n"
-            "Chunks sent to Gemma: %d\n"
+            "Chunks sent to %s: %d\n"
             "Residual candidates added: %d\n"
             "Duplicates suppressed: %d\n"
             "Failures: %d\n"
@@ -1856,7 +1899,20 @@ class DetectionService:
             "Average latency: %.1fms\n"
             "Total latency: %.1fms\n"
             "==================================================",
-            total_chunks, fully_covered, partially_covered, insufficiently_covered, uncovered, sent_to_gemma, len(discovered_entities), duplicates_suppressed, failures, getattr(detector, "MODEL_NAME", "gemma4:e4b"), avg_latency, total_latency
+            provider_name,
+            total_chunks,
+            fully_covered,
+            partially_covered,
+            insufficiently_covered,
+            uncovered,
+            provider_name,
+            sent_to_gemma,
+            len(discovered_entities),
+            duplicates_suppressed,
+            failures,
+            model_name,
+            avg_latency,
+            total_latency,
         )
 
         return discovered_entities
@@ -1893,6 +1949,8 @@ class DetectionService:
     ) -> None:
         if not state.pending_candidates:
             return
+
+        provider_name, model_name = self._llm_log_context(detector)
 
         all_chunks = self.chunker.chunk_document(state.original_text)
         pending_cands = list(state.pending_candidates)
@@ -1931,7 +1989,7 @@ class DetectionService:
 
                 orig_det = match.detector or cand.metadata.get("original_detector") or cand.detector
                 orig_mode = cand.metadata.get("llm_mode", "VALIDATION")
-                llm_model_name = getattr(detector, "MODEL_NAME", None) or getattr(detector, "name", "AzureOpenAI")
+                llm_model_name = model_name
                 state.record_llm_candidate(
                     candidate_value=match.entity_value,
                     entity_type=match.entity_type,
@@ -1946,9 +2004,12 @@ class DetectionService:
                 )
 
                 logger.info(
-                    "LLMValidation: doc_id=doc candidate_id=%s model=%s mode=VALIDATION decision=%s original_type=%r final_type=%r confidence=%.2f",
+                    "LLMValidation: doc_id=doc candidate_id=%s provider=%s "
+                    "model=%s mode=VALIDATION decision=%s original_type=%r "
+                    "final_type=%r confidence=%.2f",
                     cand_id,
-                    getattr(detector, "MODEL_NAME", "AzureOpenAI"),
+                    provider_name,
+                    model_name,
                     decision,
                     cand.entity_type,
                     match.entity_type,
@@ -1963,7 +2024,7 @@ class DetectionService:
                     rejection_reason = f"Rejected '{cand.entity_value}' as non-sensitive text fragment or structural noise."
 
                 orig_det = cand.metadata.get("original_detector") or cand.detector
-                llm_model_name = getattr(detector, "MODEL_NAME", None) or getattr(detector, "name", "AzureOpenAI")
+                llm_model_name = model_name
                 state.record_llm_candidate(
                     candidate_value=cand.entity_value,
                     entity_type=cand.entity_type,
@@ -1976,15 +2037,18 @@ class DetectionService:
                     page_number=cand.page_number,
                 )
                 logger.info(
-                    "LLMValidation: doc_id=doc candidate_id=%s model=%s mode=VALIDATION decision=REJECT original_type=%r final_type=null",
+                    "LLMValidation: doc_id=doc candidate_id=%s provider=%s "
+                    "model=%s mode=VALIDATION decision=REJECT "
+                    "original_type=%r final_type=null",
                     cand_id,
-                    getattr(detector, "MODEL_NAME", "AzureOpenAI"),
+                    provider_name,
+                    model_name,
                     cand.entity_type,
                 )
 
         state.add_entities(
             validated,
-            detector_name=getattr(detector, "name", "gemma"),
+            detector_name=getattr(detector, "name", "llm"),
             mask_confidence_threshold=config.high_confidence_threshold,
         )
         state.clear_pending_candidates()
@@ -1997,6 +2061,8 @@ class DetectionService:
         remaining_candidates: dict,
         config: DynamicDetectionConfig,
     ) -> list[DetectionResult]:
+        provider_name, model_name = self._llm_log_context(detector)
+
         # 1. Contextual Validation Phase for low-confidence candidates
         if state.pending_candidates:
             self._execute_qwen_candidate_validation(
@@ -2014,13 +2080,19 @@ class DetectionService:
         )
         if not contexts:
             logger.info(
-                "Skipping Gemma residual discovery because no unresolved candidate or low-confidence context remains"
+                "Skipping LLM residual discovery provider=%s model=%s because "
+                "no unresolved candidate or low-confidence context remains",
+                provider_name,
+                model_name,
             )
             state.add_entities([], detector.name)
             return []
 
         logger.info(
-            "Running Gemma residual discovery on %d bounded context(s), max_contexts=%d window=%d",
+            "Running LLM residual discovery provider=%s model=%s on %d "
+            "bounded context(s), max_contexts=%d window=%d",
+            provider_name,
+            model_name,
             len(contexts),
             self.QWEN_MAX_CONTEXTS,
             self.QWEN_CONTEXT_WINDOW,
@@ -2050,7 +2122,10 @@ class DetectionService:
                 )
             collected.extend(discovered)
             logger.info(
-                "QwenResidualDetection: chunk_span=%d-%d known_entities=%d new_entities_found=%d",
+                "LLMResidualDetection: provider=%s model=%s chunk_span=%d-%d "
+                "known_entities=%d new_entities_found=%d",
+                provider_name,
+                model_name,
                 context["start"],
                 context["end"],
                 len(context.get("known_entities", [])),

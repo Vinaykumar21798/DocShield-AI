@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.dependencies import get_db
+from api.routes.admin import canonical_llm_provider
 from app import app
 from core.security import hash_token
 from database.models import AuthSession, Document, Entity, User
@@ -391,11 +392,32 @@ def test_admin_can_list_users_and_change_roles(api_client):
     assert me_after.json()["role"] == "REVIEWER"
 
 
-def test_admin_stats_endpoint(api_client):
+@pytest.mark.parametrize(
+    ("stored_provider", "display_provider"),
+    [
+        ("azure", "Azure"),
+        ("azure_openai", "Azure"),
+        ("AzureOpenAI", "Azure"),
+        ("gemma", "Gemma"),
+        ("gemma4:e4b", "Gemma"),
+        ("ollama", "Gemma"),
+        (None, None),
+        ("", None),
+    ],
+)
+def test_canonical_llm_provider(stored_provider, display_provider):
+    assert canonical_llm_provider(stored_provider) == display_provider
+
+
+def test_admin_stats_endpoint(api_client, db_session):
     admin_token, _ = signup_user(api_client, "Stats Admin", role="ADMIN")
     headers = auth_headers(admin_token)
     upload_response = _upload_file(api_client, headers)
     assert upload_response.status_code == 201
+    document_id = upload_response.json()["document"]["document_id"]
+    document = db_session.get(Document, document_id)
+    document.llm_provider = "ollama"
+    db_session.commit()
 
     response = api_client.get("/admin/stats", headers=headers)
     assert response.status_code == 200
@@ -412,6 +434,7 @@ def test_admin_stats_endpoint(api_client):
     assert 0 <= stats["completion_rate"] <= 100
     assert stats["recent_documents"][0]["filename"] == "note.txt"
     assert stats["recent_documents"][0]["owner"] == "Stats Admin"
+    assert stats["recent_documents"][0]["llm_provider"] == "Gemma"
 
 
 def test_admin_can_deactivate_and_reactivate_user(api_client):

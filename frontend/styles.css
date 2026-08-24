@@ -783,6 +783,50 @@ button:disabled {
   color: var(--pill-danger-text);
 }
 
+.provider-badge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--text);
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  font-weight: var(--weight-strong);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.provider-badge-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.provider-badge.is-azure {
+  border-color: rgba(0, 120, 212, 0.28);
+  background: rgba(0, 120, 212, 0.1);
+  color: #0078d4;
+}
+
+.provider-badge.is-gemma {
+  border-color: rgba(124, 77, 255, 0.25);
+  background: rgba(124, 77, 255, 0.1);
+  color: #6842d9;
+}
+
+[data-theme="dark"] .provider-badge.is-azure {
+  color: #58aaf2;
+}
+
+[data-theme="dark"] .provider-badge.is-gemma {
+  color: #ad94ff;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

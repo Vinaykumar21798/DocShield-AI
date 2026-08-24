@@ -193,11 +193,13 @@
         ? `$${Number(documentItem.llm_cost_usd).toFixed(4)}`
         : "-";
 
-      const rawProvider = (documentItem.llm_provider || "").trim().toUpperCase();
+      const provider = canonicalLlmProvider(documentItem.llm_provider);
       let providerHtml = `<span style="color: var(--muted, #94a3b8); font-weight: 500;">-</span>`;
-      if (rawProvider) {
-        const providerClass = rawProvider === "AZURE" ? "tone-info" : "tone-neutral";
-        providerHtml = `<span class="status-pill ${providerClass}" style="font-size: 0.68rem; padding: 2px 7px;">${escapeHtml(rawProvider)}</span>`;
+      if (provider) {
+        const providerClass = provider === "Azure"
+          ? "is-azure"
+          : provider === "Gemma" ? "is-gemma" : "is-other";
+        providerHtml = `<span class="provider-badge ${providerClass}" aria-label="LLM provider: ${escapeHtml(provider)}"><span class="provider-badge-dot" aria-hidden="true"></span>${escapeHtml(provider)}</span>`;
       }
 
       return `
@@ -525,6 +527,16 @@
     if (/(DONE|COMPLETE|COMPLETED|SUCCESS|APPROVED|HEALTHY)/.test(normalized)) return "success";
     if (/(RUNNING|PROCESSING|PENDING|QUEUED|UPLOADED|STARTED)/.test(normalized)) return "warning";
     return "neutral";
+  }
+
+  function canonicalLlmProvider(value) {
+    const rawProvider = String(value || "").trim();
+    if (!rawProvider) return "";
+
+    const normalized = rawProvider.toLowerCase().replace(/[\s-]+/g, "_");
+    if (normalized.includes("azure")) return "Azure";
+    if (normalized.includes("gemma") || normalized === "ollama") return "Gemma";
+    return rawProvider;
   }
 
   function formatDate(value) {

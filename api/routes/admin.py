@@ -16,6 +16,23 @@ router = APIRouter(
 )
 
 
+def canonical_llm_provider(provider: Optional[str]) -> Optional[str]:
+    """Return the user-facing provider name for current and legacy values."""
+    if provider is None:
+        return None
+
+    raw_provider = provider.strip()
+    if not raw_provider:
+        return None
+
+    normalized = raw_provider.lower().replace("-", "_").replace(" ", "_")
+    if "azure" in normalized:
+        return "Azure"
+    if "gemma" in normalized or normalized == "ollama":
+        return "Gemma"
+    return raw_provider
+
+
 class RoleUpdateRequest(BaseModel):
     role: str
 
@@ -233,7 +250,7 @@ def get_stats(
                 prompt_tokens=document.prompt_tokens,
                 completion_tokens=document.completion_tokens,
                 llm_cost_usd=round(document.llm_cost_usd, 6) if document.llm_cost_usd is not None else None,
-                llm_provider=document.llm_provider,
+                llm_provider=canonical_llm_provider(document.llm_provider),
             )
         )
 
