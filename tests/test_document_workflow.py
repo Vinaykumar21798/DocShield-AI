@@ -433,6 +433,17 @@ def test_workflow_uses_mixed_pdf_extractor(
     )
     fake_mixed_extractor = FakeMixedPDFExtractor()
     fake_detection = FakeDetectionService()
+    fake_detection.gemma = SimpleNamespace(
+        name="azure",
+        llm_model="synthetic-deployment",
+        prompt_tokens=120,
+        cached_prompt_tokens=20,
+        completion_tokens=30,
+        total_cost_usd=0.0042,
+        llm_duration_seconds=None,
+        cost_basis="azure_configured_token_rates",
+        usage_complete=True,
+    )
 
     state = DocumentProcessingWorkflow(
         db_session,
@@ -456,6 +467,14 @@ def test_workflow_uses_mixed_pdf_extractor(
     assert ocr_result.structured_output["searchable_pages"] == [1]
     assert ocr_result.structured_output["ocr_pages"] == [2]
     assert fake_detection.document_type == DocumentType.INVOICE.value
+    saved_document = db_session.get(Document, document.id)
+    assert saved_document.prompt_tokens == 120
+    assert saved_document.cached_prompt_tokens == 20
+    assert saved_document.completion_tokens == 30
+    assert saved_document.llm_cost_usd == pytest.approx(0.0042)
+    assert saved_document.llm_model == "synthetic-deployment"
+    assert saved_document.llm_cost_basis == "azure_configured_token_rates"
+    assert saved_document.llm_usage_complete is True
 
 
 def test_post_redaction_verification_passes_when_all_values_are_removed():

@@ -79,6 +79,7 @@ Example LLM settings:
 LLM_PROVIDER=gemma
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=gemma4:e4b
+GEMMA_COMPUTE_COST_PER_HOUR_USD=<actual-host-hourly-cost>
 BYPASS_LLM=false
 
 # Or Azure OpenAI
@@ -87,8 +88,17 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=replace_me
 AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
 AZURE_OPENAI_API_VERSION=2024-12-01-preview
+AZURE_OPENAI_INPUT_COST_PER_1M=<your-input-rate>
+AZURE_OPENAI_CACHED_INPUT_COST_PER_1M=<your-cached-input-rate>
+AZURE_OPENAI_OUTPUT_COST_PER_1M=<your-output-rate>
 BYPASS_LLM=false
 ```
+
+Token totals come only from provider-reported usage. Azure cost uses the
+configured subscription/deployment rate card, including cached input. Local
+Gemma cost uses Ollama's measured runtime and the configured composite hourly
+host cost. When an exact rate or usage value is unavailable, cost is reported
+as not configured rather than estimated.
 
 Check dependencies and services, migrate the database, and start both processes:
 

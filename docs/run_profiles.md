@@ -28,6 +28,7 @@ For Ollama:
 LLM_PROVIDER=gemma
 OLLAMA_HOST=http://localhost:11434
 OLLAMA_MODEL=gemma4:e4b
+GEMMA_COMPUTE_COST_PER_HOUR_USD=<actual-host-hourly-cost>
 BYPASS_LLM=false
 ```
 
@@ -39,8 +40,16 @@ AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_KEY=replace_me
 AZURE_OPENAI_DEPLOYMENT=gpt-5.4-mini
 AZURE_OPENAI_API_VERSION=2024-12-01-preview
+AZURE_OPENAI_INPUT_COST_PER_1M=<your-input-rate>
+AZURE_OPENAI_CACHED_INPUT_COST_PER_1M=<your-cached-input-rate>
+AZURE_OPENAI_OUTPUT_COST_PER_1M=<your-output-rate>
 BYPASS_LLM=false
 ```
+
+Use the effective Azure rate card for the subscription and deployment. For
+local Gemma, use the cloud-instance hourly price or an amortized hourly total
+for hardware and electricity. Blank pricing values keep exact token reporting
+enabled while cost is shown as not configured.
 
 The LLM residual path uses bounded candidate contexts and a maximum of three prioritized contexts. `BYPASS_LLM=true` disables both residual discovery and LLM validation.
 

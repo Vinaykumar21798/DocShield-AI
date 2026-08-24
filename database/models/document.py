@@ -1,5 +1,5 @@
 from uuid import uuid4
-from sqlalchemy import Column, DateTime, Float, Integer, String, ForeignKey
+from sqlalchemy import Boolean, Column, DateTime, Float, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
@@ -64,8 +64,13 @@ class Document(Base):
 
     prompt_tokens = Column(Integer, nullable=True)
     completion_tokens = Column(Integer, nullable=True)
+    cached_prompt_tokens = Column(Integer, nullable=True)
     llm_cost_usd = Column(Float, nullable=True)
     llm_provider = Column(String(50), nullable=True)
+    llm_model = Column(String(100), nullable=True)
+    llm_duration_seconds = Column(Float, nullable=True)
+    llm_cost_basis = Column(String(100), nullable=True)
+    llm_usage_complete = Column(Boolean, nullable=True)
 
     created_at = Column(
         DateTime(timezone=True),

@@ -417,6 +417,14 @@ def test_admin_stats_endpoint(api_client, db_session):
     document_id = upload_response.json()["document"]["document_id"]
     document = db_session.get(Document, document_id)
     document.llm_provider = "ollama"
+    document.llm_model = "synthetic-model"
+    document.prompt_tokens = 120
+    document.cached_prompt_tokens = 0
+    document.completion_tokens = 30
+    document.llm_cost_usd = 0.00001234
+    document.llm_duration_seconds = 1.5
+    document.llm_cost_basis = "gemma_measured_compute_runtime"
+    document.llm_usage_complete = True
     db_session.commit()
 
     response = api_client.get("/admin/stats", headers=headers)
@@ -435,6 +443,14 @@ def test_admin_stats_endpoint(api_client, db_session):
     assert stats["recent_documents"][0]["filename"] == "note.txt"
     assert stats["recent_documents"][0]["owner"] == "Stats Admin"
     assert stats["recent_documents"][0]["llm_provider"] == "Gemma"
+    assert stats["recent_documents"][0]["llm_model"] == "synthetic-model"
+    assert stats["recent_documents"][0]["prompt_tokens"] == 120
+    assert stats["recent_documents"][0]["cached_prompt_tokens"] == 0
+    assert stats["recent_documents"][0]["completion_tokens"] == 30
+    assert stats["recent_documents"][0]["llm_cost_usd"] == pytest.approx(0.00001234)
+    assert stats["recent_documents"][0]["llm_duration_seconds"] == pytest.approx(1.5)
+    assert stats["recent_documents"][0]["llm_cost_basis"] == "gemma_measured_compute_runtime"
+    assert stats["recent_documents"][0]["llm_usage_complete"] is True
 
 
 def test_admin_can_deactivate_and_reactivate_user(api_client):

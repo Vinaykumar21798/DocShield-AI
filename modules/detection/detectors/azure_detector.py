@@ -7,6 +7,11 @@ from typing import Any, List, Optional
 from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
+from modules.detection.usage import (
+    AzureTokenRates,
+    UsageLedger,
+    extract_azure_usage,
+)
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.taxonomy import TaxonomyService
 
@@ -76,9 +81,15 @@ class AzureOpenAIDetector(BaseDetector):
         self.deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-5.4-mini")
         self.api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview")
         self.client = None
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-        self.total_cost_usd = 0.0
+        token_rates = AzureTokenRates.from_env()
+        self._usage = UsageLedger(
+            token_rates.calculate if token_rates is not None else None,
+            cost_basis=(
+                "azure_configured_token_rates"
+                if token_rates is not None
+                else None
+            ),
+        )
 
         if self.api_key and self.api_key != "YOUR_AZURE_OPENAI_API_KEY":
             try:
@@ -97,6 +108,49 @@ class AzureOpenAIDetector(BaseDetector):
     @property
     def name(self) -> str:
         return "azure"
+
+    @property
+    def prompt_tokens(self) -> int:
+        return self._usage.prompt_tokens
+
+    @property
+    def completion_tokens(self) -> int:
+        return self._usage.completion_tokens
+
+    @property
+    def cached_prompt_tokens(self) -> Optional[int]:
+        return self._usage.cached_prompt_tokens
+
+    @property
+    def total_cost_usd(self) -> Optional[float]:
+        return self._usage.total_cost_usd
+
+    @property
+    def llm_duration_seconds(self) -> None:
+        return None
+
+    @property
+    def cost_basis(self) -> Optional[str]:
+        return self._usage.cost_basis
+
+    @property
+    def usage_complete(self) -> bool:
+        return self._usage.is_complete
+
+    @property
+    def llm_model(self) -> str:
+        return self.deployment
+
+    def _record_usage(self, response: Any) -> None:
+        usage = extract_azure_usage(response)
+        if usage is None:
+            self._usage.mark_incomplete()
+            logger.warning(
+                "Azure OpenAI response did not include token usage; "
+                "usage and cost were not estimated."
+            )
+            return
+        self._usage.record(usage)
 
     def should_run(self, text: str, state: Any) -> bool:
         bypass_llm = os.getenv("BYPASS_LLM", "false").strip().lower()
@@ -139,11 +193,10 @@ class AzureOpenAIDetector(BaseDetector):
                     chunk_text = c_text
                     break
 
-            prompt_estimate = max(50, len(chunk_text or candidate.entity_value) // 4 + 80)
-            completion_estimate = 30
             llm_item: Optional[CandidateValidationItem] = None
 
             if self.client:
+                resp = None
                 try:
                     system_prompt = (
                         "You are an elite PII/PHI Compliance Validation Engine for legal, healthcare, and enterprise documents, "
@@ -189,9 +242,7 @@ class AzureOpenAIDetector(BaseDetector):
                         ],
                         temperature=0.0,
                     )
-                    if hasattr(resp, "usage") and resp.usage:
-                        prompt_estimate = getattr(resp.usage, "prompt_tokens", prompt_estimate) or prompt_estimate
-                        completion_estimate = getattr(resp.usage, "completion_tokens", completion_estimate) or completion_estimate
+                    self._record_usage(resp)
 
                     raw_resp = (resp.choices[0].message.content or "").strip()
                     json_match = re.search(r"\{.*\}", raw_resp, re.DOTALL)
@@ -210,11 +261,9 @@ class AzureOpenAIDetector(BaseDetector):
                                 reasoning=reason,
                             )
                 except Exception as exc:
+                    if resp is None:
+                        self._usage.mark_incomplete()
                     logger.debug("Azure OpenAI chat completion failed/skipped (%s); falling back to heuristic", exc)
-
-            self.prompt_tokens += prompt_estimate
-            self.completion_tokens += completion_estimate
-            self.total_cost_usd += (prompt_estimate * 0.00000015) + (completion_estimate * 0.00000060)
 
             # Use LLM decision if available; fallback to deterministic heuristic
             item = llm_item or self._heuristic_validate_candidate(candidate, chunk_text, document_type)
@@ -454,18 +503,14 @@ Return a valid JSON object with the "entities" key containing items with "value"
         if self.client is None:
             return []
 
+        response = None
         try:
             response = self.client.chat.completions.create(
                 model=self.deployment,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.TEMPERATURE,
             )
-            if hasattr(response, "usage") and response.usage:
-                p_tok = getattr(response.usage, "prompt_tokens", 0) or 0
-                c_tok = getattr(response.usage, "completion_tokens", 0) or 0
-                self.prompt_tokens += p_tok
-                self.completion_tokens += c_tok
-                self.total_cost_usd += (p_tok * 0.00000015) + (c_tok * 0.00000060)
+            self._record_usage(response)
 
             raw_content = response.choices[0].message.content or ""
             if not raw_content:
@@ -514,6 +559,8 @@ Return a valid JSON object with the "entities" key containing items with "value"
             return results
 
         except Exception as exc:
+            if response is None:
+                self._usage.mark_incomplete()
             logger.error("Azure OpenAI detection request failed: %s", exc)
             return []
 

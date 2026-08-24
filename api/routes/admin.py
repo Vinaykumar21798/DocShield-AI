@@ -50,8 +50,13 @@ class RecentDocument(BaseModel):
     created_at: Optional[datetime] = None
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
+    cached_prompt_tokens: Optional[int] = None
     llm_cost_usd: Optional[float] = None
     llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    llm_duration_seconds: Optional[float] = None
+    llm_cost_basis: Optional[str] = None
+    llm_usage_complete: Optional[bool] = None
 
 
 class UserStats(BaseModel):
@@ -249,8 +254,13 @@ def get_stats(
                 created_at=document.created_at,
                 prompt_tokens=document.prompt_tokens,
                 completion_tokens=document.completion_tokens,
-                llm_cost_usd=round(document.llm_cost_usd, 6) if document.llm_cost_usd is not None else None,
+                cached_prompt_tokens=document.cached_prompt_tokens,
+                llm_cost_usd=document.llm_cost_usd,
                 llm_provider=canonical_llm_provider(document.llm_provider),
+                llm_model=document.llm_model,
+                llm_duration_seconds=document.llm_duration_seconds,
+                llm_cost_basis=document.llm_cost_basis,
+                llm_usage_complete=document.llm_usage_complete,
             )
         )
 

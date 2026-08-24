@@ -187,11 +187,22 @@
     body.innerHTML = documents.map((documentItem) => {
       const hasTokens = documentItem.prompt_tokens != null || documentItem.completion_tokens != null;
       const totalTokens = (documentItem.prompt_tokens || 0) + (documentItem.completion_tokens || 0);
-      const tokensDisplay = hasTokens ? totalTokens.toLocaleString() : "-";
+      const usageComplete = documentItem.llm_usage_complete === true;
+      const cachedTokenDisplay = documentItem.cached_prompt_tokens == null
+        ? "unknown"
+        : documentItem.cached_prompt_tokens.toLocaleString();
+      const tokensDisplay = !usageComplete
+        ? (totalTokens > 0 ? `${totalTokens.toLocaleString()} (partial)` : "Unavailable")
+        : (hasTokens ? totalTokens.toLocaleString() : "-");
+      const tokenBreakdown = hasTokens
+        ? `${usageComplete ? "" : "Incomplete provider usage. "}Input: ${(documentItem.prompt_tokens || 0).toLocaleString()}, cached input: ${cachedTokenDisplay}, output: ${(documentItem.completion_tokens || 0).toLocaleString()}${documentItem.llm_model ? `, model: ${documentItem.llm_model}` : ""}`
+        : "";
 
-      const costDisplay = documentItem.llm_cost_usd != null
-        ? `$${Number(documentItem.llm_cost_usd).toFixed(4)}`
-        : "-";
+      const costDisplay = !usageComplete
+        ? "Unavailable"
+        : documentItem.llm_cost_usd != null
+        ? `$${Number(documentItem.llm_cost_usd).toFixed(5)}`
+        : (totalTokens > 0 ? "Unavailable" : "-");
 
       const provider = canonicalLlmProvider(documentItem.llm_provider);
       let providerHtml = `<span style="color: var(--muted, #94a3b8); font-weight: 500;">-</span>`;
@@ -211,8 +222,8 @@
         <td class="admin-truncate" title="${escapeHtml(documentItem.owner)}">${escapeHtml(documentItem.owner)}</td>
         <td><span class="status-pill ${statusTone(documentItem.status)}">${escapeHtml(documentItem.status)}</span></td>
         <td>${escapeHtml(documentItem.entity_count)}</td>
-        <td>${tokensDisplay !== "-" ? `<strong>${tokensDisplay}</strong>` : "-"}</td>
-        <td>${costDisplay}</td>
+        <td${tokenBreakdown ? ` title="${escapeHtml(tokenBreakdown)}"` : ""}>${tokensDisplay !== "-" ? `<strong>${tokensDisplay}</strong>` : "-"}</td>
+        <td title="${escapeHtml(!usageComplete ? "Provider usage was incomplete; exact cost is unavailable" : (documentItem.llm_cost_basis || (totalTokens > 0 ? "Exact cost requires complete provider metadata and configured pricing" : "")))}">${costDisplay}</td>
         <td>${providerHtml}</td>
         <td style="white-space: nowrap;">${escapeHtml(formatDate(documentItem.created_at))}</td>
       </tr>
@@ -324,7 +335,7 @@
     const refreshButton = document.getElementById("adminRefreshBtn");
     if (refreshButton) refreshButton.disabled = true;
     document.getElementById("adminStatsGrid").innerHTML = `<div class="admin-stat is-loading"><span>Loading dashboard metrics...</span></div>`;
-    document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="5" class="empty-state">Loading documents...</td></tr>`;
+    document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="8" class="empty-state">Loading documents...</td></tr>`;
     document.getElementById("adminUsersBody").innerHTML = `<tr><td colspan="5" class="empty-state">Loading users...</td></tr>`;
 
     try {
@@ -337,7 +348,7 @@
         renderAdminStats(statsResult.value);
       } else {
         document.getElementById("adminStatsGrid").innerHTML = `<div class="admin-error-state">Dashboard metrics could not be loaded.</div>`;
-        document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="5" class="empty-state">Recent documents could not be loaded.</td></tr>`;
+        document.getElementById("adminDocumentsBody").innerHTML = `<tr><td colspan="8" class="empty-state">Recent documents could not be loaded.</td></tr>`;
       }
 
       if (usersResult.status === "fulfilled" && Array.isArray(usersResult.value)) {

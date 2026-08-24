@@ -953,15 +953,49 @@ class DocumentProcessingWorkflow:
         # Update persistent token and cost metrics on document
         active_llm = getattr(self.detection_service, "gemma", None)
         if active_llm:
-            document.prompt_tokens = getattr(active_llm, "prompt_tokens", 0) or 0
-            document.completion_tokens = getattr(active_llm, "completion_tokens", 0) or 0
-            document.llm_cost_usd = round(getattr(active_llm, "total_cost_usd", 0.0) or 0.0, 6)
+            document.prompt_tokens = getattr(active_llm, "prompt_tokens", 0)
+            document.completion_tokens = getattr(
+                active_llm,
+                "completion_tokens",
+                0,
+            )
+            document.cached_prompt_tokens = getattr(
+                active_llm,
+                "cached_prompt_tokens",
+                0,
+            )
+            document.llm_cost_usd = getattr(
+                active_llm,
+                "total_cost_usd",
+                None,
+            )
             document.llm_provider = getattr(active_llm, "name", os.getenv("LLM_PROVIDER", "azure")).lower()
+            document.llm_model = getattr(active_llm, "llm_model", None)
+            document.llm_duration_seconds = getattr(
+                active_llm,
+                "llm_duration_seconds",
+                None,
+            )
+            document.llm_cost_basis = getattr(
+                active_llm,
+                "cost_basis",
+                None,
+            )
+            document.llm_usage_complete = getattr(
+                active_llm,
+                "usage_complete",
+                True,
+            )
         else:
             document.llm_provider = os.getenv("LLM_PROVIDER", "azure").lower()
             document.prompt_tokens = 0
             document.completion_tokens = 0
-            document.llm_cost_usd = 0.0
+            document.cached_prompt_tokens = 0
+            document.llm_cost_usd = None
+            document.llm_model = None
+            document.llm_duration_seconds = None
+            document.llm_cost_basis = None
+            document.llm_usage_complete = True
         self.db.add(document)
 
         entity_repository = EntityRepository(self.db)
@@ -1013,6 +1047,17 @@ class DocumentProcessingWorkflow:
             "pending_reviews": len(pending_reviews),
             "redacted_file_path": state.redacted_file_path,
             "detectors_used": detectors_used,
+            "llm_usage": {
+                "provider": document.llm_provider,
+                "model": document.llm_model,
+                "prompt_tokens": document.prompt_tokens,
+                "cached_prompt_tokens": document.cached_prompt_tokens,
+                "completion_tokens": document.completion_tokens,
+                "duration_seconds": document.llm_duration_seconds,
+                "cost_usd": document.llm_cost_usd,
+                "cost_basis": document.llm_cost_basis,
+                "usage_complete": document.llm_usage_complete,
+            },
             "llm_candidate_audit": getattr(self.detection_service, "last_llm_candidate_audit", {"accepted": [], "rejected": []}),
             "entities": [
                 {

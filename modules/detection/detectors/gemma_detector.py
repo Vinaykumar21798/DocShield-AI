@@ -9,6 +9,11 @@ from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field
 
 from modules.detection.detectors.base_detector import BaseDetector
+from modules.detection.usage import (
+    LocalComputeRate,
+    UsageLedger,
+    extract_ollama_usage,
+)
 from modules.detection.models.detection_result import DetectionResult
 from modules.detection.taxonomy import TaxonomyService
 
@@ -166,13 +171,70 @@ class Gemma4E4BDetector(BaseDetector):
                     "Ollama package is not installed or unavailable. LLM detection will be skipped."
                 )
 
-        self.prompt_tokens = 0
-        self.completion_tokens = 0
-        self.total_cost_usd = 0.0
+        compute_rate = LocalComputeRate.from_env()
+        self._usage = UsageLedger(
+            compute_rate.calculate if compute_rate is not None else None,
+            cost_basis=(
+                "gemma_measured_compute_runtime"
+                if compute_rate is not None
+                else None
+            ),
+        )
 
     @property
     def name(self) -> str:
         return "gemma"
+
+    @property
+    def prompt_tokens(self) -> int:
+        return self._usage.prompt_tokens
+
+    @property
+    def completion_tokens(self) -> int:
+        return self._usage.completion_tokens
+
+    @property
+    def cached_prompt_tokens(self) -> int:
+        return 0
+
+    @property
+    def total_cost_usd(self) -> Optional[float]:
+        return self._usage.total_cost_usd
+
+    @property
+    def llm_duration_seconds(self) -> float:
+        return float(self._usage.duration_seconds)
+
+    @property
+    def cost_basis(self) -> Optional[str]:
+        return self._usage.cost_basis
+
+    @property
+    def usage_complete(self) -> bool:
+        return self._usage.is_complete
+
+    @property
+    def llm_model(self) -> str:
+        return self.MODEL_NAME
+
+    def _record_usage(
+        self,
+        response: Any,
+        *,
+        elapsed_seconds: Optional[float],
+    ) -> None:
+        usage = extract_ollama_usage(
+            response,
+            elapsed_seconds=elapsed_seconds,
+        )
+        if usage is None:
+            self._usage.mark_incomplete()
+            logger.warning(
+                "Ollama response did not include token usage; usage and "
+                "cost were not estimated."
+            )
+            return
+        self._usage.record(usage)
 
     def should_run(self, text: str, state: Any) -> bool:
         """
@@ -391,6 +453,7 @@ entity_type, entity_value, confidence_score, start_char, end_char.
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
                 break
             except Exception as exc:
+                self._usage.mark_incomplete()
                 if attempt == 0 and "timeout" in str(exc).lower():
                     logger.warning("Ollama chat timeout encountered, retrying once... (%s)", exc)
                     time.sleep(1.0)
@@ -405,19 +468,16 @@ entity_type, entity_value, confidence_score, start_char, end_char.
             if isinstance(response, dict):
                 msg = response.get("message", {})
                 raw_content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
-                p_tok = response.get("prompt_eval_count", 0) or (len(prompt) // 4)
-                c_tok = response.get("eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
             else:
                 msg = getattr(response, "message", None)
                 if isinstance(msg, dict):
                     raw_content = msg.get("content", "")
                 else:
                     raw_content = getattr(msg, "content", "") if msg else ""
-                p_tok = getattr(response, "prompt_eval_count", 0) or (len(prompt) // 4)
-                c_tok = getattr(response, "eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
-
-            self.prompt_tokens += max(1, p_tok)
-            self.completion_tokens += max(1, c_tok)
+            self._record_usage(
+                response,
+                elapsed_seconds=elapsed_ms / 1000.0,
+            )
 
             if not raw_content or not raw_content.strip():
                 return []
@@ -487,6 +547,7 @@ entity_type, entity_value, confidence_score, start_char, end_char.
 
             llm_item: Optional[CandidateValidationItem] = None
             if self.client and os.getenv("BYPASS_LLM", "false").strip().lower() not in {"1", "true", "yes", "on"}:
+                resp = None
                 try:
                     system_prompt = (
                         "You are an elite PII/PHI Compliance Validation Engine. "
@@ -508,6 +569,7 @@ entity_type, entity_value, confidence_score, start_char, end_char.
                         f"Context:\n\"\"\"{chunk_text[:400]}\"\"\"\n\n"
                         "Return your validation decision in strict JSON format."
                     )
+                    started_at = time.perf_counter()
                     resp = self.client.chat(
                         model=self.MODEL_NAME,
                         messages=[
@@ -516,6 +578,10 @@ entity_type, entity_value, confidence_score, start_char, end_char.
                         ],
                         format="json",
                         options={"temperature": 0.0},
+                    )
+                    self._record_usage(
+                        resp,
+                        elapsed_seconds=time.perf_counter() - started_at,
                     )
                     raw_content = resp.get("message", {}).get("content", "")
                     if raw_content:
@@ -535,6 +601,8 @@ entity_type, entity_value, confidence_score, start_char, end_char.
                                     reason=r_reason,
                                 )
                 except Exception as exc:
+                    if resp is None:
+                        self._usage.mark_incomplete()
                     logger.debug("Gemma chat completion failed/skipped (%s); falling back to heuristic", exc)
 
             item = llm_item or self._heuristic_validate_candidate(candidate, chunk_text, document_type)
@@ -660,6 +728,7 @@ Return JSON format with "entities" key containing items with value, entity_type,
                 elapsed_ms = (time.perf_counter() - start_time) * 1000.0
                 break
             except Exception as exc:
+                self._usage.mark_incomplete()
                 if attempt == 0 and "timeout" in str(exc).lower():
                     logger.warning("Ollama residual chat timeout encountered, retrying once... (%s)", exc)
                     time.sleep(1.0)
@@ -674,19 +743,16 @@ Return JSON format with "entities" key containing items with value, entity_type,
             if isinstance(response, dict):
                 msg = response.get("message", {})
                 raw_content = msg.get("content", "") if isinstance(msg, dict) else getattr(msg, "content", "")
-                p_tok = response.get("prompt_eval_count", 0) or (len(prompt) // 4)
-                c_tok = response.get("eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
             else:
                 msg = getattr(response, "message", None)
                 if isinstance(msg, dict):
                     raw_content = msg.get("content", "")
                 else:
                     raw_content = getattr(msg, "content", "") if msg else ""
-                p_tok = getattr(response, "prompt_eval_count", 0) or (len(prompt) // 4)
-                c_tok = getattr(response, "eval_count", 0) or (len(raw_content) // 4 if raw_content else 0)
-
-            self.prompt_tokens += max(1, p_tok)
-            self.completion_tokens += max(1, c_tok)
+            self._record_usage(
+                response,
+                elapsed_seconds=elapsed_ms / 1000.0,
+            )
 
             if not raw_content or not raw_content.strip():
                 return []
